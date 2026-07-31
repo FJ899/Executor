@@ -1,0 +1,105 @@
+{
+  "schema_version": "executor-project/1.0",
+  "project": {
+    "name": "Creative OS Executor",
+    "repository": "litrgratis-pixel/Executor",
+    "entrypoint": "README.md"
+  },
+  "authoritative_sources": [
+    {
+      "path": "EXECUTOR_POLICY.yaml",
+      "role": "authoritative_instruction"
+    },
+    {
+      "path": "CREATIVE_OS_EXECUTOR_BUILD_INSTRUCTION_v0.2.md",
+      "role": "authoritative_instruction"
+    },
+    {
+      "path": "README.md",
+      "role": "state_owner"
+    }
+  ],
+  "commands": {
+    "setup": [],
+    "unit_test": [
+      "python -m unittest discover -s tests -v"
+    ],
+    "integration_test": [],
+    "full_verify": [
+      "python -m unittest discover -s tests -v",
+      "python -m compileall -q executor"
+    ]
+  },
+  "path_rules": {
+    "CREATIVE_OS_EXECUTOR_*.md": {
+      "class": "semantic",
+      "approval": "USER"
+    },
+    "EXECUTOR_POLICY.yaml": {
+      "class": "semantic",
+      "approval": "USER"
+    },
+    ".github/workflows/**": {
+      "class": "infrastructure",
+      "approval": "USER"
+    },
+    "schemas/**": {
+      "class": "technical",
+      "approval": "AI"
+    },
+    "executor/**": {
+      "class": "technical",
+      "approval": "AI"
+    },
+    "tests/**": {
+      "class": "test",
+      "approval": "AI"
+    },
+    "**": {
+      "class": "unknown",
+      "approval": "USER"
+    }
+  },
+  "change_impact_rules": {
+    "public_api_change": "USER",
+    "data_schema_change": "USER",
+    "result_semantics_change": "USER"
+  },
+  "capabilities": {
+    "network": {
+      "default": false
+    },
+    "secrets": {
+      "default": []
+    },
+    "commands": {
+      "allow": [
+        "python",
+        "git"
+      ]
+    },
+    "dependencies": {
+      "install": "none"
+    }
+  },
+  "environment": {
+    "python": "3.11",
+    "max_cpu": 2,
+    "max_memory_mb": 4096,
+    "max_disk_mb": 2048,
+    "timeout_minutes": 30,
+    "home_access": false
+  },
+  "artifacts": {
+    "output": "artifacts/**",
+    "baseline": "baselines/**"
+  },
+  "rollback": {
+    "strategy": "git_reset"
+  },
+  "owners": {
+    "semantic_changes": "USER",
+    "technical_changes": "AI",
+    "infrastructure_changes": "USER"
+  }
+}

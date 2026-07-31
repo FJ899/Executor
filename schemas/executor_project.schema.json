@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "executor-project/1.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "project",
+    "authoritative_sources",
+    "commands",
+    "path_rules",
+    "change_impact_rules",
+    "capabilities",
+    "environment",
+    "artifacts",
+    "rollback",
+    "owners"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "executor-project/1.0"
+    },
+    "project": {
+      "type": "object"
+    },
+    "path_rules": {
+      "type": "object"
+    },
+    "capabilities": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

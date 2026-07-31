@@ -1,0 +1,40 @@
+name: Verify Executor foundations
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile package
+        run: python -m compileall -q executor
+
+      - name: Run M0 and M1 tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Validate example project contract
+        run: python -m executor.cli validate-project project_contracts/executor-self.yaml
+
+      - name: Validate example test contract
+        run: python -m executor.cli validate-test test_contracts/examples/valid_test.yaml --base-dir tests/fixtures
+
+      - name: Prove invalid test is blocked before model
+        run: |
+          set +e
+          python -m executor.cli validate-test test_contracts/examples/invalid_missing_negative.yaml --base-dir tests/fixtures
+          code=$?
+          test "$code" -eq 2

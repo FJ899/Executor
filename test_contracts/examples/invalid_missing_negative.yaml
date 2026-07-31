@@ -1,0 +1,36 @@
+{
+  "schema_version": "executor-test/1.0",
+  "test_id": "INVALID-001",
+  "source_claims": [
+    {
+      "claim": "x == 1",
+      "source": {
+        "file": "source_result.json",
+        "selector": "$.x"
+      }
+    }
+  ],
+  "positive_control": {
+    "description": "Positive",
+    "expected": "x == 1"
+  },
+  "tamper_control": {
+    "description": "Tamper",
+    "method": "replay_hash_mismatch",
+    "expected": "DETECTED"
+  },
+  "unchanged_controls": [
+    {
+      "name": "baseline",
+      "assertion": "baseline == same"
+    }
+  ],
+  "holdout": {
+    "visibility": "HIDDEN_FROM_IMPLEMENTER",
+    "location": "holdout/GINSENG_TEST-003_HOLDOUT.enc",
+    "access": "REPLAY_ONLY"
+  },
+  "acceptance": [
+    "x == 1"
+  ]
+}
