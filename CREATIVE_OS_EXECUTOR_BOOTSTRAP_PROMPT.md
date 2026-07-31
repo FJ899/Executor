@@ -3,8 +3,10 @@
 Repozytorium zostało utworzone jako:
 
 ```text
-litrgratis-pixel/creative-os-executor
+litrgratis-pixel/Executor
 ```
+
+Robocza nazwa projektu i pakietu Python pozostaje `creative-os-executor`. Nie jest to nazwa osobnego repozytorium.
 
 Przeczytaj w całości:
 
