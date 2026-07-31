@@ -1,0 +1,46 @@
+{
+  "schema_version": "executor-test/1.0",
+  "test_id": "GINSENG_TEST-003",
+  "source_claims": [
+    {
+      "claim": "blocking_gate_count_before == 7",
+      "source": {
+        "file": "source_result.json",
+        "selector": "$.blocking_gate_count"
+      }
+    }
+  ],
+  "positive_control": {
+    "description": "Applying the approved complaint ownership decision closes one gate",
+    "expected": "blocking_gate_count_after == 6"
+  },
+  "negative_control": {
+    "description": "Without the decision all gates remain open",
+    "expected": "blocking_gate_count_after == 7"
+  },
+  "tamper_control": {
+    "description": "Manual result edit without replay must be detected",
+    "method": "replay_hash_mismatch",
+    "expected": "DETECTED"
+  },
+  "unchanged_controls": [
+    {
+      "name": "baseline",
+      "assertion": "baseline_mutated_after == false"
+    },
+    {
+      "name": "readiness",
+      "assertion": "implementation_readiness_after == BLOCKED"
+    }
+  ],
+  "holdout": {
+    "visibility": "HIDDEN_FROM_IMPLEMENTER",
+    "location": "holdout/GINSENG_TEST-003_HOLDOUT.enc",
+    "access": "REPLAY_ONLY"
+  },
+  "acceptance": [
+    "blocking_gate_count_after == 6",
+    "baseline_mutated_after == false",
+    "implementation_readiness_after == BLOCKED"
+  ]
+}

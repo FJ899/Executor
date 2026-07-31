@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "creative-os-executor"
+version = "0.2.0"
+description = "Policy-first executor foundations for Creative OS"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+creative-os-executor = "executor.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["executor*"]

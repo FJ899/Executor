@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "executor-task/1.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "risk_class",
+    "mode",
+    "repositories",
+    "test_contract",
+    "capabilities",
+    "budgets",
+    "decision_policy",
+    "merge_policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "executor-task/1.0"
+    },
+    "risk_class": {
+      "enum": [
+        "LOW_RISK",
+        "MEDIUM_RISK",
+        "HIGH_RISK"
+      ]
+    },
+    "merge_policy": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

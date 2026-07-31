@@ -1,0 +1,33 @@
+{
+  "schema_version": "executor-policy/1.0",
+  "execution": {
+    "external_projects": false,
+    "auto_merge": false,
+    "default_network": false,
+    "default_secrets": []
+  },
+  "trust_hierarchy": [
+    "executor_policy",
+    "project_contract",
+    "task_contract",
+    "authoritative_source",
+    "untrusted_repository_data",
+    "generated_data"
+  ],
+  "hard_veto_evidence_types": [
+    "missing_required_file",
+    "repository_access_denied",
+    "baseline_hash_changed",
+    "forbidden_path_modified",
+    "required_test_missing",
+    "capability_denied",
+    "contract_invalid"
+  ],
+  "allowed_objection_types": [
+    "PASS",
+    "CONCERN",
+    "EVIDENCE_GAP",
+    "POLICY_VETO",
+    "HARD_VETO"
+  ]
+}
