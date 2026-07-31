@@ -1,5 +1,9 @@
 # Creative OS Executor
 
+Repozytorium: `litrgratis-pixel/Executor`.
+
+Robocza nazwa systemu i pakietu Python: `creative-os-executor`. Nie oznacza ona osobnego repozytorium.
+
 Bezpieczny runtime wykonawczy dla Creative OS. Aktualny zakres obejmuje wyłącznie fundamenty:
 
 - **M0 — Test Contract Validator**;
