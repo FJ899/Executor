@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  foundation-tests:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,7 +23,7 @@ jobs:
       - name: Compile package
         run: python -m compileall -q executor
 
-      - name: Run M0 and M1 tests
+      - name: Run M0, M1 and M2A tests
         run: python -m unittest discover -s tests -v
 
       - name: Validate example project contract
