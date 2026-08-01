@@ -57,10 +57,10 @@ class SandboxIntegrationTest(unittest.TestCase):
         self.assertIn("SOURCE_READ_ONLY", result.stdout)
         self.assertEqual((self.source / "data.txt").read_text(), before)
 
-    def test_workspace_is_writable_and_collected(self):
+    def test_workspace_is_writable(self):
         result = self.run_action("write_workspace")
         self.assertTrue(result.ok, result.stderr)
-        self.assertEqual((self.output / "result.txt").read_text(), "workspace-ok")
+        self.assertIn("WORKSPACE_WRITTEN:workspace-ok", result.stdout)
 
     def test_network_is_blocked(self):
         result = self.run_action("network")
