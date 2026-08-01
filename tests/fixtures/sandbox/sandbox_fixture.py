@@ -21,8 +21,9 @@ def main() -> int:
             return 0
         return 41
     if action == "write_workspace":
-        Path("/workspace/result.txt").write_text("workspace-ok", encoding="utf-8")
-        print("WORKSPACE_WRITTEN")
+        target = Path("/workspace/result.txt")
+        target.write_text("workspace-ok", encoding="utf-8")
+        print(f"WORKSPACE_WRITTEN:{target.read_text(encoding='utf-8')}")
         return 0
     if action == "network":
         sock = socket.socket()
