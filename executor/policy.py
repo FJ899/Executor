@@ -7,6 +7,9 @@ from fnmatch import fnmatch
 from pathlib import PurePosixPath
 from typing import Any
 
+from executor.sandbox.command_policy import CommandDenied, validate_argv
+from executor.sandbox.spec import CommandRule
+
 
 class ObjectionKind(StrEnum):
     PASS = "PASS"
@@ -115,8 +118,16 @@ class PolicyEngine:
                 argv = shlex.split(command)
             except ValueError:
                 argv = []
-            executable = argv[0] if argv else ""
-            allowed = set(caps["commands"]["allow"])
-            if executable not in allowed:
-                objections.append(hard_veto(summary=f"Command denied: {executable or '<invalid>'}", evidence_type="capability_denied", evidence={"capability": "command", "command": command, "allowed": sorted(allowed)}, minimal_resolution="Use allowed command or update contract."))
+            rules_payload = caps["commands"].get("rules", [])
+            if rules_payload:
+                rules = tuple(CommandRule.from_dict(item) for item in rules_payload)
+                try:
+                    validate_argv(argv, rules)
+                except CommandDenied as exc:
+                    objections.append(hard_veto(summary=str(exc), evidence_type="capability_denied", evidence={"capability": "command", "argv": argv}, minimal_resolution="Use a command matching an approved executable and argv prefix."))
+            else:
+                executable = argv[0] if argv else ""
+                allowed = set(caps["commands"]["allow"])
+                if executable not in allowed:
+                    objections.append(hard_veto(summary=f"Command denied: {executable or '<invalid>'}", evidence_type="capability_denied", evidence={"capability": "command", "command": command, "allowed": sorted(allowed)}, minimal_resolution="Use allowed command or update contract."))
         return objections or [Objection(ObjectionKind.PASS, "Requested capabilities are allowed")]
