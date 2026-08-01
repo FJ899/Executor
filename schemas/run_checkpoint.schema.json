@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schemas/run_checkpoint.schema.json",
+  "title": "Executor Run Checkpoint",
+  "type": "object",
+  "required": [
+    "run_id",
+    "state",
+    "sequence",
+    "event_hash",
+    "snapshot",
+    "updated_at"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "state": {
+      "enum": [
+        "CREATED",
+        "CONTRACT_VALIDATED",
+        "NORMALIZED",
+        "PLANNED",
+        "AWAITING_DECISION",
+        "APPROVED",
+        "EXECUTING",
+        "VERIFYING",
+        "REPLAYING",
+        "PASS",
+        "BLOCKED",
+        "FAILED",
+        "STALE"
+      ]
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "event_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "snapshot": {
+      "type": "object"
+    },
+    "updated_at": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}
