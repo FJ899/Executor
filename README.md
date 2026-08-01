@@ -8,11 +8,12 @@ Bezpieczny runtime wykonawczy dla Creative OS. Aktualny zakres obejmuje:
 
 - **M0 — Test Contract Validator**;
 - **M1 — Project Contract + Policy Engine**;
-- **M2A — State Machine + Checkpointy**.
+- **M2A — State Machine + Checkpointy**;
+- **M2B — Izolowany Sandbox dla fixtures**.
 
-M2A zapisuje append-only historię stanów, atomowe checkpointy i wykrywa `STALE` przed wznowieniem pracy. `PASS` jest niemożliwy bez przejścia przez `REPLAYING`.
+Sandbox używa backendu Docker bez fallbacku do wykonania na hoście. Profil wymusza: read-only root, read-only source, osobny tmpfs workspace, brak sieci, brak sekretów, niedostępny HOME, non-root, usunięte capabilities, limity CPU/RAM/dysku/procesów/czasu oraz cleanup po runie.
 
-Executor nadal nie wykonuje kodu z zewnętrznych repozytoriów, nie korzysta z sekretów, nie ma runtime sieciowego, nie implementuje Company Loop ani Execution Loop.
+M2B jest zweryfikowany wyłącznie na fixtures należących do repo Executora. Uruchamianie kodu z COS, ScriptOps, BPM:160 i innych repozytoriów nadal jest zabronione.
 
 ## Start
 
@@ -31,7 +32,8 @@ Pliki `.yaml` używają składni JSON, która jest poprawnym podzbiorem YAML 1.2
 M0: IMPLEMENTED
 M1: IMPLEMENTED
 M2A: IMPLEMENTED
-M2B+: LOCKED
+M2B: IMPLEMENTED / FIXTURES VERIFIED
+M3+: LOCKED
 EXTERNAL PROJECT EXECUTION: FORBIDDEN
 AUTO MERGE: DISABLED
 ```
