@@ -76,6 +76,34 @@
       "allow": [
         "python",
         "git"
+      ],
+      "rules": [
+        {
+          "executable": "python",
+          "argv_prefix": [
+            "-m",
+            "unittest"
+          ]
+        },
+        {
+          "executable": "python",
+          "argv_prefix": [
+            "-m",
+            "compileall"
+          ]
+        },
+        {
+          "executable": "git",
+          "argv_prefix": [
+            "status"
+          ]
+        },
+        {
+          "executable": "git",
+          "argv_prefix": [
+            "diff"
+          ]
+        }
       ]
     },
     "dependencies": {
