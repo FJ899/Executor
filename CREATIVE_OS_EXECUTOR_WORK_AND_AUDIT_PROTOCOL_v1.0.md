@@ -412,6 +412,68 @@ AUTO MERGE: DISABLED
 
 To są deklaracje stanu wymagające audytowalnych dowodów. Protokół nie zmienia ich automatycznie.
 
+### 19.1. Odzyskany plan kontynuacji
+
+Status planu:
+
+```text
+RECOVERED USER DECISION
+PENDING BASELINE AUDIT
+NOT IMPLEMENTED
+```
+
+Plan został odzyskany z wcześniejszego punktu zatrzymania prac i potwierdzony przez użytkownika 2026-08-02. Jego zapis chroni ciągłość intencji, ale nie oznacza rozpoczęcia ani zakończenia któregokolwiek kroku.
+
+Po przejściu obowiązkowej bramki audytowej praca ma przebiegać w następującej kolejności:
+
+1. przygotować `EXECUTOR_SELF_TEST-001`;
+2. przygotować kontrakt M3 i kryteria `PASS`;
+3. uruchomić agenta AI jako wykonawcę;
+4. przeprowadzić M3A, M3B i M3C jako osobne pull requesty;
+5. zmierzyć udział człowieka i działanie zabezpieczeń;
+6. ocenić pierwszy wynik Executora;
+7. dopiero potem przejść do Company Loop i kalibracji agentów;
+8. następnie wykonać `GINSENG_TEST-003`.
+
+Kolejność jest częścią decyzji użytkownika. Company Loop, kalibracja agentów i `GINSENG_TEST-003` nie mogą zostać przesunięte przed ocenę pierwszego wyniku Executora.
+
+### 19.2. Obowiązkowa bramka przed wykonaniem planu
+
+Przed przygotowaniem i uruchomieniem `EXECUTOR_SELF_TEST-001` wymagane są kolejno:
+
+1. scalenie protokołu pracy i audytu;
+2. pełny audyt M0–M2B na aktualnym `main`;
+3. usunięcie blokad P0 i P1 wykrytych przez audyt;
+4. ukierunkowana ponowna weryfikacja poprawionych fundamentów;
+5. zamrożenie `EXECUTOR_SELF_TEST-001`, definicji M3A/M3B/M3C, kryteriów `PASS` i niewidocznego dla implementera holdoutu.
+
+Na potrzeby tej bramki:
+
+```text
+P0
+blokuje deklarowany cel, bezpieczeństwo albo wiarygodność fundamentu
+
+P1
+materialnie ogranicza działanie, egzekwowanie polityki albo wartość dowodową
+```
+
+Jeżeli audyt nie wykryje P0 ani P1, krok trzeci i czwarty zamykają się wynikiem `NO_BLOCKING_FINDINGS`, a praca przechodzi do zamrożenia kontraktu self-testu.
+
+### 19.3. Blokada definicji M3A/M3B/M3C
+
+Na dzień 2026-08-02 repozytorium nie zawiera zatwierdzonych definicji zakresów M3A, M3B i M3C.
+
+Obowiązuje status:
+
+```text
+EVIDENCE_GAP
+IMPLEMENTATION BLOCKED UNTIL CONTRACT FREEZE
+```
+
+Nazwy M3A, M3B i M3C nie mogą zostać zinterpretowane ani rozwinięte samodzielnie przez implementera. Ich pełne znaczenie, granice, kolejność, artefakty, testy, zależności i kryteria `PASS` muszą zostać zapisane w kontrakcie po audycie baseline i przed pierwszym wywołaniem agenta wykonawczego.
+
+Holdout musi zostać przygotowany i zamrożony przed udostępnieniem zadania implementerowi. Implementer nie może znać jego treści ani zmieniać kryteriów po rozpoczęciu pracy.
+
 Pierwszym testem dalszej budowy pozostaje:
 
 ```text
