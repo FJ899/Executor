@@ -92,21 +92,6 @@ class DockerSandboxBackend:
         command.extend(argv)
         return command
 
-    @staticmethod
-    def _normalize_collected_workspace(output: Path, workspace_mount: str) -> None:
-        nested = output / Path(workspace_mount).name
-        if not nested.is_dir():
-            return
-        for child in list(nested.iterdir()):
-            destination = output / child.name
-            if destination.exists():
-                if destination.is_dir():
-                    shutil.rmtree(destination)
-                else:
-                    destination.unlink()
-            shutil.move(str(child), str(destination))
-        nested.rmdir()
-
     def run(
         self,
         *,
@@ -154,20 +139,10 @@ class DockerSandboxBackend:
                     exit_code = int(waited.stdout.strip())
                 except ValueError:
                     exit_code = None
-
-            copied = subprocess.run(
-                [self.docker_binary, "cp", f"{name}:{spec.workspace_mount}", str(output)],
-                text=True,
-                capture_output=True,
-                timeout=30,
-                check=False,
-            )
-            if copied.returncode != 0:
-                raise SandboxExecutionError(f"workspace collection failed: {copied.stderr.strip()}")
-            self._normalize_collected_workspace(output, spec.workspace_mount)
         finally:
             if created:
                 subprocess.run([self.docker_binary, "rm", "-f", name], text=True, capture_output=True, timeout=15, check=False)
+
         inspected = subprocess.run(
             [self.docker_binary, "inspect", name],
             text=True,
