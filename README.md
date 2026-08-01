@@ -26,6 +26,15 @@ python -m executor.cli validate-test test_contracts/examples/valid_test.yaml --b
 
 Pliki `.yaml` używają składni JSON, która jest poprawnym podzbiorem YAML 1.2.
 
+## Dokumenty sterujące
+
+- `EXECUTOR_CHARTER.md` — misja, hierarchia zaufania i warunki zatrzymania;
+- `EXECUTOR_POLICY.yaml` — deterministyczna polityka wykonania;
+- `CREATIVE_OS_EXECUTOR_BUILD_INSTRUCTION_v0.2.md` — kontrakt implementacyjny;
+- `CREATIVE_OS_EXECUTOR_WORK_AND_AUDIT_PROTOCOL_v1.0.md` — zaakceptowane zasady autonomicznej pracy, rozmowy, pełnych instrukcji oraz audytu dowodowego.
+
+Protokół pracy i audytu jest obowiązującym źródłem instrukcji dla projektu `executor-self`. Jego obecność nie jest dowodem implementacji mechanizmów runtime; egzekwowanie każdej reguły wymaga osobnego testu.
+
 ## Status
 
 ```text
@@ -34,6 +43,7 @@ M1: IMPLEMENTED
 M2A: IMPLEMENTED
 M2B: IMPLEMENTED / FIXTURES VERIFIED
 M3+: LOCKED
+WORK AND AUDIT PROTOCOL: DOCUMENTED / RUNTIME ENFORCEMENT NOT CLAIMED
 EXTERNAL PROJECT EXECUTION: FORBIDDEN
 AUTO MERGE: DISABLED
 ```
