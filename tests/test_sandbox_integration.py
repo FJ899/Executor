@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from executor.contracts import load_contract
 from executor.sandbox.docker import DockerSandboxBackend
+from executor.sandbox.policy_snapshot import load_execution_policy_snapshot
 from executor.sandbox.spec import CommandRule, SandboxExecutionContext, SandboxSpec
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,10 +16,16 @@ class SandboxIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.image = os.environ["EXECUTOR_SANDBOX_IMAGE"]
-        cls.backend = DockerSandboxBackend(executor_policy=load_contract(ROOT / "EXECUTOR_POLICY.yaml"))
+        cls.commit = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        snapshot = load_execution_policy_snapshot(ROOT, commit=cls.commit)
+        cls.backend = DockerSandboxBackend(policy_snapshot=snapshot)
         cls.backend.preflight()
         cls.source = Path(__file__).resolve().parent / "fixtures/sandbox"
-        cls.commit = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
         cls.context = SandboxExecutionContext(
             repository="litrgratis-pixel/Executor",
             commit=cls.commit,
@@ -61,6 +67,8 @@ class SandboxIntegrationTest(unittest.TestCase):
         result = self.run_action("read_source")
         self.assertTrue(result.ok, result.stderr)
         self.assertIn("source-ok", result.stdout)
+        self.assertRegex(result.execution_id, r"^[0-9a-f]{32}$")
+        self.assertEqual(result.policy_sha256, self.backend.policy_snapshot.source_sha256)
 
     def test_source_is_read_only(self):
         before = (self.source / "data.txt").read_text()
@@ -103,7 +111,10 @@ class SandboxIntegrationTest(unittest.TestCase):
     def test_memory_limit_is_enforced(self):
         result = self.run_action("memory", max_memory_mb=48)
         self.assertTrue(result.cleanup_verified)
-        self.assertTrue(result.exit_code in {0, 137} or "MEMORY_BLOCKED" in result.stdout, (result.exit_code, result.stdout, result.stderr))
+        self.assertTrue(
+            result.exit_code in {0, 137} or "MEMORY_BLOCKED" in result.stdout,
+            (result.exit_code, result.stdout, result.stderr),
+        )
 
     def test_disk_limit_is_enforced(self):
         result = self.run_action("disk", max_disk_mb=4)

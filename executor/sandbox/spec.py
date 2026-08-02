@@ -12,7 +12,10 @@ class CommandRule:
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "CommandRule":
-        return cls(str(value["executable"]), tuple(str(item) for item in value.get("argv_prefix", [])))
+        return cls(
+            str(value["executable"]),
+            tuple(str(item) for item in value.get("argv_prefix", [])),
+        )
 
     def matches(self, argv: list[str]) -> bool:
         if not argv or argv[0] != self.executable:
@@ -53,13 +56,18 @@ class SandboxSpec:
     home_access: bool = False
     source_mount: str = "/source"
     workspace_mount: str = "/workspace"
-    labels: dict[str, str] = field(default_factory=lambda: {"creative-os-executor": "sandbox"})
+    labels: dict[str, str] = field(
+        default_factory=lambda: {"creative-os-executor": "sandbox"}
+    )
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "SandboxSpec":
         return cls(
             image=str(value["image"]),
-            command_rules=tuple(CommandRule.from_dict(item) for item in value.get("command_rules", [])),
+            command_rules=tuple(
+                CommandRule.from_dict(item)
+                for item in value.get("command_rules", [])
+            ),
             max_cpu=float(value.get("max_cpu", 1.0)),
             max_memory_mb=int(value.get("max_memory_mb", 256)),
             max_disk_mb=int(value.get("max_disk_mb", 32)),
@@ -70,7 +78,12 @@ class SandboxSpec:
             home_access=bool(value.get("home_access", False)),
             source_mount=str(value.get("source_mount", "/source")),
             workspace_mount=str(value.get("workspace_mount", "/workspace")),
-            labels={str(k): str(v) for k, v in value.get("labels", {"creative-os-executor": "sandbox"}).items()},
+            labels={
+                str(k): str(v)
+                for k, v in value.get(
+                    "labels", {"creative-os-executor": "sandbox"}
+                ).items()
+            },
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -82,6 +95,8 @@ class SandboxSpec:
 @dataclass(frozen=True)
 class SandboxResult:
     container_name: str
+    execution_id: str
+    policy_sha256: str
     argv: tuple[str, ...]
     exit_code: int | None
     stdout: str
