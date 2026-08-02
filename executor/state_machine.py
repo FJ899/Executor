@@ -48,8 +48,8 @@ _ALLOWED: dict[RunState, set[RunState]] = {
     RunState.APPROVED: {RunState.EXECUTING, RunState.BLOCKED, RunState.FAILED, RunState.STALE},
     RunState.EXECUTING: {RunState.VERIFYING, RunState.BLOCKED, RunState.FAILED, RunState.STALE},
     RunState.VERIFYING: {RunState.REPLAYING, RunState.BLOCKED, RunState.FAILED, RunState.STALE},
-    # PASS remains locked until the separately approved M3 replay gate exists.
-    RunState.REPLAYING: {RunState.BLOCKED, RunState.FAILED, RunState.STALE},
+    # PASS is reachable only through transition_pass(), never transition().
+    RunState.REPLAYING: {RunState.PASS, RunState.BLOCKED, RunState.FAILED, RunState.STALE},
     RunState.PASS: set(),
     RunState.BLOCKED: set(),
     RunState.FAILED: set(),
@@ -217,6 +217,44 @@ class RunStore:
                 previous_state=current_state,
                 state=target,
                 reason=reason,
+                snapshot=snapshot,
+                previous_event_hash=rows[-1]["event_hash"],
+            )
+            self._persist_event_locked(run_dir, event, previous_rows=rows)
+            self._load_verified_locked(run_id, run_dir)
+            return event.to_dict()
+
+    def transition_pass(
+        self,
+        run_id: str,
+        snapshot: Snapshot,
+        *,
+        replay_receipt: Any,
+        replay_verifier: Any,
+    ) -> dict[str, Any]:
+        """Enter PASS only through a verified M3 replay receipt."""
+        with self._run_lock(run_id) as run_dir:
+            current, rows = self._load_verified_locked(run_id, run_dir)
+            current_state = RunState(current["state"])
+            if current_state != RunState.REPLAYING:
+                raise InvalidTransition("M3 PASS requires current state REPLAYING")
+            expected_snapshot = rows[-1]["snapshot"]
+            if expected_snapshot != snapshot.to_dict():
+                raise InvalidTransition("M3 PASS receipt is stale against the run snapshot")
+            try:
+                replay_verifier.verify_replay_receipt(
+                    replay_receipt,
+                    run_id=run_id,
+                    snapshot=snapshot,
+                )
+            except Exception as exc:
+                raise InvalidTransition(f"M3 replay gate rejected receipt: {exc}") from exc
+            event = self._build_event(
+                sequence=len(rows) + 1,
+                run_id=run_id,
+                previous_state=current_state,
+                state=RunState.PASS,
+                reason=f"M3 replay verified: {replay_receipt.manifest_sha256}",
                 snapshot=snapshot,
                 previous_event_hash=rows[-1]["event_hash"],
             )
