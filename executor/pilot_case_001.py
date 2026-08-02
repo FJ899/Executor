@@ -5,19 +5,10 @@ import subprocess
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
 
-from executor.repository_identity import (
-    RepositoryIdentityError,
-    verify_repository_checkout,
-)
+from executor.repository_identity import RepositoryIdentityError, verify_repository_checkout
 from executor.sandbox.docker import SandboxExecutionError, SandboxUnavailable
-from executor.sandbox.spec import (
-    CommandRule,
-    SandboxExecutionContext,
-    SandboxResult,
-    SandboxSpec,
-)
+from executor.sandbox.spec import CommandRule, SandboxExecutionContext, SandboxResult, SandboxSpec
 
 
 class PilotCase001Error(RuntimeError):
@@ -51,6 +42,8 @@ CASE_001_CONTRACT = PilotCase001Contract(
     allowed_path="project_registry/registry.py",
 )
 
+COMPILE_COMMAND = ("python", "-m", "compileall", "-q", "project_registry", "tests")
+TEST_COMMAND = ("python", "-m", "unittest", "discover", "-s", "tests", "-v")
 
 _BROKEN_ADD_MANY = '''\
     def add_many(self, projects: Iterable[Project]) -> None:
@@ -83,38 +76,21 @@ _FIXED_ADD_MANY = '''\
 '''
 
 
-class SandboxBackend(Protocol):
-    def run(
-        self,
-        *,
-        spec: SandboxSpec,
-        context: SandboxExecutionContext,
-        output_dir: str | Path,
-        argv: list[str],
-        container_name: str | None = None,
-    ) -> SandboxResult: ...
-
-
-def _git(
-    root: Path,
-    *args: str,
-    check: bool = True,
-    timeout: int = 30,
-) -> subprocess.CompletedProcess[str]:
+def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     try:
-        completed = subprocess.run(
+        result = subprocess.run(
             ["git", "-C", str(root), *args],
             text=True,
             capture_output=True,
-            timeout=timeout,
+            timeout=30,
             check=False,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise PilotCase001Error(f"git command failed to start: {exc}") from exc
-    if check and completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip()
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip()
         raise PilotCase001Error(f"git {' '.join(args)} failed: {detail}")
-    return completed
+    return result
 
 
 def _git_stdout(root: Path, *args: str) -> str:
@@ -122,20 +98,17 @@ def _git_stdout(root: Path, *args: str) -> str:
 
 
 def _changed_paths(root: Path, base: str, head: str = "HEAD") -> tuple[str, ...]:
-    output = _git_stdout(root, "diff", "--name-only", f"{base}..{head}")
-    return tuple(line for line in output.splitlines() if line)
+    return tuple(
+        line
+        for line in _git_stdout(root, "diff", "--name-only", f"{base}..{head}").splitlines()
+        if line
+    )
 
 
 def _verify_contract_blob(root: Path, contract: PilotCase001Contract) -> None:
-    actual = _git_stdout(
-        root,
-        "rev-parse",
-        f"{contract.input_commit}:PILOT_CONTRACT.md",
-    )
-    if actual != contract.contract_blob_sha:
-        raise PilotCase001PolicyError(
-            "PILOT_CONTRACT.md does not match the pinned CASE-001 contract"
-        )
+    blob = _git_stdout(root, "rev-parse", f"{contract.input_commit}:PILOT_CONTRACT.md")
+    if blob != contract.contract_blob_sha:
+        raise PilotCase001PolicyError("pinned PILOT_CONTRACT.md blob mismatch")
 
 
 def verify_case_001_output_checkout(
@@ -153,24 +126,15 @@ def verify_case_001_output_checkout(
         )
     except RepositoryIdentityError as exc:
         raise PilotCase001PolicyError(str(exc)) from exc
-
     _verify_contract_blob(root, contract)
-    status = _git_stdout(root, "status", "--porcelain")
-    if status:
+    if _git_stdout(root, "status", "--porcelain"):
         raise PilotCase001PolicyError("CASE-001 output worktree is not clean")
-
-    parent_line = _git_stdout(root, "rev-list", "--parents", "-n", "1", output_commit)
-    parents = parent_line.split()
-    if len(parents) != 2 or parents[1] != contract.input_commit:
-        raise PilotCase001PolicyError(
-            "CASE-001 output must be a single commit directly on the pinned input"
-        )
-
+    commit_line = _git_stdout(root, "rev-list", "--parents", "-n", "1", output_commit).split()
+    if len(commit_line) != 2 or commit_line[1] != contract.input_commit:
+        raise PilotCase001PolicyError("output must be one commit directly on pinned input")
     changed = _changed_paths(root, contract.input_commit, output_commit)
     if changed != (contract.allowed_path,):
-        raise PilotCase001PolicyError(
-            f"CASE-001 changed paths are not allowed: {list(changed)}"
-        )
+        raise PilotCase001PolicyError(f"CASE-001 changed paths are not allowed: {list(changed)}")
     return root
 
 
@@ -185,12 +149,9 @@ def apply_case_001_worker(
     except OSError as exc:
         raise PilotCase001WorkerError(f"cannot read worker target: {exc}") from exc
     if source.count(_BROKEN_ADD_MANY) != 1:
-        raise PilotCase001WorkerError(
-            "pinned CASE-001 defect was not found exactly once"
-        )
-    updated = source.replace(_BROKEN_ADD_MANY, _FIXED_ADD_MANY)
+        raise PilotCase001WorkerError("pinned CASE-001 defect was not found exactly once")
     try:
-        path.write_text(updated, encoding="utf-8")
+        path.write_text(source.replace(_BROKEN_ADD_MANY, _FIXED_ADD_MANY), encoding="utf-8")
     except OSError as exc:
         raise PilotCase001WorkerError(f"cannot write worker target: {exc}") from exc
 
@@ -199,23 +160,8 @@ def case_001_sandbox_spec(image: str) -> SandboxSpec:
     return SandboxSpec(
         image=image,
         command_rules=(
-            CommandRule(
-                "python",
-                ("-m", "compileall", "-q", "/source/project_registry", "/source/tests"),
-            ),
-            CommandRule(
-                "python",
-                (
-                    "-m",
-                    "unittest",
-                    "discover",
-                    "-s",
-                    "/source/tests",
-                    "-t",
-                    "/source",
-                    "-v",
-                ),
-            ),
+            CommandRule(COMPILE_COMMAND[0], COMPILE_COMMAND[1:]),
+            CommandRule(TEST_COMMAND[0], TEST_COMMAND[1:]),
         ),
         max_cpu=1.0,
         max_memory_mb=256,
@@ -255,7 +201,7 @@ def execute_case_001(
     *,
     repository_root: str | Path,
     runs_root: str | Path,
-    sandbox_backend: SandboxBackend,
+    sandbox_backend,
     sandbox_spec: SandboxSpec,
     contract: PilotCase001Contract = CASE_001_CONTRACT,
 ) -> dict[str, object]:
@@ -281,9 +227,19 @@ def execute_case_001(
     }
 
     try:
+        source_candidate = Path(repository_root).resolve(strict=True)
+        runs_base = Path(runs_root).resolve()
+        try:
+            runs_base.relative_to(source_candidate)
+        except ValueError:
+            pass
+        else:
+            report.update(status="POLICY_BLOCKED", error="runs_root must be outside source checkout")
+            return report
+
         try:
             source_root = verify_repository_checkout(
-                repository_root,
+                source_candidate,
                 repository=contract.repository,
                 commit=contract.input_commit,
                 require_head=True,
@@ -293,58 +249,30 @@ def execute_case_001(
         _verify_contract_blob(source_root, contract)
         if _git_stdout(source_root, "status", "--porcelain"):
             raise PilotCase001PolicyError("source checkout must be clean")
-        runs_base = Path(runs_root).resolve()
-        try:
-            runs_base.relative_to(source_root)
-        except ValueError:
-            pass
-        else:
-            raise PilotCase001PolicyError(
-                "runs_root must be outside the source checkout"
-            )
 
         run_dir.mkdir(parents=True, exist_ok=False)
         _git(source_root, "worktree", "add", "--detach", str(worktree), contract.input_commit)
         _git(worktree, "switch", "-c", branch)
-
         apply_case_001_worker(worktree, contract=contract)
-        pending = tuple(
-            line
-            for line in _git_stdout(worktree, "diff", "--name-only").splitlines()
-            if line
-        )
+        pending = tuple(line for line in _git_stdout(worktree, "diff", "--name-only").splitlines() if line)
         if pending != (contract.allowed_path,):
-            raise PilotCase001PolicyError(
-                f"worker changed forbidden paths: {list(pending)}"
-            )
+            raise PilotCase001PolicyError(f"worker changed forbidden paths: {list(pending)}")
 
         _git(worktree, "add", "--", contract.allowed_path)
         _git(
             worktree,
-            "-c",
-            "user.name=Creative OS Executor",
-            "-c",
-            "user.email=executor@local.invalid",
-            "commit",
-            "-m",
-            "Fix CASE-001 atomic batch insertion",
+            "-c", "user.name=Creative OS Executor",
+            "-c", "user.email=executor@local.invalid",
+            "commit", "-m", "Fix CASE-001 atomic batch insertion",
         )
         output_commit = _git_stdout(worktree, "rev-parse", "HEAD")
-        verify_case_001_output_checkout(
-            worktree,
-            output_commit=output_commit,
-            contract=contract,
-        )
+        verify_case_001_output_checkout(worktree, output_commit=output_commit, contract=contract)
         changed = _changed_paths(worktree, contract.input_commit, output_commit)
-        diff = _git(
-            worktree,
-            "diff",
-            "--binary",
-            contract.input_commit,
-            output_commit,
-        ).stdout
         diff_path = run_dir / "change.patch"
-        diff_path.write_text(diff, encoding="utf-8")
+        diff_path.write_text(
+            _git(worktree, "diff", "--binary", contract.input_commit, output_commit).stdout,
+            encoding="utf-8",
+        )
         report.update(
             output_commit=output_commit,
             changed_paths=list(changed),
@@ -358,53 +286,29 @@ def execute_case_001(
             source_dir=worktree,
             purpose=contract.purpose,
         )
-        commands = [
-            [
-                "python",
-                "-m",
-                "compileall",
-                "-q",
-                "/source/project_registry",
-                "/source/tests",
-            ],
-            [
-                "python",
-                "-m",
-                "unittest",
-                "discover",
-                "-s",
-                "/source/tests",
-                "-t",
-                "/source",
-                "-v",
-            ],
-        ]
-        command_results: list[dict[str, object]] = []
-        for index, argv in enumerate(commands, start=1):
+        command_results = []
+        for index, command in enumerate((COMPILE_COMMAND, TEST_COMMAND), start=1):
             result = sandbox_backend.run(
                 spec=sandbox_spec,
                 context=context,
                 output_dir=run_dir / f"sandbox-{index}",
-                argv=argv,
+                argv=list(command),
             )
             command_results.append(_result_dict(result))
             if not result.ok:
-                report["commands"] = command_results
-                report["status"] = "TESTS_FAILED"
-                report["error"] = (
-                    "sandbox command did not complete successfully: "
-                    + " ".join(argv)
+                report.update(
+                    commands=command_results,
+                    status="TESTS_FAILED",
+                    error=f"sandbox command failed: {' '.join(command)}",
                 )
                 _write_report(run_dir, report)
                 return report
 
-        report["commands"] = command_results
-        report["status"] = "ACTION_COMPLETED_REVIEW_REQUIRED"
+        report.update(commands=command_results, status="ACTION_COMPLETED_REVIEW_REQUIRED")
         _write_report(run_dir, report)
         return report
     except PilotCase001PolicyError as exc:
-        report["status"] = "POLICY_BLOCKED"
-        report["error"] = str(exc)
+        report.update(status="POLICY_BLOCKED", error=str(exc))
     except (
         PilotCase001WorkerError,
         PilotCase001Error,
@@ -413,8 +317,7 @@ def execute_case_001(
         OSError,
         ValueError,
     ) as exc:
-        report["status"] = "EXECUTION_FAILED"
-        report["error"] = str(exc)
+        report.update(status="EXECUTION_FAILED", error=str(exc))
 
     _write_report(run_dir, report)
     return report
