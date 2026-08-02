@@ -311,6 +311,51 @@ class StateMachineTest(unittest.TestCase):
         self.assertEqual(store.load_state(run_id)["state"], "CREATED")
         self.assertEqual(len(store.events(run_id)), 1)
 
+    def test_forged_journal_cannot_roll_back_committed_terminal_state(self):
+        for terminal_state in (RunState.STALE, RunState.BLOCKED):
+            with self.subTest(terminal_state=terminal_state):
+                run_id = f"RUN-FORGED-{terminal_state.value}"
+                store, _ = self.create(run_id)
+                if terminal_state == RunState.STALE:
+                    (self.workspace / "file.txt").write_text("changed", encoding="utf-8")
+                    terminal_snapshot = self.snapshot()
+                    self.assertEqual(store.revalidate(run_id, terminal_snapshot).status, "STALE")
+                else:
+                    terminal_snapshot = self.snapshot()
+                    store.transition(run_id, terminal_state, terminal_snapshot, reason="blocked")
+
+                run_dir = self.runs / run_id
+                rows = store.events(run_id)
+                state_before = (run_dir / "state.json").read_bytes()
+                events_before = (run_dir / "events.jsonl").read_bytes()
+                transaction_body = {
+                    "version": 1,
+                    "run_id": run_id,
+                    "previous_events": rows[:-1],
+                    "event": rows[-1],
+                }
+                transaction = {
+                    **transaction_body,
+                    "transaction_hash": hash_json(transaction_body),
+                }
+                (run_dir / ".transaction.json").write_text(
+                    json.dumps(transaction, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(RunIntegrityError, "cannot be authenticated after restart"):
+                    store.load_state(run_id)
+                with self.assertRaisesRegex(RunIntegrityError, "cannot be authenticated after restart"):
+                    store.transition(
+                        run_id,
+                        RunState.CONTRACT_VALIDATED,
+                        terminal_snapshot,
+                        reason="must remain blocked",
+                    )
+                self.assertEqual((run_dir / "state.json").read_bytes(), state_before)
+                self.assertEqual((run_dir / "events.jsonl").read_bytes(), events_before)
+                self.assertTrue((run_dir / ".transaction.json").exists())
+
     def test_two_concurrent_transitions_cannot_commit_the_same_sequence(self):
         store, run_id = self.create()
         barrier = threading.Barrier(2)

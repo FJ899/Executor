@@ -306,7 +306,11 @@ class RunStore:
         except BaseException as exc:
             if transaction_path.exists() or transaction_path.is_symlink():
                 try:
-                    self._recover_pending_locked(event.run_id, run_dir)
+                    self._recover_pending_locked(
+                        event.run_id,
+                        run_dir,
+                        trusted_transaction=transaction,
+                    )
                 except Exception as recovery_exc:
                     raise RunIntegrityError(
                         f"Transition for {event.run_id} failed and rollback could not be verified: {recovery_exc}"
@@ -348,7 +352,13 @@ class RunStore:
         self._verify_checkpoints(run_dir, rows)
         return state, rows
 
-    def _recover_pending_locked(self, run_id: str, run_dir: Path) -> None:
+    def _recover_pending_locked(
+        self,
+        run_id: str,
+        run_dir: Path,
+        *,
+        trusted_transaction: dict[str, Any] | None = None,
+    ) -> None:
         transaction_path = run_dir / ".transaction.json"
         if not transaction_path.exists() and not transaction_path.is_symlink():
             return
@@ -360,6 +370,8 @@ class RunStore:
             raise RunIntegrityError("Transaction journal hash mismatch")
         if transaction.get("version") != 1 or transaction.get("run_id") != run_id:
             raise RunIntegrityError("Transaction journal identity mismatch")
+        if trusted_transaction is not None and transaction != trusted_transaction:
+            raise RunIntegrityError("Transaction journal does not match the active transition")
         previous_rows = transaction.get("previous_events")
         event_row = transaction.get("event")
         if not isinstance(previous_rows, list) or not isinstance(event_row, dict):
@@ -386,6 +398,20 @@ class RunStore:
         checkpoint = self._read_optional_json_object(checkpoint_path, label="pending checkpoint")
         if checkpoint is not None and checkpoint != event_row:
             raise RunIntegrityError("Pending checkpoint cannot be safely rolled back")
+
+        # A journal found by a later process has no authenticity boundary: its
+        # ordinary hash can be recomputed by anyone who can write this directory.
+        # Cleanup is therefore automatic only while the canonical event log and
+        # state still equal the previous committed value. Once either canonical
+        # artifact contains the target value, restart recovery is ambiguous and
+        # must not silently roll a committed terminal event backwards.
+        if trusted_transaction is None and (
+            current_rows != (previous_rows if previous_rows else None)
+            or current_state != previous_state
+        ):
+            raise RunIntegrityError(
+                "Pending transaction changed canonical state and cannot be authenticated after restart"
+            )
 
         try:
             if previous_rows:
