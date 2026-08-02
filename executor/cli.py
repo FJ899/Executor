@@ -4,11 +4,12 @@ import argparse
 import json
 
 from executor.checkpoints import build_snapshot
-from executor.contracts import ContractLoadError, load_contract, validate_test_contract
+from executor.contracts import validate_test_contract
 from executor.governance import validate_project_bundle, validate_task_bundle
 from executor.policy import PolicyEngine
 from executor.repository_roots import parse_repository_roots
 from executor.state_machine import InvalidTransition, RunIntegrityError, RunState, RunStore
+from executor.strict_json import load_json_object
 
 
 def _print(payload: object) -> None:
@@ -18,10 +19,10 @@ def _print(payload: object) -> None:
 def _snapshot_from_args(args: argparse.Namespace):
     return build_snapshot(
         executor_version=args.executor_version,
-        policy=load_contract(args.policy),
-        project_contract=load_contract(args.project),
-        task_contract=load_contract(args.task),
-        test_contract=load_contract(args.test_contract),
+        policy=load_json_object(args.policy),
+        project_contract=load_json_object(args.project),
+        task_contract=load_json_object(args.task),
+        test_contract=load_json_object(args.test_contract),
         prompt_bundle={"version": args.prompt_version},
         model_id=args.model_id,
         repository_shas={"target": args.repository_sha},
@@ -102,26 +103,26 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "validate-project":
-            result = validate_project_bundle(load_contract(args.path), executor_policy=load_contract(args.policy), base_dir=args.base_dir)
+            result = validate_project_bundle(load_json_object(args.path), executor_policy=load_json_object(args.policy), base_dir=args.base_dir)
             _print(result.to_dict())
             return 0 if result.ok else 2
         if args.command == "validate-test":
-            evidence = load_contract(args.holdout_evidence) if args.holdout_evidence else None
-            result = validate_test_contract(load_contract(args.path), base_dir=args.base_dir, holdout_evidence=evidence)
+            evidence = load_json_object(args.holdout_evidence) if args.holdout_evidence else None
+            result = validate_test_contract(load_json_object(args.path), base_dir=args.base_dir, holdout_evidence=evidence)
             _print(result.to_dict())
             return 0 if result.ok else 2
         if args.command == "validate-task":
             result = validate_task_bundle(
-                load_contract(args.path),
-                executor_policy=load_contract(args.policy),
+                load_json_object(args.path),
+                executor_policy=load_json_object(args.policy),
                 base_dir=args.base_dir,
                 repository_roots=parse_repository_roots(args.repository_root),
             )
             _print(result.to_dict())
             return 0 if result.ok else 2
         if args.command == "policy-check":
-            project = load_contract(args.project)
-            policy = load_contract(args.policy)
+            project = load_json_object(args.project)
+            policy = load_json_object(args.policy)
             validation = validate_project_bundle(project, executor_policy=policy, base_dir=args.base_dir)
             if not validation.ok:
                 _print(validation.to_dict())
@@ -151,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
             result = RunStore(args.runs_root).revalidate(args.run_id, _snapshot_from_args(args))
             _print(result.to_dict())
             return 0 if result.unchanged else 3
-    except (ContractLoadError, InvalidTransition, RunIntegrityError, OSError, ValueError) as exc:
+    except (InvalidTransition, RunIntegrityError, OSError, ValueError) as exc:
         _print({"status": "BLOCKED", "error": str(exc)})
         return 2
     return 2
