@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from executor.contracts import ContractLoadError, ValidationIssue, ValidationResult, ValidationStatus, load_contract, validate_project_contract, validate_task_contract
+from executor.repository_access import RepositoryPathError, canonical_repository_path, resolve_repository_file, validate_repository_candidate
 from executor.repository_identity import repository_identity_from_remote
 
 
@@ -15,22 +16,18 @@ _SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
 def _safe_path(value: str) -> bool:
-    path = Path(value)
-    return bool(value) and not path.is_absolute() and ".." not in path.parts
+    try:
+        canonical_repository_path(value)
+    except RepositoryPathError:
+        return False
+    return True
 
 
 def _resolve_regular_file(base_dir: str | Path, relative: str) -> Path:
-    root = Path(base_dir).resolve(strict=True)
-    candidate = root / relative
-    if candidate.is_symlink():
-        raise ValueError("File cannot be a symlink")
-    resolved = candidate.resolve(strict=True)
-    try:
-        resolved.relative_to(root)
-    except ValueError as exc:
-        raise ValueError("File escapes base_dir") from exc
-    if not resolved.is_file():
+    _, candidate = validate_repository_candidate(base_dir, relative)
+    if not candidate.exists():
         raise FileNotFoundError(relative)
+    _, resolved = resolve_repository_file(base_dir, relative)
     return resolved
 
 
@@ -137,6 +134,7 @@ def validate_project_bundle(
         paths.extend(str(item.get("path", "")) for item in sources if isinstance(item, dict))
         for relative in paths:
             if not _safe_path(relative):
+                issues.append(ValidationIssue("UNSAFE_PROJECT_SOURCE", f"Unsafe project source path: {relative}", "$.authoritative_sources"))
                 continue
             try:
                 source_path = _resolve_regular_file(base_dir, relative)
@@ -146,7 +144,7 @@ def validate_project_bundle(
             except OSError as exc:
                 gaps.append(ValidationIssue("PROJECT_SOURCE_UNREADABLE", f"Cannot read required project source {relative}: {exc}", "$.authoritative_sources"))
                 continue
-            except ValueError as exc:
+            except (ValueError, RepositoryPathError) as exc:
                 issues.append(ValidationIssue("UNSAFE_PROJECT_SOURCE", f"{relative}: {exc}", "$.authoritative_sources"))
                 continue
             if source_path.stat().st_size == 0:
@@ -155,17 +153,17 @@ def validate_project_bundle(
             try:
                 policy_path = _resolve_regular_file(base_dir, "EXECUTOR_POLICY.yaml")
                 file_policy = load_contract(policy_path)
-            except (OSError, ValueError, ContractLoadError) as exc:
+            except (OSError, ValueError, RepositoryPathError, ContractLoadError) as exc:
                 gaps.append(ValidationIssue("POLICY_FILE_UNVERIFIED", f"Cannot verify EXECUTOR_POLICY.yaml: {exc}", "$.executor_policy"))
             else:
                 if file_policy != executor_policy:
                     issues.append(ValidationIssue("POLICY_FILE_MISMATCH", "Provided executor policy differs from authoritative EXECUTOR_POLICY.yaml", "$.executor_policy"))
 
     if issues:
-        return ValidationResult(ValidationStatus.INVALID, issues + gaps, contract)
+        return ValidationResult(ValidationStatus.INVALID, issues + gaps, contract, authoritative=True)
     if gaps:
-        return ValidationResult(ValidationStatus.INSUFFICIENT_EVIDENCE, gaps, contract)
-    return ValidationResult(ValidationStatus.VALID, normalized=contract)
+        return ValidationResult(ValidationStatus.INSUFFICIENT_EVIDENCE, gaps, contract, authoritative=True)
+    return ValidationResult(ValidationStatus.VALID, normalized=contract, authoritative=True)
 
 
 def validate_task_bundle(
@@ -209,7 +207,7 @@ def validate_task_bundle(
         relative = str(test_contract.get("path", ""))
         expected_hash = str(test_contract.get("sha256", ""))
         if not _safe_path(relative):
-            issues.append(ValidationIssue("UNSAFE_TEST_CONTRACT_PATH", "test_contract.path must be safe and relative", "$.test_contract.path"))
+            issues.append(ValidationIssue("UNSAFE_TEST_CONTRACT_PATH", "test_contract.path must be a normalized safe relative path", "$.test_contract.path"))
         if not _SHA256.fullmatch(expected_hash) or set(expected_hash) == {"0"}:
             issues.append(ValidationIssue("UNLOCKED_TEST_CONTRACT", "test_contract.sha256 requires a concrete SHA-256", "$.test_contract.sha256"))
         if base_dir is None:
@@ -221,7 +219,7 @@ def validate_task_bundle(
                 gaps.append(ValidationIssue("TEST_CONTRACT_NOT_FOUND", f"Locked test contract not found: {relative}", "$.test_contract.path"))
             except OSError as exc:
                 gaps.append(ValidationIssue("TEST_CONTRACT_UNREADABLE", f"Cannot read locked test contract: {exc}", "$.test_contract.path"))
-            except ValueError as exc:
+            except (ValueError, RepositoryPathError) as exc:
                 issues.append(ValidationIssue("UNSAFE_TEST_CONTRACT_PATH", str(exc), "$.test_contract.path"))
             else:
                 actual_hash = hashlib.sha256(test_path.read_bytes()).hexdigest()
@@ -241,7 +239,7 @@ def validate_task_bundle(
             issues.append(ValidationIssue("POLICY_PRECEDENCE_VIOLATION", "Task cannot enable merge denied by executor policy", "$.merge_policy.mode"))
 
     if issues:
-        return ValidationResult(ValidationStatus.INVALID, issues + gaps, contract)
+        return ValidationResult(ValidationStatus.INVALID, issues + gaps, contract, authoritative=True)
     if gaps:
-        return ValidationResult(ValidationStatus.INSUFFICIENT_EVIDENCE, gaps, contract)
-    return ValidationResult(ValidationStatus.VALID, normalized=contract)
+        return ValidationResult(ValidationStatus.INSUFFICIENT_EVIDENCE, gaps, contract, authoritative=True)
+    return ValidationResult(ValidationStatus.VALID, normalized=contract, authoritative=True)
