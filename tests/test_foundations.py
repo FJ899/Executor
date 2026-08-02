@@ -19,6 +19,16 @@ class FoundationsTest(unittest.TestCase):
     def valid_test_contract(self):
         return load_contract(ROOT / "test_contracts/examples/valid_test.yaml")
 
+    def validate_source_text(self, source_text):
+        with tempfile.TemporaryDirectory() as temp_name:
+            base = Path(temp_name)
+            (base / "holdout").mkdir()
+            (base / "source.json").write_text(source_text, encoding="utf-8")
+            (base / "holdout" / "GINSENG_TEST-003_HOLDOUT.enc").write_text("fixture\n", encoding="utf-8")
+            contract = self.valid_test_contract()
+            contract["source_claims"][0]["source"]["file"] = "source.json"
+            return validate_test_contract(contract, base_dir=base)
+
     def test_valid_test_contract(self):
         result = validate_test_contract(self.valid_test_contract(), base_dir=FIXTURES)
         self.assertEqual(result.status, ValidationStatus.VALID)
@@ -85,6 +95,16 @@ class FoundationsTest(unittest.TestCase):
             result = validate_test_contract(contract, base_dir=base)
             self.assertEqual(result.status, ValidationStatus.INVALID)
             self.assertIn("UNSAFE_SOURCE_PATH", {issue.code for issue in result.issues})
+
+    def test_duplicate_source_json_key_is_evidence_gap(self):
+        result = self.validate_source_text('{"blocking_gate_count": 999, "blocking_gate_count": 7}\n')
+        self.assertEqual(result.status, ValidationStatus.INSUFFICIENT_EVIDENCE)
+        self.assertIn("SOURCE_FILE_INVALID", {issue.code for issue in result.issues})
+
+    def test_nonstandard_source_json_constant_is_evidence_gap(self):
+        result = self.validate_source_text('{"blocking_gate_count": NaN}\n')
+        self.assertEqual(result.status, ValidationStatus.INSUFFICIENT_EVIDENCE)
+        self.assertIn("SOURCE_FILE_INVALID", {issue.code for issue in result.issues})
 
     def test_tamper_must_be_detected(self):
         contract = self.valid_test_contract()

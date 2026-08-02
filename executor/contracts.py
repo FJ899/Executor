@@ -81,6 +81,27 @@ class _SelectorLookupError(LookupError):
     pass
 
 
+def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"Duplicate JSON object key: {key}")
+        value[key] = item
+    return value
+
+
+def _reject_nonstandard_json_constant(value: str) -> None:
+    raise ValueError(f"Non-standard JSON constant: {value}")
+
+
+def _load_evidence_json(text: str) -> Any:
+    return json.loads(
+        text,
+        object_pairs_hook=_reject_duplicate_json_keys,
+        parse_constant=_reject_nonstandard_json_constant,
+    )
+
+
 def _selector_tokens(selector: str) -> list[str | int]:
     if not selector.startswith("$"):
         raise _SelectorSyntaxError("Selector must start with $")
@@ -230,8 +251,8 @@ def validate_test_contract(contract: dict[str, Any], *, base_dir: str | Path | N
                     issues.append(ValidationIssue("UNSAFE_SOURCE_PATH", str(exc), f"$.source_claims[{index}].source.file"))
                     continue
                 try:
-                    source_value = json.loads(source_path.read_text(encoding="utf-8"))
-                except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                    source_value = _load_evidence_json(source_path.read_text(encoding="utf-8"))
+                except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
                     gaps.append(ValidationIssue("SOURCE_FILE_INVALID", f"Source file must contain readable JSON: {exc}", f"$.source_claims[{index}].source.file"))
                     continue
                 try:
