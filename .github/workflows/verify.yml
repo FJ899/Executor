@@ -83,8 +83,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout
+      - name: Checkout Executor
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -103,5 +105,63 @@ jobs:
           HOST_EXECUTOR_SECRET: "must-not-reach-container"
         run: python -m unittest tests.test_sandbox_integration -v
 
+      - name: Checkout pinned CASE-001 target
+        uses: actions/checkout@v4
+        with:
+          repository: litrgratis-pixel/executor-pilot-target
+          ref: 3934a94a5eebf750079200589d6dc40e024d44a0
+          path: pilot-target-case-001
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run real pinned CASE-001 vertical slice
+        env:
+          RUN_PILOT_CASE_001: "1"
+          PILOT_TARGET_ROOT: ${{ github.workspace }}/pilot-target-case-001
+        run: python -m unittest tests.test_pilot_case_001_integration -v
+
+      - name: Checkout pinned CASE-002 target
+        uses: actions/checkout@v4
+        with:
+          repository: litrgratis-pixel/executor-pilot-target
+          ref: c3683bf37ad6a3f1d49c0ca05ebdd41627e9a5be
+          path: pilot-target-case-002
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run real pinned CASE-002 vertical slice
+        env:
+          RUN_PILOT_CASE_002: "1"
+          PILOT_TARGET_ROOT_CASE_002: ${{ github.workspace }}/pilot-target-case-002
+        run: python -m unittest tests.test_pilot_case_002_integration -v
+
+      - name: Checkout pinned CASE-003 target
+        uses: actions/checkout@v4
+        with:
+          repository: litrgratis-pixel/executor-pilot-target
+          ref: c42bead2bbbff9c84486f17637ec80f35eeffa25
+          path: pilot-target-case-003
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run real pinned CASE-003 vertical slice
+        env:
+          RUN_PILOT_CASE_003: "1"
+          PILOT_TARGET_ROOT_CASE_003: ${{ github.workspace }}/pilot-target-case-003
+        run: python -m unittest tests.test_pilot_case_003_integration -v
+
+      - name: Verify source checkouts remain pinned and clean
+        run: |
+          test "$(git -C pilot-target-case-001 rev-parse HEAD)" = "3934a94a5eebf750079200589d6dc40e024d44a0"
+          test -z "$(git -C pilot-target-case-001 status --porcelain --untracked-files=all)"
+          test "$(git -C pilot-target-case-002 rev-parse HEAD)" = "c3683bf37ad6a3f1d49c0ca05ebdd41627e9a5be"
+          test -z "$(git -C pilot-target-case-002 status --porcelain --untracked-files=all)"
+          test "$(git -C pilot-target-case-003 rev-parse HEAD)" = "c42bead2bbbff9c84486f17637ec80f35eeffa25"
+          test -z "$(git -C pilot-target-case-003 status --porcelain --untracked-files=all)"
+
       - name: Verify container cleanup
-        run: test -z "$(docker ps -aq --filter label=creative-os-executor-test=true)"
+        run: |
+          test -z "$(docker ps -aq --filter label=creative-os-executor-test=true)"
+          test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=case-001)"
+          test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=case-002)"
+          test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=case-003)"
