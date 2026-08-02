@@ -138,8 +138,8 @@ def _parse_assertion(text: str) -> tuple[str, str, Any, str] | None:
     field, operator, literal = match.groups()
     literal = literal.strip()
     try:
-        value = json.loads(literal)
-    except json.JSONDecodeError:
+        value = _load_evidence_json(literal)
+    except (json.JSONDecodeError, ValueError):
         value = literal
     return field, operator, value, literal
 
@@ -157,6 +157,14 @@ def _json_values_equal(actual: Any, expected: Any) -> bool:
         return type(actual) is type(expected) and actual == expected
     if isinstance(actual, (int, float)) and isinstance(expected, (int, float)):
         return actual == expected
+    if isinstance(actual, dict) or isinstance(expected, dict):
+        if not isinstance(actual, dict) or not isinstance(expected, dict) or actual.keys() != expected.keys():
+            return False
+        return all(_json_values_equal(actual[key], expected[key]) for key in actual)
+    if isinstance(actual, list) or isinstance(expected, list):
+        if not isinstance(actual, list) or not isinstance(expected, list) or len(actual) != len(expected):
+            return False
+        return all(_json_values_equal(left, right) for left, right in zip(actual, expected, strict=True))
     return type(actual) is type(expected) and actual == expected
 
 
