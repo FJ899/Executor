@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from executor.holdout import verify_holdout
+from executor.repository_access import RepositoryPathError, canonical_repository_path, resolve_repository_file, validate_repository_candidate
+from executor.strict_json import StrictJsonError, load_json_object
 
 
 class ContractLoadError(Exception):
@@ -32,35 +34,48 @@ class ValidationResult:
     status: ValidationStatus
     issues: list[ValidationIssue] = field(default_factory=list)
     normalized: dict[str, Any] | None = None
+    authoritative: bool = False
+
+    @property
+    def is_valid(self) -> bool:
+        return self.status == ValidationStatus.VALID
+
+    @property
+    def ready_for_model(self) -> bool:
+        return self.is_valid and self.authoritative
 
     @property
     def execution_status(self) -> str:
-        return "READY_FOR_MODEL" if self.status == ValidationStatus.VALID else "BLOCKED_BEFORE_MODEL"
+        return "READY_FOR_MODEL" if self.ready_for_model else "BLOCKED_BEFORE_MODEL"
 
     @property
     def ok(self) -> bool:
-        return self.status == ValidationStatus.VALID
+        return self.ready_for_model
 
     def to_dict(self) -> dict[str, Any]:
-        return {"status": self.status.value, "execution_status": self.execution_status, "issues": [x.__dict__ for x in self.issues], "normalized": self.normalized}
+        return {
+            "status": self.status.value,
+            "authoritative": self.authoritative,
+            "ready_for_model": self.ready_for_model,
+            "execution_status": self.execution_status,
+            "issues": [x.__dict__ for x in self.issues],
+            "normalized": self.normalized,
+        }
 
 
 def load_contract(path: str | Path) -> dict[str, Any]:
-    p = Path(path)
     try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise ContractLoadError(f"Cannot read contract {p}: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise ContractLoadError(f"{p} must use JSON-compatible YAML: {exc.msg} at line {exc.lineno}") from exc
-    if not isinstance(data, dict):
-        raise ContractLoadError(f"{p} must contain an object")
-    return data
+        return load_json_object(path)
+    except StrictJsonError as exc:
+        raise ContractLoadError(str(exc)) from exc
 
 
 def _safe_path(value: str) -> bool:
-    path = Path(value)
-    return bool(value) and not path.is_absolute() and ".." not in path.parts
+    try:
+        canonical_repository_path(value)
+    except RepositoryPathError:
+        return False
+    return True
 
 
 def _mapping(value: object) -> bool:
@@ -172,17 +187,10 @@ def _json_values_equal(actual: Any, expected: Any) -> bool:
 
 
 def _resolve_source_file(base_dir: str | Path, filename: str) -> Path:
-    root = Path(base_dir).resolve(strict=True)
-    candidate = root / filename
-    if candidate.is_symlink():
-        raise ValueError("Source file cannot be a symlink")
-    resolved = candidate.resolve(strict=True)
-    try:
-        resolved.relative_to(root)
-    except ValueError as exc:
-        raise ValueError("Source file escapes base_dir") from exc
-    if not resolved.is_file():
+    _, candidate = validate_repository_candidate(base_dir, filename)
+    if not candidate.exists():
         raise FileNotFoundError(filename)
+    _, resolved = resolve_repository_file(base_dir, filename)
     return resolved
 
 
@@ -274,7 +282,7 @@ def validate_test_contract(
                 except OSError as exc:
                     gaps.append(ValidationIssue("SOURCE_FILE_UNREADABLE", f"Cannot read source file: {exc}", f"$.source_claims[{index}].source.file"))
                     continue
-                except ValueError as exc:
+                except (ValueError, RepositoryPathError) as exc:
                     issues.append(ValidationIssue("UNSAFE_SOURCE_PATH", str(exc), f"$.source_claims[{index}].source.file"))
                     continue
                 try:
@@ -331,10 +339,10 @@ def validate_test_contract(
     else:
         issues.extend(_contradictions(acceptance))
     if issues:
-        return ValidationResult(ValidationStatus.INVALID, issues + gaps, contract)
+        return ValidationResult(ValidationStatus.INVALID, issues + gaps, contract, authoritative=True)
     if gaps:
-        return ValidationResult(ValidationStatus.INSUFFICIENT_EVIDENCE, gaps, contract)
-    return ValidationResult(ValidationStatus.VALID, normalized=contract)
+        return ValidationResult(ValidationStatus.INSUFFICIENT_EVIDENCE, gaps, contract, authoritative=True)
+    return ValidationResult(ValidationStatus.VALID, normalized=contract, authoritative=True)
 
 
 _PATH_CLASSES = {"semantic", "technical", "infrastructure", "generated", "test", "unknown"}
@@ -400,7 +408,7 @@ def validate_project_contract(contract: dict[str, Any]) -> ValidationResult:
         if not _mapping(caps.get("secrets")) or not isinstance(caps["secrets"].get("default"), list):
             issues.append(ValidationIssue("INVALID_SECRET_POLICY", "secrets.default list required", "$.capabilities.secrets"))
         if not _mapping(caps.get("commands")) or not isinstance(caps["commands"].get("allow"), list):
-            issues.append(ValidationIssue("INVALID_COMMAND_POLICY", "commands.allow list required", "$.capabilities.commands"))
+            issues.append(ValidationIssue("INVALID_COMMAND_POLICY", "commands.allow list is required", "$.capabilities.commands"))
         if not _mapping(caps.get("dependencies")) or caps["dependencies"].get("install") not in {"locked_only", "none"}:
             issues.append(ValidationIssue("INVALID_DEPENDENCY_POLICY", "dependencies.install invalid", "$.capabilities.dependencies"))
     env = contract.get("environment")
