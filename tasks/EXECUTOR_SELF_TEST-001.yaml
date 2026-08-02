@@ -1,0 +1,36 @@
+{
+  "schema_version": "executor-task/1.0",
+  "id": "EXECUTOR_SELF_TEST-001",
+  "risk_class": "LOW_RISK",
+  "mode": "BUILD_AND_TEST",
+  "repositories": {
+    "target": {
+      "name": "litrgratis-pixel/Executor",
+      "commit": "71005eafd383eeeaf4ee97ab520126142c75475c"
+    }
+  },
+  "test_contract": {
+    "path": "test_contracts/EXECUTOR_SELF_TEST-001.yaml",
+    "sha256": "04068ea23ea85161c7e608469f5435983b0a43cdfdcb9450fa96f480102c2454"
+  },
+  "capabilities": {
+    "network": false,
+    "secrets": [],
+    "commands": [
+      "python",
+      "git"
+    ]
+  },
+  "budgets": {
+    "max_model_calls": 1,
+    "max_execution_iterations": 1,
+    "max_wall_time_minutes": 15,
+    "max_patch_lines": 20
+  },
+  "decision_policy": {
+    "max_decision_rounds": 1
+  },
+  "merge_policy": {
+    "mode": "PR_ONLY"
+  }
+}
