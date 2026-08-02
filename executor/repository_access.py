@@ -82,6 +82,45 @@ def validate_repository_candidate(root_value: str | Path, relative: str) -> tupl
     return canonical, candidate
 
 
+def _read_resolved_bytes(resolved: Path) -> bytes:
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(resolved, flags)
+    except OSError as exc:
+        raise RepositoryPathError(f"Repository file cannot be opened safely: {exc}") from exc
+    try:
+        file_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_nlink != 1:
+            raise RepositoryPathError("Repository file changed type or link count during read")
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            content = stream.read()
+        after_stat = os.fstat(descriptor)
+        if (file_stat.st_dev, file_stat.st_ino, file_stat.st_size, file_stat.st_mtime_ns) != (
+            after_stat.st_dev,
+            after_stat.st_ino,
+            after_stat.st_size,
+            after_stat.st_mtime_ns,
+        ):
+            raise RepositoryPathError("Repository file changed during read")
+    finally:
+        os.close(descriptor)
+    return content
+
+
+class _VerifiedPath(type(Path())):
+    def read_bytes(self) -> bytes:
+        return _read_resolved_bytes(self)
+
+    def read_text(self, encoding: str | None = None, errors: str | None = None) -> str:
+        selected_encoding = encoding or "utf-8"
+        try:
+            return self.read_bytes().decode(selected_encoding, errors or "strict")
+        except UnicodeError as exc:
+            raise RepositoryPathError(f"Repository file must use {selected_encoding}: {exc}") from exc
+
+
 def resolve_repository_file(root_value: str | Path, relative: str) -> tuple[str, Path]:
     canonical, candidate = validate_repository_candidate(root_value, relative)
     root = _root(root_value)
@@ -101,26 +140,14 @@ def resolve_repository_file(root_value: str | Path, relative: str) -> tuple[str,
         raise RepositoryPathError("Repository path must identify a regular file")
     if file_stat.st_nlink != 1:
         raise RepositoryPathError("Repository file must not be hard-linked")
-    return canonical, resolved
+    return canonical, _VerifiedPath(resolved)
+
+
+def read_repository_bytes(root_value: str | Path, relative: str) -> tuple[str, bytes]:
+    canonical, resolved = resolve_repository_file(root_value, relative)
+    return canonical, resolved.read_bytes()
 
 
 def read_repository_text(root_value: str | Path, relative: str) -> tuple[str, str]:
     canonical, resolved = resolve_repository_file(root_value, relative)
-    flags = os.O_RDONLY
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    try:
-        descriptor = os.open(resolved, flags)
-    except OSError as exc:
-        raise RepositoryPathError(f"Repository file cannot be opened safely: {exc}") from exc
-    try:
-        file_stat = os.fstat(descriptor)
-        if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_nlink != 1:
-            raise RepositoryPathError("Repository file changed type or link count during read")
-        with os.fdopen(descriptor, "r", encoding="utf-8", closefd=False) as stream:
-            content = stream.read()
-    except UnicodeError as exc:
-        raise RepositoryPathError(f"Repository file must be UTF-8 text: {exc}") from exc
-    finally:
-        os.close(descriptor)
-    return canonical, content
+    return canonical, resolved.read_text(encoding="utf-8")
