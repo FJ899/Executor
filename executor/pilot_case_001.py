@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import uuid
 from dataclasses import dataclass
@@ -77,13 +78,37 @@ _FIXED_ADD_MANY = '''\
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    environment = {
+        key: value for key, value in os.environ.items() if not key.startswith("GIT_")
+    }
+    environment.update(
+        GIT_CONFIG_NOSYSTEM="1",
+        GIT_TERMINAL_PROMPT="0",
+    )
+    command = [
+        "git",
+        "-C",
+        str(root),
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        "core.attributesFile=/dev/null",
+        "-c",
+        "core.autocrlf=false",
+        "-c",
+        "commit.gpgSign=false",
+        *args,
+    ]
     try:
         result = subprocess.run(
-            ["git", "-C", str(root), *args],
+            command,
             text=True,
             capture_output=True,
             timeout=30,
             check=False,
+            env=environment,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise PilotCase001Error(f"git command failed to start: {exc}") from exc
@@ -100,7 +125,14 @@ def _git_stdout(root: Path, *args: str) -> str:
 def _changed_paths(root: Path, base: str, head: str = "HEAD") -> tuple[str, ...]:
     return tuple(
         line
-        for line in _git_stdout(root, "diff", "--name-only", f"{base}..{head}").splitlines()
+        for line in _git_stdout(
+            root,
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--name-only",
+            f"{base}..{head}",
+        ).splitlines()
         if line
     )
 
@@ -127,7 +159,7 @@ def verify_case_001_output_checkout(
     except RepositoryIdentityError as exc:
         raise PilotCase001PolicyError(str(exc)) from exc
     _verify_contract_blob(root, contract)
-    if _git_stdout(root, "status", "--porcelain"):
+    if _git_stdout(root, "status", "--porcelain", "--untracked-files=all"):
         raise PilotCase001PolicyError("CASE-001 output worktree is not clean")
     commit_line = _git_stdout(root, "rev-list", "--parents", "-n", "1", output_commit).split()
     if len(commit_line) != 2 or commit_line[1] != contract.input_commit:
@@ -247,14 +279,24 @@ def execute_case_001(
         except RepositoryIdentityError as exc:
             raise PilotCase001PolicyError(str(exc)) from exc
         _verify_contract_blob(source_root, contract)
-        if _git_stdout(source_root, "status", "--porcelain"):
+        if _git_stdout(source_root, "status", "--porcelain", "--untracked-files=all"):
             raise PilotCase001PolicyError("source checkout must be clean")
 
         run_dir.mkdir(parents=True, exist_ok=False)
         _git(source_root, "worktree", "add", "--detach", str(worktree), contract.input_commit)
         _git(worktree, "switch", "-c", branch)
         apply_case_001_worker(worktree, contract=contract)
-        pending = tuple(line for line in _git_stdout(worktree, "diff", "--name-only").splitlines() if line)
+        pending = tuple(
+            line
+            for line in _git_stdout(
+                worktree,
+                "diff",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--name-only",
+            ).splitlines()
+            if line
+        )
         if pending != (contract.allowed_path,):
             raise PilotCase001PolicyError(f"worker changed forbidden paths: {list(pending)}")
 
@@ -270,7 +312,15 @@ def execute_case_001(
         changed = _changed_paths(worktree, contract.input_commit, output_commit)
         diff_path = run_dir / "change.patch"
         diff_path.write_text(
-            _git(worktree, "diff", "--binary", contract.input_commit, output_commit).stdout,
+            _git(
+                worktree,
+                "diff",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--binary",
+                contract.input_commit,
+                output_commit,
+            ).stdout,
             encoding="utf-8",
         )
         report.update(
