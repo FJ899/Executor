@@ -4,7 +4,8 @@ import argparse
 import json
 
 from executor.checkpoints import build_snapshot
-from executor.contracts import ContractLoadError, load_contract, validate_project_contract, validate_task_contract, validate_test_contract
+from executor.contracts import ContractLoadError, load_contract, validate_test_contract
+from executor.governance import validate_project_bundle, validate_task_bundle
 from executor.policy import PolicyEngine
 from executor.state_machine import InvalidTransition, RunIntegrityError, RunState, RunStore
 
@@ -41,12 +42,18 @@ def _add_snapshot_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--model-id", default="none")
 
 
+def _add_governance_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--policy", required=True)
+    parser.add_argument("--base-dir", default=".")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="creative-os-executor")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_project = sub.add_parser("validate-project")
     p_project.add_argument("path")
+    _add_governance_args(p_project)
 
     p_test = sub.add_parser("validate-test")
     p_test.add_argument("path")
@@ -55,9 +62,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p_task = sub.add_parser("validate-task")
     p_task.add_argument("path")
+    _add_governance_args(p_task)
 
     p_policy = sub.add_parser("policy-check")
     p_policy.add_argument("project")
+    _add_governance_args(p_policy)
     p_policy.add_argument("--path")
     p_policy.add_argument("--allowed", action="append", default=[])
     p_policy.add_argument("--network", action="store_true")
@@ -91,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "validate-project":
-            result = validate_project_contract(load_contract(args.path))
+            result = validate_project_bundle(load_contract(args.path), executor_policy=load_contract(args.policy), base_dir=args.base_dir)
             _print(result.to_dict())
             return 0 if result.ok else 2
         if args.command == "validate-test":
@@ -100,16 +109,17 @@ def main(argv: list[str] | None = None) -> int:
             _print(result.to_dict())
             return 0 if result.ok else 2
         if args.command == "validate-task":
-            result = validate_task_contract(load_contract(args.path))
+            result = validate_task_bundle(load_contract(args.path), executor_policy=load_contract(args.policy), base_dir=args.base_dir)
             _print(result.to_dict())
             return 0 if result.ok else 2
         if args.command == "policy-check":
             project = load_contract(args.project)
-            validation = validate_project_contract(project)
+            policy = load_contract(args.policy)
+            validation = validate_project_bundle(project, executor_policy=policy, base_dir=args.base_dir)
             if not validation.ok:
                 _print(validation.to_dict())
                 return 2
-            engine = PolicyEngine(project)
+            engine = PolicyEngine(project, policy)
             results = []
             if args.path:
                 results.append(engine.check_path_change(args.path, public_api_change=args.public_api_change, data_schema_change=args.data_schema_change, result_semantics_change=args.result_semantics_change).to_dict())
