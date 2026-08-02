@@ -4,7 +4,11 @@ Repozytorium: `litrgratis-pixel/Executor`.
 
 Robocza nazwa systemu i pakietu Python: `creative-os-executor`. Nie oznacza ona osobnego repozytorium.
 
-Bezpieczny runtime wykonawczy dla Creative OS. Aktualny zakres obejmuje:
+Executor jest runtime wykonawczym większego systemu Creative OS. Otrzymuje zatwierdzony kierunek i zamienia go w odwracalne, testowalne działanie. Nie zastępuje Ginsenga ani Company Loop, których rolą jest wyjście poza pierwszą ramę użytkownika, odkrycie potencjału, porównanie wariantów i przygotowanie decyzji.
+
+Zabezpieczenia, sandbox i dowód są fundamentami uczciwego wykonania, ale nie stanowią głównego celu produktu. Nadrzędną definicję celu i granic zawiera `CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md`.
+
+Aktualny zakres implementacji fundamentów obejmuje:
 
 - **M0 — Test Contract Validator**;
 - **M1 — Project Contract + Policy Engine**;
@@ -28,12 +32,15 @@ Pliki `.yaml` używają składni JSON, która jest poprawnym podzbiorem YAML 1.2
 
 ## Dokumenty sterujące
 
-- `EXECUTOR_CHARTER.md` — misja, hierarchia zaufania i warunki zatrzymania;
+- `CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md` — nadrzędny cel produktu, role Ginsenga, Company Loop, Creative OS, Executora i audytu oraz kolejność dalszej budowy;
+- `EXECUTOR_CHARTER.md` — misja Executora, hierarchia zaufania i warunki zatrzymania;
 - `EXECUTOR_POLICY.yaml` — deterministyczna polityka wykonania;
 - `CREATIVE_OS_EXECUTOR_BUILD_INSTRUCTION_v0.2.md` — kontrakt implementacyjny;
 - `CREATIVE_OS_EXECUTOR_WORK_AND_AUDIT_PROTOCOL_v1.0.md` — zaakceptowane zasady autonomicznej pracy, rozmowy, pełnych instrukcji oraz audytu dowodowego.
 
 Protokół pracy i audytu jest obowiązującym źródłem instrukcji dla projektu `executor-self`. Jego obecność nie jest dowodem implementacji mechanizmów runtime; egzekwowanie każdej reguły wymaga osobnego testu.
+
+Dokument celu produktu jest zatwierdzoną decyzją semantyczną, ale nie stanowi dowodu implementacji Ginsenga, Company Loop, `POTENTIAL_AND_DECISION_PACKET`, M3 ani `Action Authorization Packet`.
 
 ## Status
 
@@ -43,6 +50,9 @@ M1: IMPLEMENTED
 M2A: IMPLEMENTED
 M2B: IMPLEMENTED / FIXTURES VERIFIED
 M3+: LOCKED
+PRODUCT PURPOSE: USER APPROVED / DOCUMENTED
+POTENTIAL AND DECISION PACKET: LOGICAL CONTRACT / NOT IMPLEMENTED
+ACTION AUTHORIZATION PACKET: INTERNAL IDEA / CONTRACT NOT FROZEN / NOT IMPLEMENTED
 WORK AND AUDIT PROTOCOL: DOCUMENTED / RUNTIME ENFORCEMENT NOT CLAIMED
 EXTERNAL PROJECT EXECUTION: FORBIDDEN
 AUTO MERGE: DISABLED
