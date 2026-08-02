@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import subprocess
 import time
@@ -19,12 +18,6 @@ class SandboxUnavailable(RuntimeError):
 
 class SandboxExecutionError(RuntimeError):
     pass
-
-
-_MISSING_CONTAINER = re.compile(
-    r"(?:error:\s*)?(?:error response from daemon:\s*)?no such (?:object|container):\s*\S+",
-    re.IGNORECASE,
-)
 
 
 class DockerSandboxBackend:
@@ -156,11 +149,26 @@ class DockerSandboxBackend:
         return command
 
     @staticmethod
-    def _is_confirmed_missing(completed: subprocess.CompletedProcess[str]) -> bool:
+    def _is_confirmed_missing(completed: subprocess.CompletedProcess[str], container_name: str) -> bool:
         if completed.returncode == 0:
             return False
-        lines = [line.strip() for line in f"{completed.stdout}\n{completed.stderr}".splitlines() if line.strip()]
-        return len(lines) == 1 and _MISSING_CONTAINER.fullmatch(lines[0]) is not None
+        lines = [line.strip() for line in f"{completed.stdout or ''}\n{completed.stderr or ''}".splitlines() if line.strip()]
+        if len(lines) != 1:
+            return False
+        line = lines[0].casefold()
+        prefixes = (
+            "error: no such object: ",
+            "error: no such container: ",
+            "error response from daemon: no such object: ",
+            "error response from daemon: no such container: ",
+            "no such object: ",
+            "no such container: ",
+        )
+        for prefix in prefixes:
+            if line.startswith(prefix):
+                missing_name = line[len(prefix) :].strip().lstrip("/")
+                return missing_name == container_name.casefold()
+        return False
 
     def _cleanup(self, container_name: str) -> tuple[bool, str]:
         diagnostics: list[str] = []
@@ -191,7 +199,7 @@ class DockerSandboxBackend:
         if inspected.returncode == 0:
             diagnostics.append("container still exists after cleanup")
             return False, "; ".join(diagnostics)
-        if not self._is_confirmed_missing(inspected):
+        if not self._is_confirmed_missing(inspected, container_name):
             diagnostics.append(f"container absence is unverified: {inspected.stderr.strip() or inspected.stdout.strip()}")
             return False, "; ".join(diagnostics)
         return True, "; ".join(diagnostics)
