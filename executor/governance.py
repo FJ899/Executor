@@ -6,9 +6,10 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from executor.contracts import ContractLoadError, ValidationIssue, ValidationResult, ValidationStatus, load_contract, validate_project_contract, validate_task_contract
-from executor.repository_access import RepositoryPathError, canonical_repository_path, resolve_repository_file, validate_repository_candidate
+from executor.contracts import ValidationIssue, ValidationResult, ValidationStatus, validate_project_contract, validate_task_contract
+from executor.repository_access import RepositoryPathError, canonical_repository_path, read_repository_bytes, read_repository_text, validate_repository_candidate
 from executor.repository_identity import repository_identity_from_remote
+from executor.strict_json import StrictJsonError, loads_json_object
 
 
 _COMMIT = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
@@ -23,12 +24,20 @@ def _safe_path(value: str) -> bool:
     return True
 
 
-def _resolve_regular_file(base_dir: str | Path, relative: str) -> Path:
+def _read_regular_bytes(base_dir: str | Path, relative: str) -> bytes:
     _, candidate = validate_repository_candidate(base_dir, relative)
     if not candidate.exists():
         raise FileNotFoundError(relative)
-    _, resolved = resolve_repository_file(base_dir, relative)
-    return resolved
+    _, payload = read_repository_bytes(base_dir, relative)
+    return payload
+
+
+def _read_regular_text(base_dir: str | Path, relative: str) -> str:
+    _, candidate = validate_repository_candidate(base_dir, relative)
+    if not candidate.exists():
+        raise FileNotFoundError(relative)
+    _, text = read_repository_text(base_dir, relative)
+    return text
 
 
 def _repository_name_from_remote(remote: str) -> str | None:
@@ -137,7 +146,7 @@ def validate_project_bundle(
                 issues.append(ValidationIssue("UNSAFE_PROJECT_SOURCE", f"Unsafe project source path: {relative}", "$.authoritative_sources"))
                 continue
             try:
-                source_path = _resolve_regular_file(base_dir, relative)
+                payload = _read_regular_bytes(base_dir, relative)
             except FileNotFoundError:
                 gaps.append(ValidationIssue("PROJECT_SOURCE_NOT_FOUND", f"Required project source not found: {relative}", "$.authoritative_sources"))
                 continue
@@ -147,13 +156,13 @@ def validate_project_bundle(
             except (ValueError, RepositoryPathError) as exc:
                 issues.append(ValidationIssue("UNSAFE_PROJECT_SOURCE", f"{relative}: {exc}", "$.authoritative_sources"))
                 continue
-            if source_path.stat().st_size == 0:
+            if not payload:
                 gaps.append(ValidationIssue("PROJECT_SOURCE_EMPTY", f"Required project source is empty: {relative}", "$.authoritative_sources"))
         if executor_policy is not None:
             try:
-                policy_path = _resolve_regular_file(base_dir, "EXECUTOR_POLICY.yaml")
-                file_policy = load_contract(policy_path)
-            except (OSError, ValueError, RepositoryPathError, ContractLoadError) as exc:
+                policy_text = _read_regular_text(base_dir, "EXECUTOR_POLICY.yaml")
+                file_policy = loads_json_object(policy_text)
+            except (OSError, ValueError, RepositoryPathError, StrictJsonError) as exc:
                 gaps.append(ValidationIssue("POLICY_FILE_UNVERIFIED", f"Cannot verify EXECUTOR_POLICY.yaml: {exc}", "$.executor_policy"))
             else:
                 if file_policy != executor_policy:
@@ -214,7 +223,7 @@ def validate_task_bundle(
             gaps.append(ValidationIssue("TASK_BASE_DIR_REQUIRED", "base_dir is required to verify the locked test contract", "$.test_contract"))
         elif _safe_path(relative):
             try:
-                test_path = _resolve_regular_file(base_dir, relative)
+                payload = _read_regular_bytes(base_dir, relative)
             except FileNotFoundError:
                 gaps.append(ValidationIssue("TEST_CONTRACT_NOT_FOUND", f"Locked test contract not found: {relative}", "$.test_contract.path"))
             except OSError as exc:
@@ -222,7 +231,7 @@ def validate_task_bundle(
             except (ValueError, RepositoryPathError) as exc:
                 issues.append(ValidationIssue("UNSAFE_TEST_CONTRACT_PATH", str(exc), "$.test_contract.path"))
             else:
-                actual_hash = hashlib.sha256(test_path.read_bytes()).hexdigest()
+                actual_hash = hashlib.sha256(payload).hexdigest()
                 if _SHA256.fullmatch(expected_hash) and actual_hash.lower() != expected_hash.lower():
                     issues.append(ValidationIssue("TEST_CONTRACT_HASH_MISMATCH", "Locked test contract hash does not match file content", "$.test_contract.sha256"))
 
