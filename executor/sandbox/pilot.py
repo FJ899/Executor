@@ -31,6 +31,8 @@ class PilotCase001DockerSandboxBackend(DockerSandboxBackend):
 
     def build_create_command(self, **kwargs) -> list[str]:
         command = super().build_create_command(**kwargs)
+        workdir_index = command.index("--workdir") + 1
+        command[workdir_index] = "/source"
         image = kwargs["spec"].image
         image_index = command.index(image)
         command[image_index:image_index] = [
