@@ -23,7 +23,6 @@ from executor.sandbox.policy_snapshot import load_execution_policy_snapshot
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="creative-os-executor-pilot")
     parser.add_argument("--case", choices=("001", "002", "003"), default="001")
-    parser.add_argument("--repository-root", required=True)
     parser.add_argument("--runs-root", required=True)
     parser.add_argument("--executor-root", default=".")
     parser.add_argument("--executor-commit", required=True)
@@ -37,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.case == "001":
         backend = PilotCase001DockerSandboxBackend(policy_snapshot=snapshot)
         report = execute_case_001(
-            repository_root=args.repository_root,
+            repository_root=None,
             runs_root=args.runs_root,
             sandbox_backend=backend,
             sandbox_spec=case_001_sandbox_spec(args.image),
@@ -48,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
             contract=CASE_002_CONTRACT,
         )
         report = execute_case_002(
-            repository_root=args.repository_root,
+            repository_root=None,
             runs_root=args.runs_root,
             sandbox_backend=backend,
             sandbox_spec=case_002_sandbox_spec(args.image),
@@ -59,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
             contract=CASE_003_CONTRACT,
         )
         report = execute_case_003(
-            repository_root=args.repository_root,
+            repository_root=None,
             runs_root=args.runs_root,
             sandbox_backend=backend,
             sandbox_spec=case_003_sandbox_spec(args.image),

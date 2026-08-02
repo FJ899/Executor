@@ -1,15 +1,24 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Protocol, Sequence
 
-from executor.repository_identity import RepositoryIdentityError, verify_repository_checkout
-from executor.repository_snapshot import RepositorySnapshotError, verify_source_tree
+from executor.source_acquisition import (
+    CommandResult,
+    ControlledGit,
+    ControlledHttpsSourceAcquirer,
+    ObjectIdentityError,
+    SourceAcquisitionError,
+    SourceAcquisitionRequest,
+    SourceAcquisitionResult,
+    build_manifest,
+    load_source_acquisition_result,
+    sha256_file,
+    verify_manifest_unchanged,
+)
 from executor.sandbox.docker import (
     DockerSandboxBackend,
     SandboxExecutionError,
@@ -60,56 +69,50 @@ TEST_COMMAND = ("python", "-m", "unittest", "discover", "-s", "tests", "-v")
 Worker = Callable[[Path, PinnedPilotContract], None]
 
 
-def git_command(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    environment = {
-        key: value for key, value in os.environ.items() if not key.startswith("GIT_")
-    }
-    environment.update(
-        GIT_CONFIG_NOSYSTEM="1",
-        GIT_TERMINAL_PROMPT="0",
+class GitClient(Protocol):
+    def run(self, git_args: Sequence[str]) -> CommandResult:
+        ...
+
+
+# Compatibility symbols retained for the stacked case modules. Host Git is
+# intentionally unavailable on the pilot runtime path.
+def git_command(root: Path, *args: str):
+    del root, args
+    raise PilotPolicyError(
+        "host Git is forbidden for the pinned pilot; use ControlledGit"
     )
-    command = [
-        "git",
-        "-C",
-        str(root),
-        "-c",
-        "core.hooksPath=/dev/null",
-        "-c",
-        "core.fsmonitor=false",
-        "-c",
-        "core.attributesFile=/dev/null",
-        "-c",
-        "core.autocrlf=false",
-        "-c",
-        "commit.gpgSign=false",
-        *args,
-    ]
-    try:
-        result = subprocess.run(
-            command,
-            text=True,
-            capture_output=True,
-            timeout=30,
-            check=False,
-            env=environment,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise PilotTaskError(f"git command failed to start: {exc}") from exc
-    if result.returncode:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise PilotTaskError(f"git {' '.join(args)} failed: {detail}")
-    return result
 
 
 def git_stdout(root: Path, *args: str) -> str:
-    return git_command(root, *args).stdout.strip()
+    del root, args
+    raise PilotPolicyError(
+        "host Git is forbidden for the pinned pilot; use ControlledGit"
+    )
 
 
-def changed_paths(root: Path, base: str, head: str = "HEAD") -> tuple[str, ...]:
+def _run_git(git: GitClient, *args: str) -> CommandResult:
+    try:
+        return git.run(args)
+    except SourceAcquisitionError as exc:
+        raise PilotTaskError(str(exc)) from exc
+
+
+def _git_stdout(git: GitClient, *args: str) -> str:
+    return _run_git(git, *args).stdout.strip()
+
+
+def changed_paths(
+    git: GitClient,
+    root: Path,
+    base: str,
+    head: str = "HEAD",
+) -> tuple[str, ...]:
     return tuple(
         line
-        for line in git_stdout(
-            root,
+        for line in _git_stdout(
+            git,
+            "-C",
+            str(root),
             "diff",
             "--no-ext-diff",
             "--no-textconv",
@@ -120,8 +123,18 @@ def changed_paths(root: Path, base: str, head: str = "HEAD") -> tuple[str, ...]:
     )
 
 
-def verify_contract_blob(root: Path, contract: PinnedPilotContract) -> None:
-    blob = git_stdout(root, "rev-parse", f"{contract.input_commit}:PILOT_CONTRACT.md")
+def verify_contract_blob(
+    git: GitClient,
+    root: Path,
+    contract: PinnedPilotContract,
+) -> None:
+    blob = _git_stdout(
+        git,
+        "-C",
+        str(root),
+        "rev-parse",
+        f"{contract.input_commit}:PILOT_CONTRACT.md",
+    )
     if blob != contract.contract_blob_sha:
         raise PilotPolicyError("pinned PILOT_CONTRACT.md blob mismatch")
 
@@ -148,6 +161,18 @@ def replace_exact_source(
         raise error_type(f"cannot write worker target: {exc}") from exc
 
 
+def _result_run_dir(root: Path) -> Path:
+    resolved = root.resolve(strict=True)
+    if resolved.name != "worktree":
+        raise PilotPolicyError("pilot output must use the controlled worktree path")
+    run_dir = resolved.parent
+    try:
+        load_source_acquisition_result(run_dir)
+    except SourceAcquisitionError as exc:
+        raise PilotPolicyError(str(exc)) from exc
+    return run_dir
+
+
 def verify_output_checkout(
     root_value: str | Path,
     *,
@@ -155,25 +180,51 @@ def verify_output_checkout(
     contract: PinnedPilotContract,
 ) -> Path:
     try:
-        root = verify_repository_checkout(
-            root_value,
-            repository=contract.repository,
-            commit=output_commit,
-            require_head=True,
-        )
-    except RepositoryIdentityError as exc:
+        root = Path(root_value).resolve(strict=True)
+        acquisition = load_source_acquisition_result(_result_run_dir(root))
+        git = ControlledGit(acquisition)
+    except (OSError, SourceAcquisitionError, PilotPolicyError) as exc:
+        if isinstance(exc, PilotPolicyError):
+            raise
         raise PilotPolicyError(str(exc)) from exc
-    verify_contract_blob(root, contract)
-    if git_stdout(root, "status", "--porcelain", "--untracked-files=all"):
+
+    if acquisition.repository != contract.repository:
+        raise PilotPolicyError("controlled source repository mismatch")
+    if acquisition.commit != contract.input_commit:
+        raise PilotPolicyError("controlled source commit mismatch")
+    if acquisition.contract_blob != contract.contract_blob_sha:
+        raise PilotPolicyError("controlled source contract blob mismatch")
+
+    verify_contract_blob(git, root, contract)
+    if _git_stdout(
+        git,
+        "-C",
+        str(root),
+        "status",
+        "--porcelain",
+        "--untracked-files=all",
+    ):
         raise PilotPolicyError(f"{contract.task_id} output worktree is not clean")
-    commit_line = git_stdout(
-        root, "rev-list", "--parents", "-n", "1", output_commit
+    observed_head = _git_stdout(git, "-C", str(root), "rev-parse", "HEAD")
+    if observed_head != output_commit:
+        raise PilotPolicyError(
+            f"{contract.task_id} output HEAD mismatch: expected {output_commit}"
+        )
+    commit_line = _git_stdout(
+        git,
+        "-C",
+        str(root),
+        "rev-list",
+        "--parents",
+        "-n",
+        "1",
+        output_commit,
     ).split()
     if len(commit_line) != 2 or commit_line[1] != contract.input_commit:
         raise PilotPolicyError(
             f"{contract.task_id} output must be one commit directly on pinned input"
         )
-    changed = changed_paths(root, contract.input_commit, output_commit)
+    changed = changed_paths(git, root, contract.input_commit, output_commit)
     if changed != (contract.allowed_path,):
         raise PilotPolicyError(
             f"{contract.task_id} changed paths are not allowed: {list(changed)}"
@@ -225,7 +276,7 @@ def write_report(run_dir: Path, report: dict[str, object]) -> None:
 
 
 class PinnedPilotDockerSandboxBackend(DockerSandboxBackend):
-    """Narrow external-project exception for one exact pinned pilot task."""
+    """Narrow external-project exception for one exact controlled pilot task."""
 
     def __init__(
         self,
@@ -293,18 +344,32 @@ class PinnedPilotDockerSandboxBackend(DockerSandboxBackend):
             raise SandboxExecutionError(
                 f"{self.contract.task_id} sandbox must mount the verified output repository root"
             )
-        try:
-            verify_source_tree(root, commit=context.commit, source_dir=root)
-        except RepositorySnapshotError as exc:
-            raise SandboxExecutionError(
-                f"{self.contract.task_id} source does not match the output commit: {exc}"
-            ) from exc
         return root
+
+
+def _acquisition_report(result: SourceAcquisitionResult) -> dict[str, object]:
+    return {
+        "input_model": result.input_model,
+        "repository": result.repository,
+        "canonical_url": result.canonical_url,
+        "commit": result.commit,
+        "root_tree": result.root_tree,
+        "contract_path": result.contract_path,
+        "contract_blob": result.contract_blob,
+        "evidence_path": str(result.evidence_path),
+        "evidence_sha256": sha256_file(result.evidence_path),
+        "manifest_path": str(result.manifest_path),
+        "manifest_sha256": sha256_file(result.manifest_path),
+        "toolchain_image": result.toolchain_image,
+        "toolchain_platform": result.toolchain_platform,
+        "git_binary": result.git_binary,
+        "git_version": result.git_version,
+    }
 
 
 def execute_pinned_task(
     *,
-    repository_root: str | Path,
+    repository_root: str | Path | None,
     runs_root: str | Path,
     sandbox_backend,
     sandbox_spec: SandboxSpec,
@@ -312,15 +377,18 @@ def execute_pinned_task(
     worker: Worker,
 ) -> dict[str, object]:
     run_id = uuid.uuid4().hex
-    run_dir = Path(runs_root) / run_id
+    run_dir = Path(runs_root).expanduser().resolve(strict=False) / run_id
     worktree = run_dir / "worktree"
     branch = f"{contract.branch_prefix}-{run_id[:12]}"
     report: dict[str, object] = {
-        "schema_version": "executor-pilot-result/1.0",
+        "schema_version": "executor-pilot-result/2.0",
         "task_id": contract.task_id,
         "run_id": run_id,
         "repository": contract.repository,
         "input_commit": contract.input_commit,
+        "input_root_tree": None,
+        "contract_blob": contract.contract_blob_sha,
+        "source_acquisition": None,
         "output_commit": None,
         "branch": branch,
         "worktree": str(worktree),
@@ -332,50 +400,58 @@ def execute_pinned_task(
         "human_decision_required": True,
     }
 
-    try:
-        source_candidate = Path(repository_root).resolve(strict=True)
-        runs_base = Path(runs_root).resolve()
-        try:
-            runs_base.relative_to(source_candidate)
-        except ValueError:
-            pass
-        else:
-            report.update(
-                status="POLICY_BLOCKED",
-                error="runs_root must be outside source checkout",
-            )
-            return report
+    if repository_root not in (None, ""):
+        report.update(
+            status="POLICY_BLOCKED",
+            error="local repository_root input is unsupported by CONTROLLED_HTTPS_FETCH_V1",
+        )
+        return report
 
-        try:
-            source_root = verify_repository_checkout(
-                source_candidate,
+    try:
+        acquirer = ControlledHttpsSourceAcquirer(
+            docker_binary=getattr(sandbox_backend, "docker_binary", "docker")
+        )
+        acquisition = acquirer.acquire(
+            SourceAcquisitionRequest(
+                run_id=run_id,
                 repository=contract.repository,
                 commit=contract.input_commit,
-                require_head=True,
+                contract_blob=contract.contract_blob_sha,
+                runs_root=Path(runs_root),
             )
-        except RepositoryIdentityError as exc:
-            raise PilotPolicyError(str(exc)) from exc
-        verify_contract_blob(source_root, contract)
-        if git_stdout(
-            source_root, "status", "--porcelain", "--untracked-files=all"
-        ):
-            raise PilotPolicyError("source checkout must be clean")
+        )
+        run_dir = acquisition.run_dir
+        worktree = run_dir / "worktree"
+        git = ControlledGit(
+            acquisition,
+            docker_binary=getattr(sandbox_backend, "docker_binary", "docker"),
+        )
+        verify_contract_blob(git, acquisition.source_dir, contract)
+        verify_manifest_unchanged(acquisition)
+        report.update(
+            input_root_tree=acquisition.root_tree,
+            source_acquisition=_acquisition_report(acquisition),
+            worktree=str(worktree),
+        )
 
-        run_dir.mkdir(parents=True, exist_ok=False)
-        git_command(
-            source_root,
+        _run_git(
+            git,
+            "--git-dir",
+            str(acquisition.git_dir),
             "worktree",
             "add",
             "--detach",
             str(worktree),
             contract.input_commit,
         )
-        git_command(worktree, "switch", "-c", branch)
+        _run_git(git, "-C", str(worktree), "switch", "-c", branch)
         worker(worktree, contract)
         pending = tuple(
             line
-            for line in git_stdout(
-                worktree,
+            for line in _git_stdout(
+                git,
+                "-C",
+                str(worktree),
                 "diff",
                 "--no-ext-diff",
                 "--no-textconv",
@@ -388,28 +464,28 @@ def execute_pinned_task(
                 f"worker changed forbidden paths: {list(pending)}"
             )
 
-        git_command(worktree, "add", "--", contract.allowed_path)
-        git_command(
-            worktree,
-            "-c",
-            "user.name=Creative OS Executor",
-            "-c",
-            "user.email=executor@local.invalid",
+        _run_git(git, "-C", str(worktree), "add", "--", contract.allowed_path)
+        _run_git(
+            git,
+            "-C",
+            str(worktree),
             "commit",
             "-m",
             contract.resolved_commit_message(),
         )
-        output_commit = git_stdout(worktree, "rev-parse", "HEAD")
+        output_commit = _git_stdout(git, "-C", str(worktree), "rev-parse", "HEAD")
         verify_output_checkout(
             worktree,
             output_commit=output_commit,
             contract=contract,
         )
-        changed = changed_paths(worktree, contract.input_commit, output_commit)
+        changed = changed_paths(git, worktree, contract.input_commit, output_commit)
         diff_path = run_dir / "change.patch"
         diff_path.write_text(
-            git_command(
-                worktree,
+            _run_git(
+                git,
+                "-C",
+                str(worktree),
                 "diff",
                 "--no-ext-diff",
                 "--no-textconv",
@@ -425,6 +501,7 @@ def execute_pinned_task(
             diff_path=str(diff_path),
         )
 
+        verify_manifest_unchanged(acquisition)
         context = SandboxExecutionContext(
             repository=contract.repository,
             commit=output_commit,
@@ -447,9 +524,11 @@ def execute_pinned_task(
                     status="TESTS_FAILED",
                     error=f"sandbox command failed: {' '.join(command)}",
                 )
+                verify_manifest_unchanged(acquisition)
                 write_report(run_dir, report)
                 return report
 
+        verify_manifest_unchanged(acquisition)
         report.update(
             commands=command_results,
             status="ACTION_COMPLETED_REVIEW_REQUIRED",
@@ -459,6 +538,8 @@ def execute_pinned_task(
     except PilotPolicyError as exc:
         report.update(status="POLICY_BLOCKED", error=str(exc))
     except (
+        ObjectIdentityError,
+        SourceAcquisitionError,
         PilotWorkerError,
         PilotTaskError,
         SandboxUnavailable,

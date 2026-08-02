@@ -12,18 +12,20 @@ jobs:
   foundation-tests:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout exact head
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Compile package
-        run: python -m compileall -q executor
+      - name: Compile package and tests
+        run: python -m compileall -q executor tests
 
       - name: Run unit and state tests
         run: python -m unittest discover -s tests -v
@@ -56,7 +58,7 @@ jobs:
 
       - name: Read untrusted repository data through wrapper
         run: |
-          output=$(python -m executor.cli repository-read --project project_contracts/executor-self.yaml --policy EXECUTOR_POLICY.yaml --base-dir . --repository litrgratis-pixel/Executor --commit "$GITHUB_SHA" --root . --path tests/fixtures/untrusted_prompt.md)
+          output=$(python -m executor.cli repository-read --project project_contracts/executor-self.yaml --policy EXECUTOR_POLICY.yaml --base-dir . --repository litrgratis-pixel/Executor --commit "${{ github.event.pull_request.head.sha || github.sha }}" --root . --path tests/fixtures/untrusted_prompt.md)
           printf '%s' "$output" | grep '"trust": "untrusted_data"'
           printf '%s' "$output" | grep '"can_instruct_executor": false'
 
@@ -82,86 +84,186 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      EVIDENCE_DIR: ${{ runner.temp }}/pr29-evidence
+      PILOT_RUNS_ROOT: ${{ runner.temp }}/pr29-runs
+      PINNED_GIT_IMAGE: alpine/git@sha256:0448d24b454392f9d115c6784343899e9d35a32de0ddc39a745263db34df94dd
     steps:
-      - name: Checkout Executor
+      - name: Checkout exact head
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Pull isolated fixture image
-        run: docker pull python:3.11-slim-bookworm
+      - name: Prepare raw evidence directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR/logs" "$EVIDENCE_DIR/traces" "$PILOT_RUNS_ROOT"
+          printf '%s\n' "$PR_HEAD_SHA" > "$EVIDENCE_DIR/head-sha.txt"
+          python --version 2>&1 | tee "$EVIDENCE_DIR/python-version.txt"
+          git --version 2>&1 | tee "$EVIDENCE_DIR/host-git-version.txt"
+          docker version 2>&1 | tee "$EVIDENCE_DIR/docker-version.txt"
 
-      - name: Resolve exact image id
-        run: echo "EXECUTOR_SANDBOX_IMAGE=$(docker image inspect --format='{{.Id}}' python:3.11-slim-bookworm)" >> "$GITHUB_ENV"
+      - name: Install process tracing tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v strace >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends strace
+          fi
+          strace --version 2>&1 | tee "$EVIDENCE_DIR/strace-version.txt"
+
+      - name: Pull isolated fixture image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull python:3.11-slim-bookworm 2>&1 \
+            | tee "$EVIDENCE_DIR/logs/pull-sandbox-image.log"
+
+      - name: Resolve exact sandbox image id
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_id="$(docker image inspect --format='{{.Id}}' python:3.11-slim-bookworm)"
+          test -n "$image_id"
+          printf 'EXECUTOR_SANDBOX_IMAGE=%s\n' "$image_id" >> "$GITHUB_ENV"
+          printf '%s\n' "$image_id" > "$EVIDENCE_DIR/sandbox-image-id.txt"
+
+      - name: Verify pinned Git acquisition image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull --platform linux/amd64 "$PINNED_GIT_IMAGE" 2>&1 \
+            | tee "$EVIDENCE_DIR/logs/pull-source-acquisition-image.log"
+          inspect="$(docker image inspect --format '{{json .RepoDigests}}|{{.Os}}/{{.Architecture}}|{{.Id}}' "$PINNED_GIT_IMAGE")"
+          printf '%s\n' "$inspect" | tee "$EVIDENCE_DIR/source-acquisition-image-inspect.txt"
+          printf '%s\n' "$inspect" | grep -F "$PINNED_GIT_IMAGE"
+          test "$(printf '%s\n' "$inspect" | cut -d'|' -f2)" = "linux/amd64"
+          version="$(
+            docker run --rm --platform linux/amd64 --network none \
+              --read-only --cap-drop ALL --security-opt no-new-privileges \
+              --entrypoint /bin/busybox "$PINNED_GIT_IMAGE" \
+              env -i PATH=/usr/bin:/bin /usr/bin/git --version
+          )"
+          printf '%s\n' "$version" | tee "$EVIDENCE_DIR/source-acquisition-git-version.txt"
+          test "$version" = "git version 2.54.0"
+
+      - name: Run complete unit suite for evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q executor tests
+          python -m unittest discover -s tests -v 2>&1 \
+            | tee "$EVIDENCE_DIR/logs/unit-tests.log"
 
       - name: Run Docker sandbox security tests
+        shell: bash
         env:
           RUN_DOCKER_TESTS: "1"
           HOST_EXECUTOR_SECRET: "must-not-reach-container"
-        run: python -m unittest tests.test_sandbox_integration -v
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_sandbox_integration -v 2>&1 \
+            | tee "$EVIDENCE_DIR/logs/docker-sandbox-security.log"
 
-      - name: Checkout pinned CASE-001 target
-        uses: actions/checkout@v4
-        with:
-          repository: litrgratis-pixel/executor-pilot-target
-          ref: 3934a94a5eebf750079200589d6dc40e024d44a0
-          path: pilot-target-case-001
-          fetch-depth: 1
-          persist-credentials: false
+      - name: Run real controlled source acquisition
+        shell: bash
+        env:
+          RUN_PILOT_SOURCE_ACQUISITION: "1"
+        run: |
+          set -euo pipefail
+          strace -ff -s 4096 -e trace=execve \
+            -o "$EVIDENCE_DIR/traces/source-acquisition.execve" \
+            python -m unittest \
+              tests.test_pilot_source_acquisition.RealPinnedAcquisitionIntegrationTests \
+              -v 2>&1 | tee "$EVIDENCE_DIR/logs/source-acquisition-integration.log"
 
-      - name: Run real pinned CASE-001 vertical slice
+      - name: Run real pinned CASE-001 through controlled acquisition
+        shell: bash
         env:
           RUN_PILOT_CASE_001: "1"
-          PILOT_TARGET_ROOT: ${{ github.workspace }}/pilot-target-case-001
-        run: python -m unittest tests.test_pilot_case_001_integration -v
+          EXECUTOR_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          strace -ff -s 4096 -e trace=execve \
+            -o "$EVIDENCE_DIR/traces/case-001.execve" \
+            python -m unittest tests.test_pilot_case_001_integration -v 2>&1 \
+            | tee "$EVIDENCE_DIR/logs/case-001.log"
 
-      - name: Checkout pinned CASE-002 target
-        uses: actions/checkout@v4
-        with:
-          repository: litrgratis-pixel/executor-pilot-target
-          ref: c3683bf37ad6a3f1d49c0ca05ebdd41627e9a5be
-          path: pilot-target-case-002
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Run real pinned CASE-002 vertical slice
+      - name: Run real pinned CASE-002 through controlled acquisition
+        shell: bash
         env:
           RUN_PILOT_CASE_002: "1"
-          PILOT_TARGET_ROOT_CASE_002: ${{ github.workspace }}/pilot-target-case-002
-        run: python -m unittest tests.test_pilot_case_002_integration -v
+          EXECUTOR_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          strace -ff -s 4096 -e trace=execve \
+            -o "$EVIDENCE_DIR/traces/case-002.execve" \
+            python -m unittest tests.test_pilot_case_002_integration -v 2>&1 \
+            | tee "$EVIDENCE_DIR/logs/case-002.log"
 
-      - name: Checkout pinned CASE-003 target
-        uses: actions/checkout@v4
-        with:
-          repository: litrgratis-pixel/executor-pilot-target
-          ref: c42bead2bbbff9c84486f17637ec80f35eeffa25
-          path: pilot-target-case-003
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Run real pinned CASE-003 vertical slice
+      - name: Run real pinned CASE-003 through controlled acquisition
+        shell: bash
         env:
           RUN_PILOT_CASE_003: "1"
-          PILOT_TARGET_ROOT_CASE_003: ${{ github.workspace }}/pilot-target-case-003
-        run: python -m unittest tests.test_pilot_case_003_integration -v
-
-      - name: Verify source checkouts remain pinned and clean
+          EXECUTOR_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          test "$(git -C pilot-target-case-001 rev-parse HEAD)" = "3934a94a5eebf750079200589d6dc40e024d44a0"
-          test -z "$(git -C pilot-target-case-001 status --porcelain --untracked-files=all)"
-          test "$(git -C pilot-target-case-002 rev-parse HEAD)" = "c3683bf37ad6a3f1d49c0ca05ebdd41627e9a5be"
-          test -z "$(git -C pilot-target-case-002 status --porcelain --untracked-files=all)"
-          test "$(git -C pilot-target-case-003 rev-parse HEAD)" = "c42bead2bbbff9c84486f17637ec80f35eeffa25"
-          test -z "$(git -C pilot-target-case-003 status --porcelain --untracked-files=all)"
+          set -euo pipefail
+          strace -ff -s 4096 -e trace=execve \
+            -o "$EVIDENCE_DIR/traces/case-003.execve" \
+            python -m unittest tests.test_pilot_case_003_integration -v 2>&1 \
+            | tee "$EVIDENCE_DIR/logs/case-003.log"
 
       - name: Verify container cleanup
+        if: always()
+        shell: bash
         run: |
-          test -z "$(docker ps -aq --filter label=creative-os-executor-test=true)"
-          test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=case-001)"
-          test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=case-002)"
-          test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=case-003)"
+          set -euo pipefail
+          {
+            docker ps -a --no-trunc
+            test -z "$(docker ps -aq --filter label=creative-os-executor-test=true)"
+            test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=case-001)"
+            test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=case-002)"
+            test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=case-003)"
+            test -z "$(docker ps -aq --filter label=creative-os-executor-source-git=true)"
+          } 2>&1 | tee "$EVIDENCE_DIR/logs/container-cleanup.log"
+
+      - name: Build raw PR #29 evidence archive
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR/runs"
+          if test -d "$PILOT_RUNS_ROOT"; then
+            cp -a "$PILOT_RUNS_ROOT/." "$EVIDENCE_DIR/runs/"
+          fi
+          find "$EVIDENCE_DIR" -type f -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            > "$EVIDENCE_DIR/file-sha256.txt"
+          archive="$RUNNER_TEMP/pr29-git-isolation-${PR_HEAD_SHA}.tar.gz"
+          tar --sort=name --mtime='UTC 1970-01-01' \
+            --owner=0 --group=0 --numeric-owner \
+            -czf "$archive" -C "$EVIDENCE_DIR" .
+          sha256sum "$archive" > "$archive.sha256"
+          printf 'EVIDENCE_ARCHIVE=%s\n' "$archive" >> "$GITHUB_ENV"
+
+      - name: Upload raw PR #29 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr29-git-isolation-${{ env.PR_HEAD_SHA }}
+          path: |
+            ${{ runner.temp }}/pr29-git-isolation-${{ env.PR_HEAD_SHA }}.tar.gz
+            ${{ runner.temp }}/pr29-git-isolation-${{ env.PR_HEAD_SHA }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 30
