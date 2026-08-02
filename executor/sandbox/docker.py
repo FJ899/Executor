@@ -6,8 +6,9 @@ import time
 import uuid
 from pathlib import Path
 
+from executor.repository_identity import RepositoryIdentityError, verify_repository_checkout
 from executor.sandbox.command_policy import validate_argv
-from executor.sandbox.spec import SandboxResult, SandboxSpec
+from executor.sandbox.spec import SandboxExecutionContext, SandboxResult, SandboxSpec
 
 
 class SandboxUnavailable(RuntimeError):
@@ -19,8 +20,19 @@ class SandboxExecutionError(RuntimeError):
 
 
 class DockerSandboxBackend:
-    def __init__(self, *, docker_binary: str = "docker"):
+    def __init__(
+        self,
+        *,
+        executor_policy: dict,
+        docker_binary: str = "docker",
+        control_repository: str = "litrgratis-pixel/Executor",
+    ):
+        execution = executor_policy.get("execution") if isinstance(executor_policy, dict) else None
+        if not isinstance(execution, dict) or not isinstance(execution.get("external_projects"), bool):
+            raise SandboxExecutionError("A validated executor policy with execution.external_projects is required")
+        self.executor_policy = executor_policy
         self.docker_binary = docker_binary
+        self.control_repository = control_repository
 
     def preflight(self) -> None:
         binary = shutil.which(self.docker_binary)
@@ -36,18 +48,57 @@ class DockerSandboxBackend:
         if completed.returncode != 0:
             raise SandboxUnavailable(f"Docker daemon is unavailable: {completed.stderr.strip()}")
 
+    def authorize(self, context: SandboxExecutionContext) -> Path:
+        if context.purpose not in {"EXECUTOR_FIXTURE", "PROJECT"}:
+            raise SandboxExecutionError(f"Unsupported sandbox execution purpose: {context.purpose}")
+        if context.purpose == "EXECUTOR_FIXTURE" and context.repository != self.control_repository:
+            raise SandboxExecutionError("EXECUTOR_FIXTURE is restricted to the Executor control repository")
+        external_projects = self.executor_policy["execution"]["external_projects"]
+        if not external_projects and not (
+            context.repository == self.control_repository and context.purpose == "EXECUTOR_FIXTURE"
+        ):
+            raise SandboxExecutionError(
+                "External project execution is disabled by EXECUTOR_POLICY.yaml; only Executor fixtures are allowed"
+            )
+        try:
+            repository_root = verify_repository_checkout(
+                context.repository_root,
+                repository=context.repository,
+                commit=context.commit,
+                require_head=True,
+            )
+        except RepositoryIdentityError as exc:
+            raise SandboxExecutionError(f"Unverified sandbox repository context: {exc}") from exc
+
+        source_input = Path(context.source_dir)
+        if source_input.is_symlink():
+            raise SandboxExecutionError("Sandbox source directory cannot be a symlink")
+        try:
+            source = source_input.resolve(strict=True)
+            relative = source.relative_to(repository_root)
+        except OSError as exc:
+            raise SandboxExecutionError(f"Sandbox source directory cannot be resolved: {exc}") from exc
+        except ValueError as exc:
+            raise SandboxExecutionError("Sandbox source directory escapes the verified repository") from exc
+        if not source.is_dir():
+            raise SandboxExecutionError(f"Sandbox source directory does not exist: {source}")
+        current = repository_root
+        for part in relative.parts:
+            current = current / part
+            if current.is_symlink():
+                raise SandboxExecutionError(f"Sandbox source path contains a symlink component: {part}")
+        return source
+
     def build_create_command(
         self,
         *,
         spec: SandboxSpec,
-        source_dir: str | Path,
+        context: SandboxExecutionContext,
         container_name: str,
         argv: list[str],
     ) -> list[str]:
         validate_argv(argv, spec.command_rules)
-        source = Path(source_dir).resolve()
-        if not source.is_dir():
-            raise SandboxExecutionError(f"Source directory does not exist: {source}")
+        source = self.authorize(context)
         if spec.network:
             raise SandboxExecutionError("M2B requires network=false")
         if spec.secrets:
@@ -92,26 +143,70 @@ class DockerSandboxBackend:
         command.extend(argv)
         return command
 
+    @staticmethod
+    def _is_confirmed_missing(completed: subprocess.CompletedProcess[str]) -> bool:
+        if completed.returncode == 0:
+            return False
+        message = f"{completed.stdout}\n{completed.stderr}".lower()
+        return "no such container" in message or "no such object" in message
+
+    def _cleanup(self, container_name: str) -> tuple[bool, str]:
+        diagnostics: list[str] = []
+        try:
+            removal = subprocess.run(
+                [self.docker_binary, "rm", "-f", container_name],
+                text=True,
+                capture_output=True,
+                timeout=15,
+                check=False,
+            )
+            if removal.returncode != 0:
+                diagnostics.append(f"docker rm failed: {removal.stderr.strip() or removal.stdout.strip()}")
+        except (OSError, subprocess.SubprocessError) as exc:
+            diagnostics.append(f"docker rm unavailable: {exc}")
+
+        try:
+            inspected = subprocess.run(
+                [self.docker_binary, "inspect", container_name],
+                text=True,
+                capture_output=True,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            diagnostics.append(f"docker inspect unavailable: {exc}")
+            return False, "; ".join(diagnostics)
+        if inspected.returncode == 0:
+            diagnostics.append("container still exists after cleanup")
+            return False, "; ".join(diagnostics)
+        if not self._is_confirmed_missing(inspected):
+            diagnostics.append(f"container absence is unverified: {inspected.stderr.strip() or inspected.stdout.strip()}")
+            return False, "; ".join(diagnostics)
+        return True, "; ".join(diagnostics)
+
     def run(
         self,
         *,
         spec: SandboxSpec,
-        source_dir: str | Path,
+        context: SandboxExecutionContext,
         output_dir: str | Path,
         argv: list[str],
         container_name: str | None = None,
     ) -> SandboxResult:
+        self.authorize(context)
         self.preflight()
         name = container_name or f"cos-executor-{uuid.uuid4().hex[:12]}"
         output = Path(output_dir)
         output.mkdir(parents=True, exist_ok=True)
-        create_command = self.build_create_command(spec=spec, source_dir=source_dir, container_name=name, argv=argv)
+        create_command = self.build_create_command(spec=spec, context=context, container_name=name, argv=argv)
 
         created = False
         timed_out = False
         stdout = ""
         stderr = ""
         exit_code: int | None = None
+        cleanup_verified = False
+        cleanup_detail = "container was not created"
         started = time.monotonic()
         try:
             creation = subprocess.run(create_command, text=True, capture_output=True, timeout=30, check=False)
@@ -141,16 +236,10 @@ class DockerSandboxBackend:
                     exit_code = None
         finally:
             if created:
-                subprocess.run([self.docker_binary, "rm", "-f", name], text=True, capture_output=True, timeout=15, check=False)
+                cleanup_verified, cleanup_detail = self._cleanup(name)
 
-        inspected = subprocess.run(
-            [self.docker_binary, "inspect", name],
-            text=True,
-            capture_output=True,
-            timeout=10,
-            check=False,
-        )
-        cleanup_verified = inspected.returncode != 0
+        if not cleanup_verified:
+            stderr = f"{stderr}\nCLEANUP_UNVERIFIED: {cleanup_detail}".strip()
         return SandboxResult(
             container_name=name,
             argv=tuple(argv),
