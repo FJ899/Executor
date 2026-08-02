@@ -150,6 +150,15 @@ jobs:
           PILOT_TARGET_ROOT_CASE_003: ${{ github.workspace }}/pilot-target-case-003
         run: python -m unittest tests.test_pilot_case_003_integration -v
 
+      - name: Verify source checkouts remain pinned and clean
+        run: |
+          test "$(git -C pilot-target-case-001 rev-parse HEAD)" = "3934a94a5eebf750079200589d6dc40e024d44a0"
+          test -z "$(git -C pilot-target-case-001 status --porcelain --untracked-files=all)"
+          test "$(git -C pilot-target-case-002 rev-parse HEAD)" = "c3683bf37ad6a3f1d49c0ca05ebdd41627e9a5be"
+          test -z "$(git -C pilot-target-case-002 status --porcelain --untracked-files=all)"
+          test "$(git -C pilot-target-case-003 rev-parse HEAD)" = "c42bead2bbbff9c84486f17637ec80f35eeffa25"
+          test -z "$(git -C pilot-target-case-003 status --porcelain --untracked-files=all)"
+
       - name: Verify container cleanup
         run: |
           test -z "$(docker ps -aq --filter label=creative-os-executor-test=true)"
