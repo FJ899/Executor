@@ -135,8 +135,24 @@ jobs:
           PILOT_TARGET_ROOT_CASE_002: ${{ github.workspace }}/pilot-target-case-002
         run: python -m unittest tests.test_pilot_case_002_integration -v
 
+      - name: Checkout pinned CASE-003 target
+        uses: actions/checkout@v4
+        with:
+          repository: litrgratis-pixel/executor-pilot-target
+          ref: c42bead2bbbff9c84486f17637ec80f35eeffa25
+          path: pilot-target-case-003
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run real pinned CASE-003 vertical slice
+        env:
+          RUN_PILOT_CASE_003: "1"
+          PILOT_TARGET_ROOT_CASE_003: ${{ github.workspace }}/pilot-target-case-003
+        run: python -m unittest tests.test_pilot_case_003_integration -v
+
       - name: Verify container cleanup
         run: |
           test -z "$(docker ps -aq --filter label=creative-os-executor-test=true)"
           test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=case-001)"
           test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=case-002)"
+          test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=case-003)"
