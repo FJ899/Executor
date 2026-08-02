@@ -33,6 +33,7 @@ Pliki `.yaml` używają składni JSON, która jest poprawnym podzbiorem YAML 1.2
 ## Dokumenty sterujące
 
 - `CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md` — nadrzędny cel produktu, role Ginsenga, Company Loop, Creative OS, Executora i audytu oraz kolejność dalszej budowy;
+- `EXECUTOR_MVP_REMEDIATION_AND_VALIDATION_PLAN_v1.0.md` — plan przejścia od infrastruktury do domkniętego Executor 1.0, rejestr ryzyk `FIN-*`, kolejność małych PR-ów, testy etapowe oraz bramki `CONTINUE / STOP`;
 - `EXECUTOR_CHARTER.md` — misja Executora, hierarchia zaufania i warunki zatrzymania;
 - `EXECUTOR_POLICY.yaml` — deterministyczna polityka wykonania;
 - `CREATIVE_OS_EXECUTOR_BUILD_INSTRUCTION_v0.2.md` — kontrakt implementacyjny;
@@ -40,6 +41,8 @@ Pliki `.yaml` używają składni JSON, która jest poprawnym podzbiorem YAML 1.2
 - `ACTION_AUTHORIZATION_PACKET_v1.0.md` — zamrożony terminalny kontrakt jednorazowej autoryzacji konkretnego działania.
 
 Protokół pracy i audytu jest obowiązującym źródłem instrukcji dla projektu `executor-self`. Jego obecność nie jest dowodem implementacji mechanizmów runtime; egzekwowanie każdej reguły wymaga osobnego testu.
+
+Plan naprawczy i rejestr `FIN-*` są punktem odniesienia dla kolejnych PR-ów. Ich obecność nie oznacza, że problemy zostały usunięte; ryzyko może otrzymać status `ELIMINATED` wyłącznie po wskazaniu dowodu w kodzie, teście i — gdy wymagane — realnym pilocie.
 
 Action Authorization Packet jest zamrożonym kontraktem semantycznym i posiada walidator. Poprawny pakiet oznacza wyłącznie `READY_FOR_ATOMIC_CONSUMPTION`. Nie jest dowodem wykonania. Atomowy ledger konsumpcji i związanie wyniku akcji należą do projektu M3.
 
@@ -54,6 +57,7 @@ M2A: IMPLEMENTED
 M2B: IMPLEMENTED / FIXTURES VERIFIED
 M3+: LOCKED
 PRODUCT PURPOSE: USER APPROVED / DOCUMENTED
+MVP REMEDIATION PLAN: PROPOSED / RUNTIME NOT IMPLEMENTED
 POTENTIAL AND DECISION PACKET: LOGICAL CONTRACT / NOT IMPLEMENTED
 ACTION AUTHORIZATION PACKET: CONTRACT FROZEN / VALIDATOR IMPLEMENTED / LEDGER PENDING M3
 WORK AND AUDIT PROTOCOL: DOCUMENTED / RUNTIME ENFORCEMENT NOT CLAIMED
