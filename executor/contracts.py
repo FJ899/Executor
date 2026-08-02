@@ -70,6 +70,79 @@ def _nonempty_list(value: object) -> bool:
 
 
 _ASSERTION = re.compile(r"^\s*([A-Za-z0-9_.-]+)\s*(==|!=)\s*(.+?)\s*$")
+_SELECTOR_TOKEN = re.compile(r"(?:\.([A-Za-z_][A-Za-z0-9_-]*)|\[(0|[1-9][0-9]*)\])")
+
+
+class _SelectorSyntaxError(ValueError):
+    pass
+
+
+class _SelectorLookupError(LookupError):
+    pass
+
+
+def _selector_tokens(selector: str) -> list[str | int]:
+    if not selector.startswith("$"):
+        raise _SelectorSyntaxError("Selector must start with $")
+    tokens: list[str | int] = []
+    position = 1
+    while position < len(selector):
+        match = _SELECTOR_TOKEN.match(selector, position)
+        if match is None:
+            raise _SelectorSyntaxError("Only .field and [index] selector segments are supported")
+        key, index = match.groups()
+        tokens.append(key if key is not None else int(index))
+        position = match.end()
+    return tokens
+
+
+def _select_json(value: Any, tokens: list[str | int]) -> Any:
+    selected = value
+    for token in tokens:
+        if isinstance(token, str):
+            if not isinstance(selected, dict) or token not in selected:
+                raise _SelectorLookupError(f"Object field not found: {token}")
+            selected = selected[token]
+        else:
+            if not isinstance(selected, list) or token >= len(selected):
+                raise _SelectorLookupError(f"Array index not found: {token}")
+            selected = selected[token]
+    return selected
+
+
+def _claim_expected_value(text: str) -> tuple[str, Any] | None:
+    match = _ASSERTION.match(text)
+    if match is None:
+        return None
+    _, operator, literal = match.groups()
+    try:
+        expected = json.loads(literal)
+    except json.JSONDecodeError:
+        expected = literal.strip()
+    return operator, expected
+
+
+def _json_values_equal(actual: Any, expected: Any) -> bool:
+    if isinstance(actual, bool) or isinstance(expected, bool):
+        return type(actual) is type(expected) and actual == expected
+    if isinstance(actual, (int, float)) and isinstance(expected, (int, float)):
+        return actual == expected
+    return type(actual) is type(expected) and actual == expected
+
+
+def _resolve_source_file(base_dir: str | Path, filename: str) -> Path:
+    root = Path(base_dir).resolve(strict=True)
+    candidate = root / filename
+    if candidate.is_symlink():
+        raise ValueError("Source file cannot be a symlink")
+    resolved = candidate.resolve(strict=True)
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("Source file escapes base_dir") from exc
+    if not resolved.is_file():
+        raise FileNotFoundError(filename)
+    return resolved
 
 
 def _control(contract: dict[str, Any], name: str, issues: list[ValidationIssue]) -> None:
@@ -119,9 +192,13 @@ def validate_test_contract(contract: dict[str, Any], *, base_dir: str | Path | N
     else:
         for index, claim in enumerate(claims):
             source = claim.get("source") if _mapping(claim) else None
-            if not _mapping(claim) or not str(claim.get("claim", "")).strip():
+            claim_text = str(claim.get("claim", "")).strip() if _mapping(claim) else ""
+            if not _mapping(claim) or not claim_text:
                 gaps.append(ValidationIssue("INVALID_SOURCE_CLAIM", "Claim text is required", f"$.source_claims[{index}]"))
                 continue
+            claim_expectation = _claim_expected_value(claim_text)
+            if claim_expectation is None:
+                issues.append(ValidationIssue("UNSUPPORTED_SOURCE_CLAIM", "Source claim must use field == value or field != value", f"$.source_claims[{index}].claim"))
             if not _mapping(source):
                 gaps.append(ValidationIssue("MISSING_SOURCE", "Claim source is required", f"$.source_claims[{index}].source"))
                 continue
@@ -131,8 +208,41 @@ def validate_test_contract(contract: dict[str, Any], *, base_dir: str | Path | N
                 issues.append(ValidationIssue("UNSAFE_SOURCE_PATH", "Source path must be safe and relative", f"$.source_claims[{index}].source.file"))
             if not selector:
                 gaps.append(ValidationIssue("MISSING_SELECTOR", "Source selector is required", f"$.source_claims[{index}].source.selector"))
-            if base_dir is not None and _safe_path(filename) and not (Path(base_dir) / filename).is_file():
-                gaps.append(ValidationIssue("SOURCE_FILE_NOT_FOUND", f"Source file not found: {filename}", f"$.source_claims[{index}].source.file"))
+                selector_tokens = None
+            else:
+                try:
+                    selector_tokens = _selector_tokens(selector)
+                except _SelectorSyntaxError as exc:
+                    issues.append(ValidationIssue("INVALID_SOURCE_SELECTOR", str(exc), f"$.source_claims[{index}].source.selector"))
+                    selector_tokens = None
+            if base_dir is None:
+                gaps.append(ValidationIssue("SOURCE_BASE_DIR_REQUIRED", "base_dir is required to verify source claims", f"$.source_claims[{index}].source"))
+            elif _safe_path(filename) and selector_tokens is not None and claim_expectation is not None:
+                try:
+                    source_path = _resolve_source_file(base_dir, filename)
+                except FileNotFoundError:
+                    gaps.append(ValidationIssue("SOURCE_FILE_NOT_FOUND", f"Source file not found: {filename}", f"$.source_claims[{index}].source.file"))
+                    continue
+                except OSError as exc:
+                    gaps.append(ValidationIssue("SOURCE_FILE_UNREADABLE", f"Cannot read source file: {exc}", f"$.source_claims[{index}].source.file"))
+                    continue
+                except ValueError as exc:
+                    issues.append(ValidationIssue("UNSAFE_SOURCE_PATH", str(exc), f"$.source_claims[{index}].source.file"))
+                    continue
+                try:
+                    source_value = json.loads(source_path.read_text(encoding="utf-8"))
+                except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                    gaps.append(ValidationIssue("SOURCE_FILE_INVALID", f"Source file must contain readable JSON: {exc}", f"$.source_claims[{index}].source.file"))
+                    continue
+                try:
+                    selected = _select_json(source_value, selector_tokens)
+                except _SelectorLookupError as exc:
+                    gaps.append(ValidationIssue("SOURCE_SELECTOR_NOT_FOUND", str(exc), f"$.source_claims[{index}].source.selector"))
+                    continue
+                operator, expected = claim_expectation
+                equal = _json_values_equal(selected, expected)
+                if (operator == "==" and not equal) or (operator == "!=" and equal):
+                    gaps.append(ValidationIssue("SOURCE_CLAIM_MISMATCH", "Selected source value does not satisfy the claim", f"$.source_claims[{index}].claim"))
     for name in ("positive_control", "negative_control", "tamper_control"):
         _control(contract, name, issues)
     positive, negative = contract.get("positive_control", {}), contract.get("negative_control", {})
