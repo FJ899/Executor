@@ -104,7 +104,7 @@ def resolve_repository_file(root_value: str | Path, relative: str) -> tuple[str,
     return canonical, resolved
 
 
-def read_repository_text(root_value: str | Path, relative: str) -> tuple[str, str]:
+def read_repository_bytes(root_value: str | Path, relative: str) -> tuple[str, bytes]:
     canonical, resolved = resolve_repository_file(root_value, relative)
     flags = os.O_RDONLY
     if hasattr(os, "O_NOFOLLOW"):
@@ -117,10 +117,25 @@ def read_repository_text(root_value: str | Path, relative: str) -> tuple[str, st
         file_stat = os.fstat(descriptor)
         if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_nlink != 1:
             raise RepositoryPathError("Repository file changed type or link count during read")
-        with os.fdopen(descriptor, "r", encoding="utf-8", closefd=False) as stream:
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
             content = stream.read()
-    except UnicodeError as exc:
-        raise RepositoryPathError(f"Repository file must be UTF-8 text: {exc}") from exc
+        after_stat = os.fstat(descriptor)
+        if (file_stat.st_dev, file_stat.st_ino, file_stat.st_size, file_stat.st_mtime_ns) != (
+            after_stat.st_dev,
+            after_stat.st_ino,
+            after_stat.st_size,
+            after_stat.st_mtime_ns,
+        ):
+            raise RepositoryPathError("Repository file changed during read")
     finally:
         os.close(descriptor)
     return canonical, content
+
+
+def read_repository_text(root_value: str | Path, relative: str) -> tuple[str, str]:
+    canonical, content = read_repository_bytes(root_value, relative)
+    try:
+        text = content.decode("utf-8")
+    except UnicodeError as exc:
+        raise RepositoryPathError(f"Repository file must be UTF-8 text: {exc}") from exc
+    return canonical, text
