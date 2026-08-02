@@ -5,6 +5,7 @@ from typing import Any
 
 from executor.policy import wrap_repository_content
 from executor.repository_access import read_repository_text
+from executor.repository_identity import verify_repository_checkout
 
 
 def read_wrapped_repository_file(
@@ -15,7 +16,8 @@ def read_wrapped_repository_file(
     path: str,
     project_contract: dict[str, Any],
 ) -> dict[str, Any]:
-    canonical, content = read_repository_text(root, path)
+    verified_root = verify_repository_checkout(root, repository=repository, commit=commit, require_head=True)
+    canonical, content = read_repository_text(verified_root, path)
     return wrap_repository_content(
         repository=repository,
         commit=commit,
