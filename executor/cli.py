@@ -7,6 +7,7 @@ from executor.checkpoints import build_snapshot
 from executor.contracts import ContractLoadError, load_contract, validate_test_contract
 from executor.governance import validate_project_bundle, validate_task_bundle
 from executor.policy import PolicyEngine
+from executor.repository_roots import parse_repository_roots
 from executor.state_machine import InvalidTransition, RunIntegrityError, RunState, RunStore
 
 
@@ -63,6 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     p_task = sub.add_parser("validate-task")
     p_task.add_argument("path")
     _add_governance_args(p_task)
+    p_task.add_argument("--repository-root", action="append", default=[])
 
     p_policy = sub.add_parser("policy-check")
     p_policy.add_argument("project")
@@ -109,7 +111,12 @@ def main(argv: list[str] | None = None) -> int:
             _print(result.to_dict())
             return 0 if result.ok else 2
         if args.command == "validate-task":
-            result = validate_task_bundle(load_contract(args.path), executor_policy=load_contract(args.policy), base_dir=args.base_dir)
+            result = validate_task_bundle(
+                load_contract(args.path),
+                executor_policy=load_contract(args.policy),
+                base_dir=args.base_dir,
+                repository_roots=parse_repository_roots(args.repository_root),
+            )
             _print(result.to_dict())
             return 0 if result.ok else 2
         if args.command == "policy-check":
