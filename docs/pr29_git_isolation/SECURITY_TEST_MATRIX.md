@@ -1,6 +1,16 @@
 # PR #29 — macierz testów bezpieczeństwa
 
-Każdy wynik wskazuje dokładny SHA, run ID i konkretny dowód. Sam status `PASS` bez logu, trace, markera lub manifestu jest niekompletny.
+Każdy wynik wskazuje dokładny SHA, run ID i konkretny dowód. Sam status `PASS` bez logu, trace, markera, manifestu lub artefaktu jest niekompletny.
+
+## Status powierzchni
+
+```text
+CLEAN / SMUDGE / PROCESS DIAGNOSTICS:
+COMPLETE FOR TESTED COMMANDS
+
+GENERAL HOST GIT EXECUTION SURFACE:
+PARTIAL — REMAINING TESTS DERIVE FROM ADR-001
+```
 
 | Wektor | Oczekiwane zachowanie | Test | SHA / run | Wynik | Dowód |
 |---|---|---|---|---|---|
@@ -10,27 +20,55 @@ Każdy wynik wskazuje dokładny SHA, run ID i konkretny dowód. Sam status `PASS
 | filtr `process` | proces nie startuje | `test_local_process_filter_cannot_start_on_host` | `ea3226dc` / `30767747711` | RED | marker + failure log |
 | `include.path` | konfiguracja nie jest ładowana | `test_include_path_cannot_load_executable_filter_configuration` | `ea3226dc` / `30767747711` | RED | marker + failure log |
 | `includeIf` | konfiguracja nie jest ładowana | `test_include_if_cannot_load_executable_filter_configuration` | `ea3226dc` / `30767747711` | RED | marker + failure log |
-| fsmonitor | program nie startuje | istniejący test / rozszerzenie PENDING | PENDING | PENDING | trace |
-| external diff | program nie startuje | test regresyjny PENDING | PENDING | PENDING | trace |
-| textconv | program nie startuje | test regresyjny PENDING | PENDING | PENDING | trace |
 | Git na wejściowym checkoutcie | brak procesu | `test_executor_never_runs_git_against_input_checkout_or_git_dir` | `ea3226dc` / `30767747711` | RED | 6 wywołań w failure log |
-| Git na wejściowym `.git` przez `--git-dir` | brak procesu | test negatywny PENDING | PENDING | PENDING | exec trace |
-| Git na wejściowym `.git` przez env | brak procesu | test negatywny PENDING | PENDING | PENDING | exec trace |
-| Git wykryty przez cwd / katalog nadrzędny | brak procesu | test negatywny PENDING | PENDING | PENDING | exec trace |
-| remote helper / skrypt potomny | brak wykonania kodu wejścia | test negatywny PENDING | PENDING | PENDING | exec trace |
-| INPUT MODEL COMPLIANCE | wejście zgodne z ADR albo fail-closed | test modelu wejścia | PENDING | PENDING | report |
-| OBJECT IDENTITY | commit, drzewa i bloby zgodne | test integralności | PENDING | PENDING | hashes |
-| ORIGIN ANCHOR | pochodzenie zakotwiczone poza checkoutem | test ADR | PENDING | PENDING | acquisition log / signature |
-| zmiana working tree | brak istotnych zmian | manifest | PENDING | PENDING | before / after |
-| zmiana wejściowego `.git` | brak istotnych zmian | manifest bezpieczeństwa | PENDING | PENDING | before / after |
 | CASE-001 | poprawny wynik | real run | `ea3226dc` / `30767747711` | PASS | sandbox job |
 | CASE-002 | poprawny wynik | real run | `ea3226dc` / `30767747711` | PASS | sandbox job |
 | CASE-003 | poprawny wynik | real run | `ea3226dc` / `30767747711` | PASS | sandbox job |
-| source checkouts pinned and clean | dokładne HEAD i pusty status | workflow gate | `ea3226dc` / `30767747711` | PASS* | sandbox job |
-| cleanup | brak pozostałych procesów i kontenerów | workflow gate | `ea3226dc` / `30767747711` | PASS | sandbox job |
+| cleanup | brak pozostałych kontenerów | workflow gate | `ea3226dc` / `30767747711` | PASS | sandbox job |
 | terminalny `PASS` | niedostępny | istniejące testy stanu | `ea3226dc` / `30767747711` | PASS | unit log |
 
-`PASS*` przy kontroli źródeł potwierdza dotychczasowy warunek workflow. Nie dowodzi bezpieczeństwa samego `git status` wobec wrogich metadanych; nowy model musi zastąpić tę kontrolę manifestem lub repozytorium kontrolowanym zgodnie z ADR.
+## Testy wymagane przez ADR-001
+
+| Wektor | Oczekiwane zachowanie | Planowany dowód | Status |
+|---|---|---|---|
+| REWORK SCOPE COMPLIANCE | zmienione wyłącznie ścieżki z `REWORK_SCOPE_V2` | porównanie changed files + commit diff | PENDING |
+| allowlist host/repository | akceptowane wyłącznie `github.com/litrgratis-pixel/executor-pilot-target` | acquisition report | PENDING |
+| dowolny URL użytkownika | odrzucony przed uruchomieniem toolchainu | negative test | PENDING |
+| lokalny checkout | `UNSUPPORTED / FAIL-CLOSED` | negative test + brak procesu Git | PENDING |
+| lokalna ścieżka / `file://` | odrzucone | negative tests | PENDING |
+| `ext::` | odrzucone | negative test | PENDING |
+| SSH / SCP-like / `git://` / HTTP | odrzucone | negative tests | PENDING |
+| cross-host redirect | odrzucony | transport test | PENDING |
+| credential helper / askpass | nieuruchomione | process trace | PENDING |
+| SSH command / agent | nieużyte | env + process trace | PENDING |
+| submodules | niepobierane | acquisition log + filesystem manifest | PENDING |
+| LFS smudge | nieuruchomiony | process trace + marker | PENDING |
+| niekontrolowany remote helper | nieuruchomiony | restricted PATH + process trace | PENDING |
+| przypięty image digest | dokładny `sha256:0448d24...` | container inspect / acquisition report | PENDING |
+| platforma | dokładnie `linux/amd64` | container inspect | PENDING |
+| Git binary path | dokładnie `/usr/bin/git` | acquisition report | PENDING |
+| Git version | dokładnie `2.54.0` | acquisition report | PENDING |
+| INPUT MODEL COMPLIANCE | tylko `CONTROLLED_HTTPS_FETCH_V1` | contract validation report | PENDING |
+| OBJECT IDENTITY — commit | `FETCH_HEAD` i detached HEAD równe oczekiwanemu SHA | hashes + log | PENDING |
+| OBJECT IDENTITY — tree | root tree związany z oczekiwanym commitem | hash | PENDING |
+| OBJECT IDENTITY — contract blob | dokładny blob `PILOT_CONTRACT.md` | hash | PENDING |
+| object integrity | wymagane obiekty przechodzą `git fsck --strict` | raw log | PENDING |
+| ORIGIN ANCHOR | kontrolowany HTTPS fetch do dokładnego endpointu | acquisition log | PENDING |
+| acquisition under `run_dir` | brak repo poza katalogiem runu | path trace + manifest | PENDING |
+| `--git-dir` / `--work-tree` do wejścia | brak procesu | exec trace | PENDING |
+| `GIT_DIR` / `GIT_WORK_TREE` | brak wskazania wejścia | sanitized env + exec trace | PENDING |
+| repo wykryte przez cwd | brak cwd wewnątrz nieufnego checkoutu | exec trace | PENDING |
+| program potomny uruchamiający Git | brak nieautoryzowanego exec | exec trace | PENDING |
+| fsmonitor | program wejścia nie startuje | marker + exec trace | PENDING |
+| external diff | program wejścia nie startuje | marker + exec trace | PENDING |
+| textconv | program wejścia nie startuje | marker + exec trace | PENDING |
+| przerwany fetch | fail-closed i cleanup | interruption test | PENDING |
+| niepełny / zły commit | run zablokowany | negative test | PENDING |
+| zły contract blob | run zablokowany | negative test | PENDING |
+| acquisition immutability | manifest istotnych wpisów stabilny | before / after | PENDING |
+| worker network | `network=false` | Docker command + test | PENDING |
+| raw CI evidence | artefakt związany z pełnym SHA | artifact metadata + archive SHA-256 | PENDING |
+| CASE-001–003 po naprawie | wszystkie zielone na fixed SHA | reports + raw logs | PENDING |
 
 ## Diagnostyka per polecenie
 
@@ -42,11 +80,12 @@ Dla Git `2.47.3` skrypt `evidence/diagnose_git_filter_surface.py` wykazał:
 | `smudge` | `worktree add` |
 | `process` | `status`, `worktree add`, `diff`, `add` |
 
-Brak wykonania w tej diagnozie nie tworzy listy „bezpiecznych poleceń”. Nadrzędny invariant zabrania wszystkim procesom Executora używania wejściowego `.git`.
+Brak wykonania w tej diagnozie nie tworzy listy „bezpiecznych poleceń”.
 
 ## Zasady aktualizacji
 
-- Zakres macierzy może zostać rozszerzony na podstawie ADR lub nowego kontrprzykładu.
-- Czerwony wynik na test-only SHA pozostaje jako dowód wykrywania podatności.
+- Czerwony wynik na test-only SHA pozostaje dowodem wykrywania podatności.
 - Zielony wynik musi pochodzić z fixed implementation SHA.
-- Wyniki baseline workflow `30766241419` są dowodem funkcjonalnym, nie dowodem izolacji filtrów Git.
+- Testy ADR nie są dodawane w commicie decyzyjnym.
+- Każdy nowy plik poza `REWORK_SCOPE_V2` powoduje `REWORK SCOPE COMPLIANCE: FAIL`.
+- Wyniki baseline workflow są dowodem funkcjonalnym, nie dowodem izolacji.
