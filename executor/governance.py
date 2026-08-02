@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
-from executor.contracts import ValidationIssue, ValidationResult, ValidationStatus, validate_project_contract, validate_task_contract
+from executor.contracts import ContractLoadError, ValidationIssue, ValidationResult, ValidationStatus, load_contract, validate_project_contract, validate_task_contract
 
 
 _COMMIT = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
@@ -31,6 +32,56 @@ def _resolve_regular_file(base_dir: str | Path, relative: str) -> Path:
     if not resolved.is_file():
         raise FileNotFoundError(relative)
     return resolved
+
+
+def _repository_name_from_remote(remote: str) -> str | None:
+    value = remote.strip()
+    if value.startswith("git@") and ":" in value:
+        value = value.split(":", 1)[1]
+    else:
+        parsed = urlparse(value)
+        if parsed.scheme:
+            value = parsed.path
+    value = value.strip("/")
+    if value.endswith(".git"):
+        value = value[:-4]
+    parts = value.split("/")
+    if len(parts) < 2:
+        return None
+    return "/".join(parts[-2:])
+
+
+def _git(root: str | Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(root), *args],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+
+def _verify_repository_lock(name: str, commit: str, root_value: str | Path) -> ValidationIssue | None:
+    root_input = Path(root_value)
+    if root_input.is_symlink():
+        return ValidationIssue("UNSAFE_REPOSITORY_ROOT", f"Repository root for {name} cannot be a symlink", "$.repositories")
+    try:
+        root = root_input.resolve(strict=True)
+    except OSError as exc:
+        return ValidationIssue("REPOSITORY_ROOT_UNAVAILABLE", f"Cannot resolve repository root for {name}: {exc}", "$.repositories")
+    if not root.is_dir():
+        return ValidationIssue("REPOSITORY_ROOT_UNAVAILABLE", f"Repository root for {name} is not a directory", "$.repositories")
+    try:
+        remote_result = _git(root, "remote", "get-url", "origin")
+        commit_result = _git(root, "cat-file", "-e", f"{commit}^{{commit}}")
+    except (OSError, subprocess.SubprocessError) as exc:
+        return ValidationIssue("REPOSITORY_VERIFICATION_FAILED", f"Cannot verify repository {name}: {exc}", "$.repositories")
+    actual_name = _repository_name_from_remote(remote_result.stdout) if remote_result.returncode == 0 else None
+    if actual_name is None or actual_name.lower() != name.lower():
+        return ValidationIssue("REPOSITORY_ROOT_MISMATCH", f"Repository root resolves to {actual_name or '<unknown>'}, expected {name}", "$.repositories")
+    if commit_result.returncode != 0:
+        return ValidationIssue("REPOSITORY_COMMIT_NOT_FOUND", f"Locked commit is not present in verified repository {name}: {commit}", "$.repositories")
+    return None
 
 
 def _policy_issues(policy: dict[str, Any]) -> list[ValidationIssue]:
@@ -113,8 +164,8 @@ def validate_project_bundle(
         if executor_policy is not None:
             try:
                 policy_path = _resolve_regular_file(base_dir, "EXECUTOR_POLICY.yaml")
-                file_policy = json.loads(policy_path.read_text(encoding="utf-8"))
-            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                file_policy = load_contract(policy_path)
+            except (OSError, ValueError, ContractLoadError) as exc:
                 gaps.append(ValidationIssue("POLICY_FILE_UNVERIFIED", f"Cannot verify EXECUTOR_POLICY.yaml: {exc}", "$.executor_policy"))
             else:
                 if file_policy != executor_policy:
@@ -132,6 +183,7 @@ def validate_task_bundle(
     *,
     executor_policy: dict[str, Any] | None,
     base_dir: str | Path | None,
+    repository_roots: dict[str, str | Path] | None = None,
 ) -> ValidationResult:
     structural = validate_task_contract(contract)
     issues = list(structural.issues)
@@ -141,6 +193,7 @@ def validate_task_bundle(
     else:
         issues.extend(_policy_issues(executor_policy))
 
+    roots = repository_roots or {}
     repositories = contract.get("repositories")
     if isinstance(repositories, dict):
         for key, repository in repositories.items():
@@ -148,9 +201,18 @@ def validate_task_bundle(
             if not isinstance(repository, dict) or not str(repository.get("name", "")).strip():
                 issues.append(ValidationIssue("INVALID_REPOSITORY_LOCK", "Repository name is required", path))
                 continue
+            name = str(repository["name"])
             commit = str(repository.get("commit", ""))
             if not _COMMIT.fullmatch(commit) or set(commit) == {"0"}:
                 issues.append(ValidationIssue("UNLOCKED_REPOSITORY", f"Repository {key} requires a concrete 40- or 64-hex commit", f"{path}.commit"))
+                continue
+            root = roots.get(name)
+            if root is None:
+                gaps.append(ValidationIssue("REPOSITORY_COMMIT_UNVERIFIED", f"A verified local repository root is required to prove the lock for {name}", path))
+                continue
+            repository_issue = _verify_repository_lock(name, commit, root)
+            if repository_issue is not None:
+                issues.append(ValidationIssue(repository_issue.code, repository_issue.message, path))
 
     test_contract = contract.get("test_contract")
     if isinstance(test_contract, dict):
