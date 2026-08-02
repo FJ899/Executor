@@ -90,6 +90,8 @@ def verify_holdout(
     if verifier_role == "TEST_FIXTURE_VERIFIER":
         if not test_id.startswith("EXECUTOR_VALIDATOR_FIXTURE-"):
             issues.append(("INVALID_HOLDOUT_VERIFIER", "TEST_FIXTURE_VERIFIER is allowed only for validator fixture contracts", "$.holdout"))
-    elif verifier_role != "INDEPENDENT_HOLDOUT_VERIFIER":
-        issues.append(("INVALID_HOLDOUT_VERIFIER", "Holdout evidence must come from an independent holdout verifier", "$.holdout"))
+    elif verifier_role == "INDEPENDENT_HOLDOUT_VERIFIER":
+        gaps.append(("INDEPENDENT_HOLDOUT_VERIFICATION_UNAVAILABLE", "The independent verifier trust mechanism is not implemented yet; a role string cannot prove independence", "$.holdout"))
+    else:
+        issues.append(("INVALID_HOLDOUT_VERIFIER", "Unsupported holdout verifier role", "$.holdout"))
     return issues, gaps
