@@ -22,6 +22,24 @@ class CommandRule:
 
 
 @dataclass(frozen=True)
+class SandboxExecutionContext:
+    repository: str
+    commit: str
+    repository_root: Path
+    source_dir: Path
+    purpose: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "repository": self.repository,
+            "commit": self.commit,
+            "repository_root": str(self.repository_root),
+            "source_dir": str(self.source_dir),
+            "purpose": self.purpose,
+        }
+
+
+@dataclass(frozen=True)
 class SandboxSpec:
     image: str
     command_rules: tuple[CommandRule, ...]
