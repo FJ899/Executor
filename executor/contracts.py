@@ -7,6 +7,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from executor.holdout import verify_holdout
+
 
 class ContractLoadError(Exception):
     pass
@@ -220,7 +222,12 @@ def _contradictions(assertions: list[str]) -> list[ValidationIssue]:
     return issues
 
 
-def validate_test_contract(contract: dict[str, Any], *, base_dir: str | Path | None = None) -> ValidationResult:
+def validate_test_contract(
+    contract: dict[str, Any],
+    *,
+    base_dir: str | Path | None = None,
+    holdout_evidence: dict[str, Any] | None = None,
+) -> ValidationResult:
     issues: list[ValidationIssue] = []
     gaps: list[ValidationIssue] = []
     if contract.get("schema_version") != "executor-test/1.0":
@@ -310,11 +317,14 @@ def validate_test_contract(contract: dict[str, Any], *, base_dir: str | Path | N
             issues.append(ValidationIssue("HOLDOUT_VISIBLE", "Holdout must be hidden", "$.holdout.visibility"))
         if holdout.get("access") != "REPLAY_ONLY":
             issues.append(ValidationIssue("INVALID_HOLDOUT_ACCESS", "Holdout access must be REPLAY_ONLY", "$.holdout.access"))
-        location = str(holdout.get("location", ""))
-        if not _safe_path(location):
-            issues.append(ValidationIssue("UNSAFE_HOLDOUT_PATH", "Holdout path must be safe and relative", "$.holdout.location"))
-        elif base_dir is not None and not (Path(base_dir) / location).is_file():
-            gaps.append(ValidationIssue("HOLDOUT_NOT_FOUND", f"Holdout file not found: {location}", "$.holdout.location"))
+        holdout_issues, holdout_gaps = verify_holdout(
+            test_id=str(contract.get("test_id", "")),
+            holdout=holdout,
+            base_dir=base_dir,
+            evidence=holdout_evidence,
+        )
+        issues.extend(ValidationIssue(*finding) for finding in holdout_issues)
+        gaps.extend(ValidationIssue(*finding) for finding in holdout_gaps)
     acceptance = contract.get("acceptance")
     if not _nonempty_list(acceptance) or not all(isinstance(x, str) and x.strip() for x in acceptance or []):
         issues.append(ValidationIssue("MISSING_ACCEPTANCE", "Acceptance needs non-empty assertions", "$.acceptance"))
