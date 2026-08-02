@@ -40,6 +40,7 @@ class ConsumptionReceipt:
     previous_event_hash: str | None
     event_hash: str
     event_authentication_tag: str
+    result_binding_token_sha256: str
     result_binding_token: str
 
     def public_dict(self) -> dict[str, Any]:
@@ -214,8 +215,50 @@ class AuthorizationConsumptionLedger:
             previous_event_hash=previous_event_hash,
             event_hash=event_hash,
             event_authentication_tag=tag,
+            result_binding_token_sha256=token_hash,
             result_binding_token=token,
         )
+
+    def verify_evidence_binding(
+        self,
+        consumption: dict[str, Any],
+        result: dict[str, Any],
+    ) -> None:
+        self.verify_integrity()
+        packet_id = consumption.get("packet_id")
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM consumptions WHERE packet_id = ?", (packet_id,)
+            ).fetchone()
+        if row is None or row["result_json"] is None:
+            raise AuthorizationLedgerIntegrityError("Evidence references an incomplete consumption")
+        expected_consumption = {
+            "schema_version": "executor-authorization-consumption/1.0",
+            "consumption_id": row["consumption_id"],
+            "packet_id": row["packet_id"],
+            "payload_sha256": row["payload_sha256"],
+            "run_id": row["run_id"],
+            "action_kind": row["action_kind"],
+            "action_binding_sha256": row["action_binding_sha256"],
+            "consumed_at": row["consumed_at"],
+            "previous_event_hash": row["previous_event_hash"],
+            "event_hash": row["event_hash"],
+            "event_authentication_tag": row["event_authentication_tag"],
+            "result_binding_token_sha256": row["result_binding_token_sha256"],
+        }
+        stored_result = json_loads(row["result_json"])
+        expected_result = {
+            "schema_version": "executor-action-result-binding/1.0",
+            "consumption_id": row["consumption_id"],
+            "packet_id": row["packet_id"],
+            "action_result": stored_result,
+            "action_result_sha256": row["action_result_sha256"],
+            "previous_event_hash": row["event_hash"],
+            "event_hash": row["result_event_hash"],
+            "event_authentication_tag": row["result_authentication_tag"],
+        }
+        if consumption != expected_consumption or result != expected_result:
+            raise AuthorizationLedgerIntegrityError("Evidence does not match the ledger binding")
 
     def bind_result(
         self,
@@ -344,7 +387,7 @@ class AuthorizationConsumptionLedger:
         ):
             raise AuthorizationLedgerIntegrityError("Invalid action result exit code")
         for value in (result.stdout_sha256, result.stderr_sha256, result.output_sha256):
-            if _SHA256.fullmatch(value) is None:
+            if _SHA256.fullmatch(value) is None or set(value) == {"0"}:
                 raise AuthorizationLedgerIntegrityError("Invalid action result hash")
         if not result.completed_at.endswith("Z"):
             raise AuthorizationLedgerIntegrityError("Action completion time must be UTC")
