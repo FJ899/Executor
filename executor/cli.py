@@ -7,6 +7,7 @@ from executor.checkpoints import build_snapshot
 from executor.contracts import validate_test_contract
 from executor.governance import validate_project_bundle, validate_task_bundle
 from executor.policy import PolicyEngine
+from executor.repository_reader import read_wrapped_repository_file
 from executor.repository_roots import parse_repository_roots
 from executor.state_machine import InvalidTransition, RunIntegrityError, RunState, RunStore
 from executor.strict_json import load_json_object
@@ -72,12 +73,21 @@ def main(argv: list[str] | None = None) -> int:
     _add_governance_args(p_policy)
     p_policy.add_argument("--path")
     p_policy.add_argument("--allowed", action="append", default=[])
+    p_policy.add_argument("--repository-root", default=None)
     p_policy.add_argument("--network", action="store_true")
     p_policy.add_argument("--secret", action="append", default=[])
     p_policy.add_argument("--command-line", default=None)
     p_policy.add_argument("--public-api-change", action="store_true")
     p_policy.add_argument("--data-schema-change", action="store_true")
     p_policy.add_argument("--result-semantics-change", action="store_true")
+
+    p_read = sub.add_parser("repository-read")
+    p_read.add_argument("--project", required=True)
+    _add_governance_args(p_read)
+    p_read.add_argument("--repository", required=True)
+    p_read.add_argument("--commit", required=True)
+    p_read.add_argument("--root", required=True)
+    p_read.add_argument("--path", required=True)
 
     p_create = sub.add_parser("run-create")
     p_create.add_argument("--runs-root", default="runs")
@@ -132,10 +142,26 @@ def main(argv: list[str] | None = None) -> int:
             if args.path:
                 results.append(engine.check_path_change(args.path, public_api_change=args.public_api_change, data_schema_change=args.data_schema_change, result_semantics_change=args.result_semantics_change).to_dict())
                 if args.allowed:
-                    results.append(engine.check_forbidden_path(args.path, args.allowed).to_dict())
+                    results.append(engine.check_forbidden_path(args.path, args.allowed, repository_root=args.repository_root).to_dict())
             results.extend(o.to_dict() for o in engine.check_capabilities(network=args.network, secrets=args.secret, command=args.command_line))
             _print({"objections": results})
             return 2 if any(item["kind"] in {"HARD_VETO", "POLICY_VETO"} for item in results) else 0
+        if args.command == "repository-read":
+            project = load_json_object(args.project)
+            policy = load_json_object(args.policy)
+            validation = validate_project_bundle(project, executor_policy=policy, base_dir=args.base_dir)
+            if not validation.ok:
+                _print(validation.to_dict())
+                return 2
+            wrapped = read_wrapped_repository_file(
+                repository=args.repository,
+                commit=args.commit,
+                root=args.root,
+                path=args.path,
+                project_contract=project,
+            )
+            _print(wrapped)
+            return 0
         if args.command == "run-create":
             store = RunStore(args.runs_root)
             run_id = store.create(_snapshot_from_args(args), run_id=args.run_id)
