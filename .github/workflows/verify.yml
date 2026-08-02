@@ -83,8 +83,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout
+      - name: Checkout Executor
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -103,5 +105,22 @@ jobs:
           HOST_EXECUTOR_SECRET: "must-not-reach-container"
         run: python -m unittest tests.test_sandbox_integration -v
 
+      - name: Checkout pinned CASE-001 target
+        uses: actions/checkout@v4
+        with:
+          repository: litrgratis-pixel/executor-pilot-target
+          ref: 3934a94a5eebf750079200589d6dc40e024d44a0
+          path: pilot-target
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run real pinned CASE-001 vertical slice
+        env:
+          RUN_PILOT_CASE_001: "1"
+          PILOT_TARGET_ROOT: ${{ github.workspace }}/pilot-target
+        run: python -m unittest tests.test_pilot_case_001_integration -v
+
       - name: Verify container cleanup
-        run: test -z "$(docker ps -aq --filter label=creative-os-executor-test=true)"
+        run: |
+          test -z "$(docker ps -aq --filter label=creative-os-executor-test=true)"
+          test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=case-001)"
