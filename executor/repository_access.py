@@ -44,8 +44,7 @@ def validate_scope_pattern(pattern: str) -> str:
     return pattern
 
 
-def resolve_repository_file(root_value: str | Path, relative: str) -> tuple[str, Path]:
-    canonical = canonical_repository_path(relative)
+def _root(root_value: str | Path) -> Path:
     root_input = Path(root_value)
     if root_input.is_symlink():
         raise RepositoryPathError("Repository root cannot be a symlink")
@@ -55,12 +54,37 @@ def resolve_repository_file(root_value: str | Path, relative: str) -> tuple[str,
         raise RepositoryPathError(f"Cannot resolve repository root: {exc}") from exc
     if not root.is_dir():
         raise RepositoryPathError("Repository root must be a directory")
+    return root
 
-    candidate = root
-    for part in PurePosixPath(canonical).parts:
-        candidate = candidate / part
-        if candidate.is_symlink():
+
+def validate_repository_candidate(root_value: str | Path, relative: str) -> tuple[str, Path]:
+    canonical = canonical_repository_path(relative)
+    root = _root(root_value)
+    parts = PurePosixPath(canonical).parts
+    current = root
+    for part in parts[:-1]:
+        current = current / part
+        if current.is_symlink():
             raise RepositoryPathError(f"Repository path contains symlink component: {part}")
+        try:
+            current = current.resolve(strict=True)
+        except OSError as exc:
+            raise RepositoryPathError(f"Repository parent cannot be resolved: {exc}") from exc
+        try:
+            current.relative_to(root)
+        except ValueError as exc:
+            raise RepositoryPathError("Repository path escapes repository root") from exc
+        if not current.is_dir():
+            raise RepositoryPathError("Repository path parent must be a directory")
+    candidate = current / parts[-1]
+    if candidate.is_symlink():
+        raise RepositoryPathError(f"Repository path contains symlink component: {parts[-1]}")
+    return canonical, candidate
+
+
+def resolve_repository_file(root_value: str | Path, relative: str) -> tuple[str, Path]:
+    canonical, candidate = validate_repository_candidate(root_value, relative)
+    root = _root(root_value)
     try:
         resolved = candidate.resolve(strict=True)
     except OSError as exc:
