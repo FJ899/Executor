@@ -39,7 +39,16 @@ class SandboxGateFalsificationTest(unittest.TestCase):
             stdout="",
             stderr="Error: No such object: x\nCannot connect to the Docker daemon",
         )
-        self.assertFalse(self.backend()._is_confirmed_missing(ambiguous))
+        self.assertFalse(self.backend()._is_confirmed_missing(ambiguous, "x"))
+
+    def test_missing_message_for_different_name_is_not_confirmation(self):
+        missing = subprocess.CompletedProcess(
+            ["docker", "inspect", "x"],
+            1,
+            stdout="",
+            stderr="Error: No such object: another-container",
+        )
+        self.assertFalse(self.backend()._is_confirmed_missing(missing, "x"))
 
     def test_exact_missing_container_message_is_confirmation(self):
         missing = subprocess.CompletedProcess(
@@ -48,7 +57,7 @@ class SandboxGateFalsificationTest(unittest.TestCase):
             stdout="",
             stderr="Error: No such object: x",
         )
-        self.assertTrue(self.backend()._is_confirmed_missing(missing))
+        self.assertTrue(self.backend()._is_confirmed_missing(missing, "x"))
 
 
 if __name__ == "__main__":
