@@ -15,7 +15,7 @@ Aktualny zakres implementacji fundamentów obejmuje:
 - **M2A — State Machine + Checkpointy**;
 - **M2B — Izolowany Sandbox dla fixtures**.
 
-Sandbox używa backendu Docker bez fallbacku do wykonania na hoście. Profil wymusza: read-only root, read-only source, osobny tmpfs workspace, brak sieci, brak sekretów, niedostępny HOME, non-root, usunięte capabilities, limity CPU/RAM/dysku/procesów/czasu oraz cleanup po runie.
+Sandbox używa backendu Docker bez fallbacku do wykonania na hoście. Profil wymusza: read-only root, read-only source, osobny tmpfs workspace, brak sieci, brak sekretów, niedostępny HOME, non-root, usunięte capabilities, limity CPU/RAM/dysku/procesów/czasu oraz cleanup po runie. Polityka, source, obraz i własność kontenera są wiązane z niezmiennymi identyfikatorami oraz weryfikowane fail-closed.
 
 M2B jest zweryfikowany wyłącznie na fixtures należących do repo Executora. Uruchamianie kodu z COS, ScriptOps, BPM:160 i innych repozytoriów nadal jest zabronione.
 
@@ -24,8 +24,8 @@ M2B jest zweryfikowany wyłącznie na fixtures należących do repo Executora. U
 ```bash
 python -m unittest discover -s tests -v
 python -m compileall -q executor
-python -m executor.cli validate-project project_contracts/executor-self.yaml
-python -m executor.cli validate-test test_contracts/examples/valid_test.yaml --base-dir tests/fixtures
+python -m executor.cli validate-project project_contracts/executor-self.yaml --policy EXECUTOR_POLICY.yaml --base-dir .
+python -m executor.cli validate-test test_contracts/examples/valid_test.yaml --base-dir tests/fixtures --holdout-evidence tests/fixtures/holdout_evidence.json
 ```
 
 Pliki `.yaml` używają składni JSON, która jest poprawnym podzbiorem YAML 1.2.
@@ -36,11 +36,14 @@ Pliki `.yaml` używają składni JSON, która jest poprawnym podzbiorem YAML 1.2
 - `EXECUTOR_CHARTER.md` — misja Executora, hierarchia zaufania i warunki zatrzymania;
 - `EXECUTOR_POLICY.yaml` — deterministyczna polityka wykonania;
 - `CREATIVE_OS_EXECUTOR_BUILD_INSTRUCTION_v0.2.md` — kontrakt implementacyjny;
-- `CREATIVE_OS_EXECUTOR_WORK_AND_AUDIT_PROTOCOL_v1.0.md` — zaakceptowane zasady autonomicznej pracy, rozmowy, pełnych instrukcji oraz audytu dowodowego.
+- `CREATIVE_OS_EXECUTOR_WORK_AND_AUDIT_PROTOCOL_v1.0.md` — zaakceptowane zasady autonomicznej pracy, rozmowy, pełnych instrukcji oraz audytu dowodowego;
+- `ACTION_AUTHORIZATION_PACKET_v1.0.md` — zamrożony terminalny kontrakt jednorazowej autoryzacji konkretnego działania.
 
 Protokół pracy i audytu jest obowiązującym źródłem instrukcji dla projektu `executor-self`. Jego obecność nie jest dowodem implementacji mechanizmów runtime; egzekwowanie każdej reguły wymaga osobnego testu.
 
-Dokument celu produktu jest zatwierdzoną decyzją semantyczną, ale nie stanowi dowodu implementacji Ginsenga, Company Loop, `POTENTIAL_AND_DECISION_PACKET`, M3 ani `Action Authorization Packet`.
+Action Authorization Packet jest zamrożonym kontraktem semantycznym i posiada walidator. Poprawny pakiet oznacza wyłącznie `READY_FOR_ATOMIC_CONSUMPTION`. Nie jest dowodem wykonania. Atomowy ledger konsumpcji i związanie wyniku akcji należą do projektu M3.
+
+Dokument celu produktu jest zatwierdzoną decyzją semantyczną, ale nie stanowi dowodu implementacji Ginsenga, Company Loop, `POTENTIAL_AND_DECISION_PACKET` ani M3.
 
 ## Status
 
@@ -52,7 +55,7 @@ M2B: IMPLEMENTED / FIXTURES VERIFIED
 M3+: LOCKED
 PRODUCT PURPOSE: USER APPROVED / DOCUMENTED
 POTENTIAL AND DECISION PACKET: LOGICAL CONTRACT / NOT IMPLEMENTED
-ACTION AUTHORIZATION PACKET: INTERNAL IDEA / CONTRACT NOT FROZEN / NOT IMPLEMENTED
+ACTION AUTHORIZATION PACKET: CONTRACT FROZEN / VALIDATOR IMPLEMENTED / LEDGER PENDING M3
 WORK AND AUDIT PROTOCOL: DOCUMENTED / RUNTIME ENFORCEMENT NOT CLAIMED
 EXTERNAL PROJECT EXECUTION: FORBIDDEN
 AUTO MERGE: DISABLED
