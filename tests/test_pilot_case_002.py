@@ -38,17 +38,30 @@ class PilotCase002Test(unittest.TestCase):
         self.temp.cleanup()
 
     def execute(self, backend=None):
-        return execute_case_002(
-            repository_root=self.fixture.source,
-            runs_root=self.fixture.runs,
-            sandbox_backend=backend or FakeSandboxBackend(),
-            sandbox_spec=self.spec,
-            contract=self.fixture.contract,
-        )
+        with self.fixture.controlled_runtime():
+            return execute_case_002(
+                repository_root=None,
+                runs_root=self.fixture.runs,
+                sandbox_backend=backend or FakeSandboxBackend(),
+                sandbox_spec=self.spec,
+                contract=self.fixture.contract,
+            )
 
     def test_happy_path_creates_one_reviewable_case_002_commit(self):
         backend = FakeSandboxBackend()
-        report = self.execute(backend)
+        with self.fixture.controlled_runtime():
+            report = execute_case_002(
+                repository_root=None,
+                runs_root=self.fixture.runs,
+                sandbox_backend=backend,
+                sandbox_spec=self.spec,
+                contract=self.fixture.contract,
+            )
+            verify_case_002_output_checkout(
+                report["worktree"],
+                output_commit=report["output_commit"],
+                contract=self.fixture.contract,
+            )
 
         self.assertEqual(report["status"], "ACTION_COMPLETED_REVIEW_REQUIRED")
         self.assertTrue(report["human_decision_required"])
@@ -63,19 +76,12 @@ class PilotCase002Test(unittest.TestCase):
             Path(report["worktree"]) / "project_registry/registry.py"
         ).read_text(encoding="utf-8")
         self.assertIn("CLOSED -> ACTIVE requires a non-empty reopen_reason", source)
-        verify_case_002_output_checkout(
-            report["worktree"],
-            output_commit=report["output_commit"],
-            contract=self.fixture.contract,
-        )
 
     def test_source_checkout_remains_on_broken_input(self):
         before = (
             self.fixture.source / "project_registry/registry.py"
         ).read_text(encoding="utf-8")
-
         report = self.execute()
-
         after = (
             self.fixture.source / "project_registry/registry.py"
         ).read_text(encoding="utf-8")
@@ -99,43 +105,48 @@ class PilotCase002Test(unittest.TestCase):
             branch_prefix="executor/case-002",
             purpose="PILOT_CASE_002",
         )
-
         report = self.execute()
-
         self.assertEqual(report["status"], "EXECUTION_FAILED")
         self.assertIn("not found exactly once", report["error"])
 
     def test_test_failure_keeps_diff_without_claiming_success(self):
         report = self.execute(FakeSandboxBackend((0, 1)))
-
         self.assertEqual(report["status"], "TESTS_FAILED")
         self.assertIsNotNone(report["output_commit"])
         self.assertTrue(Path(report["diff_path"]).is_file())
         self.assertTrue(report["human_decision_required"])
 
     def test_case_002_sandbox_accepts_only_verified_output(self):
-        report = self.execute()
-        context = SandboxExecutionContext(
-            repository=self.fixture.contract.repository,
-            commit=report["output_commit"],
-            repository_root=Path(report["worktree"]),
-            source_dir=Path(report["worktree"]),
-            purpose=self.fixture.contract.purpose,
-        )
-        backend = object.__new__(PilotCase002DockerSandboxBackend)
-        backend.contract = self.fixture.contract
-        policy = SimpleNamespace(
-            external_projects=False,
-            auto_merge=False,
-            default_network=False,
-            default_secrets=(),
-        )
-        with patch.object(
-            PilotCase002DockerSandboxBackend,
-            "_authoritative_policy",
-            return_value=policy,
-        ):
-            authorized = backend.authorize(context)
+        with self.fixture.controlled_runtime():
+            report = execute_case_002(
+                repository_root=None,
+                runs_root=self.fixture.runs,
+                sandbox_backend=FakeSandboxBackend(),
+                sandbox_spec=self.spec,
+                contract=self.fixture.contract,
+            )
+            context = SandboxExecutionContext(
+                repository=self.fixture.contract.repository,
+                commit=report["output_commit"],
+                repository_root=Path(report["worktree"]),
+                source_dir=Path(report["worktree"]),
+                purpose=self.fixture.contract.purpose,
+            )
+            backend = object.__new__(PilotCase002DockerSandboxBackend)
+            backend.contract = self.fixture.contract
+            backend.docker_binary = "docker"
+            policy = SimpleNamespace(
+                external_projects=False,
+                auto_merge=False,
+                default_network=False,
+                default_secrets=(),
+            )
+            with patch.object(
+                PilotCase002DockerSandboxBackend,
+                "_authoritative_policy",
+                return_value=policy,
+            ):
+                authorized = backend.authorize(context)
         self.assertEqual(authorized, Path(report["worktree"]).resolve())
 
     def test_case_002_sandbox_refuses_case_001_context(self):
