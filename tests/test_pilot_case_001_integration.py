@@ -4,11 +4,8 @@ import unittest
 from contextlib import nullcontext
 from pathlib import Path
 
-from executor.pilot_case_001 import (
-    PilotCase001DockerSandboxBackend,
-    case_001_sandbox_spec,
-    execute_case_001,
-)
+from executor.pilot_case_001 import case_001_sandbox_spec, execute_case_001
+from executor.sandbox.pilot import PilotCase001DockerSandboxBackend
 from executor.sandbox.policy_snapshot import load_execution_policy_snapshot
 
 ROOT = Path(__file__).resolve().parents[1]
