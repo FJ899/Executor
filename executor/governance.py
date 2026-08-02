@@ -5,9 +5,9 @@ import re
 import subprocess
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 from executor.contracts import ContractLoadError, ValidationIssue, ValidationResult, ValidationStatus, load_contract, validate_project_contract, validate_task_contract
+from executor.repository_identity import repository_identity_from_remote
 
 
 _COMMIT = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
@@ -35,20 +35,10 @@ def _resolve_regular_file(base_dir: str | Path, relative: str) -> Path:
 
 
 def _repository_name_from_remote(remote: str) -> str | None:
-    value = remote.strip()
-    if value.startswith("git@") and ":" in value:
-        value = value.split(":", 1)[1]
-    else:
-        parsed = urlparse(value)
-        if parsed.scheme:
-            value = parsed.path
-    value = value.strip("/")
-    if value.endswith(".git"):
-        value = value[:-4]
-    parts = value.split("/")
-    if len(parts) < 2:
+    identity = repository_identity_from_remote(remote)
+    if identity is None or identity[0] != "github.com":
         return None
-    return "/".join(parts[-2:])
+    return identity[1]
 
 
 def _git(root: str | Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -78,7 +68,7 @@ def _verify_repository_lock(name: str, commit: str, root_value: str | Path) -> V
         return ValidationIssue("REPOSITORY_VERIFICATION_FAILED", f"Cannot verify repository {name}: {exc}", "$.repositories")
     actual_name = _repository_name_from_remote(remote_result.stdout) if remote_result.returncode == 0 else None
     if actual_name is None or actual_name.lower() != name.lower():
-        return ValidationIssue("REPOSITORY_ROOT_MISMATCH", f"Repository root resolves to {actual_name or '<unknown>'}, expected {name}", "$.repositories")
+        return ValidationIssue("REPOSITORY_ROOT_MISMATCH", f"Repository root does not resolve to github.com/{name}", "$.repositories")
     if commit_result.returncode != 0:
         return ValidationIssue("REPOSITORY_COMMIT_NOT_FOUND", f"Locked commit is not present in verified repository {name}: {commit}", "$.repositories")
     return None
