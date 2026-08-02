@@ -49,9 +49,13 @@ def normalize_model_objection(payload: dict[str, Any]) -> Objection:
     evidence = payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}
     resolution = payload.get("minimal_resolution")
     if requested == "HARD_VETO":
-        if evidence_type not in HARD_VETO_EVIDENCE or not evidence:
-            return Objection(ObjectionKind.EVIDENCE_GAP, summary, str(evidence_type) if evidence_type else None, evidence, "Provide machine-verifiable evidence before HARD_VETO.")
-        return hard_veto(summary=summary, evidence_type=str(evidence_type), evidence=evidence, minimal_resolution=str(resolution or "Resolve deterministic violation"))
+        return Objection(
+            ObjectionKind.EVIDENCE_GAP,
+            summary,
+            str(evidence_type) if evidence_type else None,
+            evidence,
+            "A model cannot self-certify HARD_VETO; a deterministic policy or verifier must produce it.",
+        )
     try:
         kind = ObjectionKind(requested)
     except ValueError:
@@ -85,8 +89,16 @@ def wrap_repository_content(*, repository: str, commit: str, path: str, content:
 
 
 class PolicyEngine:
-    def __init__(self, project_contract: dict[str, Any]):
+    def __init__(self, project_contract: dict[str, Any], executor_policy: dict[str, Any] | None = None):
         self.contract = project_contract
+        self.executor_policy = executor_policy or {
+            "execution": {
+                "default_network": False,
+                "default_secrets": [],
+                "auto_merge": False,
+                "external_projects": False,
+            }
+        }
 
     def check_path_change(self, path: str, *, public_api_change: bool = False, data_schema_change: bool = False, result_semantics_change: bool = False) -> Objection:
         pattern, path_class, approval = classify_path(self.contract, path)
@@ -107,12 +119,17 @@ class PolicyEngine:
     def check_capabilities(self, *, network: bool = False, secrets: list[str] | None = None, command: str | None = None) -> list[Objection]:
         objections: list[Objection] = []
         caps = self.contract["capabilities"]
-        if network and caps["network"]["default"] is not True:
-            objections.append(hard_veto(summary="Network capability denied", evidence_type="capability_denied", evidence={"capability": "network", "requested": True, "allowed": False}, minimal_resolution="Use offline method or owner-approved contract."))
-        allowed_secrets = set(caps["secrets"]["default"])
+        execution = self.executor_policy.get("execution", {})
+        project_network = caps["network"]["default"] is True
+        policy_network = execution.get("default_network") is True
+        if network and not (project_network and policy_network):
+            objections.append(hard_veto(summary="Network capability denied", evidence_type="capability_denied", evidence={"capability": "network", "requested": True, "project_allowed": project_network, "policy_allowed": policy_network}, minimal_resolution="Use offline method or owner-approved policy and contract."))
+        project_secrets = set(caps["secrets"]["default"])
+        policy_secrets = set(execution.get("default_secrets", []))
+        allowed_secrets = project_secrets & policy_secrets
         for secret in secrets or []:
             if secret not in allowed_secrets:
-                objections.append(hard_veto(summary=f"Secret capability denied: {secret}", evidence_type="capability_denied", evidence={"capability": "secret", "name": secret, "allowed": sorted(allowed_secrets)}, minimal_resolution="Remove request or obtain authorization."))
+                objections.append(hard_veto(summary=f"Secret capability denied: {secret}", evidence_type="capability_denied", evidence={"capability": "secret", "name": secret, "project_allowed": sorted(project_secrets), "policy_allowed": sorted(policy_secrets)}, minimal_resolution="Remove request or obtain authorization in both policy and project contract."))
         if command:
             try:
                 argv = shlex.split(command)

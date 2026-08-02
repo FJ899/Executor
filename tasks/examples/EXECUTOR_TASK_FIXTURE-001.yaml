@@ -1,0 +1,36 @@
+{
+  "schema_version": "executor-task/1.0",
+  "id": "EXECUTOR_TASK_FIXTURE-001",
+  "risk_class": "LOW_RISK",
+  "mode": "AUDIT",
+  "repositories": {
+    "target": {
+      "name": "litrgratis-pixel/Executor",
+      "commit": "757e78a06f08fbfd050f765ea65113c3b995cd04"
+    }
+  },
+  "test_contract": {
+    "path": "test_contracts/examples/valid_test.yaml",
+    "sha256": "5d08299f564a6cbf8d11bae7cb8afe250498f4593d40536a4baf902bac8bf805"
+  },
+  "capabilities": {
+    "network": false,
+    "secrets": [],
+    "commands": [
+      "python",
+      "git"
+    ]
+  },
+  "budgets": {
+    "max_model_calls": 1,
+    "max_execution_iterations": 1,
+    "max_wall_time_minutes": 5,
+    "max_patch_lines": 0
+  },
+  "decision_policy": {
+    "max_decision_rounds": 1
+  },
+  "merge_policy": {
+    "mode": "PR_ONLY"
+  }
+}
