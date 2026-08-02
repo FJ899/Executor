@@ -1,4 +1,3 @@
-import copy
 import io
 import unittest
 from contextlib import redirect_stdout
@@ -14,6 +13,7 @@ POLICY_PATH = ROOT / "EXECUTOR_POLICY.yaml"
 PROJECT_PATH = ROOT / "project_contracts/executor-self.yaml"
 TASK_FIXTURE_PATH = ROOT / "tasks/examples/EXECUTOR_TASK_FIXTURE-001.yaml"
 GINSENG_TASK_PATH = ROOT / "tasks/examples/GINSENG_TEST-003.yaml"
+REPOSITORY_ROOTS = {"litrgratis-pixel/Executor": ROOT}
 
 
 class GovernanceTest(unittest.TestCase):
@@ -25,6 +25,9 @@ class GovernanceTest(unittest.TestCase):
 
     def task_fixture(self):
         return load_contract(TASK_FIXTURE_PATH)
+
+    def validate_task(self, task, *, roots=REPOSITORY_ROOTS):
+        return validate_task_bundle(task, executor_policy=self.policy(), base_dir=ROOT, repository_roots=roots)
 
     def test_valid_project_bundle(self):
         result = validate_project_bundle(self.project(), executor_policy=self.policy(), base_dir=ROOT)
@@ -57,11 +60,23 @@ class GovernanceTest(unittest.TestCase):
         self.assertIn("POLICY_FILE_MISMATCH", {issue.code for issue in result.issues})
 
     def test_valid_locked_task_fixture(self):
-        result = validate_task_bundle(self.task_fixture(), executor_policy=self.policy(), base_dir=ROOT)
+        result = self.validate_task(self.task_fixture())
         self.assertEqual(result.status, ValidationStatus.VALID)
 
+    def test_repository_lock_requires_verified_root(self):
+        result = self.validate_task(self.task_fixture(), roots={})
+        self.assertEqual(result.status, ValidationStatus.INSUFFICIENT_EVIDENCE)
+        self.assertIn("REPOSITORY_COMMIT_UNVERIFIED", {issue.code for issue in result.issues})
+
+    def test_random_hex_commit_is_not_a_valid_lock(self):
+        task = self.task_fixture()
+        task["repositories"]["target"]["commit"] = "1" * 40
+        result = self.validate_task(task)
+        self.assertEqual(result.status, ValidationStatus.INVALID)
+        self.assertIn("REPOSITORY_COMMIT_NOT_FOUND", {issue.code for issue in result.issues})
+
     def test_ginseng_placeholder_locks_are_invalid(self):
-        result = validate_task_bundle(load_contract(GINSENG_TASK_PATH), executor_policy=self.policy(), base_dir=ROOT)
+        result = self.validate_task(load_contract(GINSENG_TASK_PATH), roots={})
         self.assertEqual(result.status, ValidationStatus.INVALID)
         codes = {issue.code for issue in result.issues}
         self.assertIn("UNLOCKED_REPOSITORY", codes)
@@ -70,14 +85,14 @@ class GovernanceTest(unittest.TestCase):
     def test_task_contract_hash_is_verified(self):
         task = self.task_fixture()
         task["test_contract"]["sha256"] = "1" * 64
-        result = validate_task_bundle(task, executor_policy=self.policy(), base_dir=ROOT)
+        result = self.validate_task(task)
         self.assertEqual(result.status, ValidationStatus.INVALID)
         self.assertIn("TEST_CONTRACT_HASH_MISMATCH", {issue.code for issue in result.issues})
 
     def test_task_cannot_override_policy_network(self):
         task = self.task_fixture()
         task["capabilities"]["network"] = True
-        result = validate_task_bundle(task, executor_policy=self.policy(), base_dir=ROOT)
+        result = self.validate_task(task)
         self.assertEqual(result.status, ValidationStatus.INVALID)
         self.assertIn("POLICY_PRECEDENCE_VIOLATION", {issue.code for issue in result.issues})
 
@@ -100,6 +115,22 @@ class GovernanceTest(unittest.TestCase):
                 str(POLICY_PATH),
                 "--base-dir",
                 str(ROOT),
+            ])
+        self.assertEqual(code, 0)
+        self.assertIn("READY_FOR_MODEL", out.getvalue())
+
+    def test_cli_validates_locked_task_with_repository_root(self):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main([
+                "validate-task",
+                str(TASK_FIXTURE_PATH),
+                "--policy",
+                str(POLICY_PATH),
+                "--base-dir",
+                str(ROOT),
+                "--repository-root",
+                f"litrgratis-pixel/Executor={ROOT}",
             ])
         self.assertEqual(code, 0)
         self.assertIn("READY_FOR_MODEL", out.getvalue())
