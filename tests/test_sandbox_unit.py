@@ -142,15 +142,23 @@ class SandboxUnitTest(unittest.TestCase):
             with self.assertRaises(SandboxUnavailable):
                 self.backend().preflight()
 
-    def test_cleanup_requires_confirmed_missing_container(self):
+    def test_cleanup_requires_successful_exact_list_query(self):
         backend = self.backend()
         cases = (
             (
-                [self.completed(["rm"], 1, stderr="daemon unavailable"), self.completed(["inspect"], 1, stderr="daemon unavailable")],
+                [
+                    self.completed(["rm"], 1, stderr="daemon unavailable"),
+                    self.completed(["inspect"], 1, stderr="daemon unavailable"),
+                    self.completed(["ps"], 1, stderr="daemon unavailable"),
+                ],
                 False,
             ),
             (
-                [self.completed(["rm"], 1, stderr="No such container"), self.completed(["inspect"], 1, stderr="Error: No such object: x")],
+                [
+                    self.completed(["rm"], 1, stderr="No such container"),
+                    self.completed(["inspect"], 1, stderr="Error: No such object: x"),
+                    self.completed(["ps"], 0, stdout=""),
+                ],
                 True,
             ),
             (
@@ -163,7 +171,7 @@ class SandboxUnitTest(unittest.TestCase):
                 verified, _ = backend._cleanup("x")
                 self.assertEqual(verified, expected)
 
-    def test_rm_and_inspect_failure_cannot_report_cleanup_success(self):
+    def test_rm_inspect_and_list_failure_cannot_report_cleanup_success(self):
         backend = self.backend()
         with tempfile.TemporaryDirectory() as temp:
             context = self.context(temp, temp)
@@ -172,6 +180,7 @@ class SandboxUnitTest(unittest.TestCase):
                 self.completed(["start"], 0, stdout="ok"),
                 self.completed(["rm"], 1, stderr="daemon unavailable"),
                 self.completed(["inspect"], 1, stderr="daemon unavailable"),
+                self.completed(["ps"], 1, stderr="daemon unavailable"),
             ]
             with patch.object(backend, "authorize", return_value=Path(temp)), patch.object(backend, "preflight"), patch.object(backend, "build_create_command", return_value=["docker", "create"]), patch("executor.sandbox.docker.subprocess.run", side_effect=responses):
                 result = backend.run(spec=self.spec(), context=context, output_dir=Path(temp) / "output", argv=["python", "/source/sandbox_fixture.py", "read_source"], container_name="x")
