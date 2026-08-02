@@ -29,6 +29,16 @@ class PilotCase001DockerSandboxBackend(DockerSandboxBackend):
         )
         self.contract = contract
 
+    def build_create_command(self, **kwargs) -> list[str]:
+        command = super().build_create_command(**kwargs)
+        image = kwargs["spec"].image
+        image_index = command.index(image)
+        command[image_index:image_index] = [
+            "--env",
+            "PYTHONPYCACHEPREFIX=/workspace/pycache",
+        ]
+        return command
+
     def authorize(self, context: SandboxExecutionContext) -> Path:
         policy = self._authoritative_policy()
         if policy.external_projects:
