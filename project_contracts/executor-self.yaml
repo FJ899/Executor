@@ -23,6 +23,10 @@
       "role": "authoritative_instruction"
     },
     {
+      "path": "ACTION_AUTHORIZATION_PACKET_v1.0.md",
+      "role": "authoritative_instruction"
+    },
+    {
       "path": "README.md",
       "role": "state_owner"
     }
@@ -40,6 +44,10 @@
   },
   "path_rules": {
     "CREATIVE_OS_EXECUTOR_*.md": {
+      "class": "semantic",
+      "approval": "USER"
+    },
+    "ACTION_AUTHORIZATION_PACKET_v1.0.md": {
       "class": "semantic",
       "approval": "USER"
     },
