@@ -101,6 +101,13 @@
           ]
         },
         {
+          "executable": "python",
+          "argv_prefix": [
+            "-m",
+            "executor.cli"
+          ]
+        },
+        {
           "executable": "git",
           "argv_prefix": [
             "status"
