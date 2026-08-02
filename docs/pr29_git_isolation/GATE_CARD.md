@@ -3,20 +3,25 @@
 ```text
 PR: #29
 BASELINE SHA: 514ba20d67bd415e438440c62f47307709177a7f
+DOCUMENTATION SHA: 9b71726eadd152984bd906bde2d8f0f8cd96dc39
+TEST-ONLY SHA: ea3226dc2836d6287af7a080d12d3adeb7787298
+RED RUN ID: 30767747711
+
 DECISION: REWORK
 READY: NO
 MERGE: NO
 STOP: NO
 
 HOST GIT FILTER ISOLATION: FAILED
-CURRENT CI: GREEN BUT INSUFFICIENT
+CURRENT CI: RED AS REQUIRED BY TEST-ONLY STAGE
+IMPLEMENTATION FIX: NOT STARTED
 ```
 
 ## Blocker
 
-Hostowe operacje Git mogą uruchomić lokalne filtry `clean`, `smudge` lub `process` pochodzące z metadanych wejściowego checkoutu. Bazowy kontrprzykład potwierdza wykonanie filtrów `clean` i `smudge` przy zachowaniu czystego checkoutu i niezmienionego HEAD.
+Hostowe operacje Git uruchamiają lokalne filtry `clean`, `smudge` i `process` oraz konfiguracje wczytane przez `include.path` i `includeIf` z metadanych wejściowego checkoutu.
 
-Dokładne przypisanie wykonań do poszczególnych poleceń Git pozostaje zadaniem diagnostycznym. Nie osłabia to nadrzędnego niezmiennika.
+Test-only run na Git `2.54.0` potwierdził sześć oczekiwanych porażek bezpieczeństwa, podczas gdy realne CASE-001–003 oraz Docker pozostały zielone. Oznacza to, że funkcjonalność pilota działa, ale obowiązkowa izolacja hosta jest niespełniona.
 
 ## Niezmiennik bezpieczeństwa
 
@@ -55,13 +60,13 @@ URL `origin` z wejściowego `.git/config` jest nieufną deklaracją pomocniczą,
 ## Exit criteria
 
 - bazowy kontrprzykład jest zapisany i odtwarzalny;
-- istnieje osobny test-only SHA i udokumentowany czerwony run;
+- czerwony test-only run został zapisany;
 - wspierany model wejścia jest jawnie określony;
 - wariant pozyskania źródła został wybrany w ADR;
 - naprawa nie osłabia sandboxu;
-- wszystkie testy macierzy są zielone na jednym nowym SHA;
+- wszystkie testy macierzy są zielone na jednym fixed SHA;
 - CASE-001–003 są zielone;
-- wykonano niezależne review nowego SHA;
+- wykonano niezależne review fixed SHA;
 - nie znaleziono false success w zdefiniowanym modelu zagrożeń.
 
 Dozwolona końcowa decyzja: `ACCEPT`, `REWORK` albo `STOP`.
