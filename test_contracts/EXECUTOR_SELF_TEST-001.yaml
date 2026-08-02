@@ -1,0 +1,76 @@
+{
+  "schema_version": "executor-test/1.0",
+  "test_id": "EXECUTOR_SELF_TEST-001",
+  "source_claims": [
+    {
+      "claim": "m3_entry_gate == OPEN",
+      "source": {
+        "file": "m3_entry_gate.json",
+        "selector": "$.m3_entry_gate"
+      }
+    },
+    {
+      "claim": "p0_open == 0",
+      "source": {
+        "file": "m3_entry_gate.json",
+        "selector": "$.p0_open"
+      }
+    },
+    {
+      "claim": "p1_open == 0",
+      "source": {
+        "file": "m3_entry_gate.json",
+        "selector": "$.p1_open"
+      }
+    }
+  ],
+  "positive_control": {
+    "description": "The exact authorized deterministic change is executed once and independently replayed",
+    "expected": "authorized_path_final_state == PASS"
+  },
+  "negative_control": {
+    "description": "Without atomic AAP consumption or successful independent replay the run cannot pass",
+    "expected": "unauthorized_or_unreplayed_final_state != PASS"
+  },
+  "tamper_control": {
+    "description": "Changing any bound ledger, result, holdout, manifest, blob, checkpoint or commit is detected",
+    "method": "replay_hash_mismatch",
+    "expected": "DETECTED"
+  },
+  "unchanged_controls": [
+    {
+      "name": "main",
+      "assertion": "main_mutated == false"
+    },
+    {
+      "name": "external_execution",
+      "assertion": "external_project_execution == BLOCKED"
+    },
+    {
+      "name": "automatic_merge",
+      "assertion": "auto_merge == false"
+    },
+    {
+      "name": "holdout_visibility",
+      "assertion": "holdout_exposed_to_implementer == false"
+    }
+  ],
+  "holdout": {
+    "visibility": "HIDDEN_FROM_IMPLEMENTER",
+    "location": "independent/EXECUTOR_SELF_TEST-001",
+    "access": "REPLAY_ONLY"
+  },
+  "acceptance": [
+    "authorized_path_final_state == PASS",
+    "concurrent_consumption_winner_count == 1",
+    "authorization_replay_blocked == true",
+    "action_result_binding_verified == true",
+    "independent_holdout_replay == PASS",
+    "evidence_replay == PASS",
+    "tamper_attempts_detected == true",
+    "main_mutated == false",
+    "external_project_execution == BLOCKED",
+    "auto_merge == false",
+    "holdout_exposed_to_implementer == false"
+  ]
+}
