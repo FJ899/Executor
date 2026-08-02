@@ -19,6 +19,13 @@ class FoundationsTest(unittest.TestCase):
     def valid_test_contract(self):
         return load_contract(ROOT / "test_contracts/examples/valid_test.yaml")
 
+    def assert_acceptance_contradiction(self, *assertions):
+        contract = self.valid_test_contract()
+        contract["acceptance"] = list(assertions)
+        result = validate_test_contract(contract, base_dir=FIXTURES)
+        self.assertEqual(result.status, ValidationStatus.INVALID)
+        self.assertIn("CONTRADICTORY_ACCEPTANCE", {issue.code for issue in result.issues})
+
     def validate_source_text(self, source_text):
         with tempfile.TemporaryDirectory() as temp_name:
             base = Path(temp_name)
@@ -43,6 +50,25 @@ class FoundationsTest(unittest.TestCase):
         contract = self.valid_test_contract()
         contract["acceptance"].append("blocking_gate_count_after == 5")
         self.assertIn("CONTRADICTORY_ACCEPTANCE", {x.code for x in validate_test_contract(contract, base_dir=FIXTURES).issues})
+
+    def test_equivalent_numeric_acceptance_is_contradictory(self):
+        self.assert_acceptance_contradiction("score == 1", "score != 1.0")
+
+    def test_equivalent_json_acceptance_is_contradictory(self):
+        counterexamples = (
+            ('payload == {"a":1,"b":2}', 'payload != {"b":2,"a":1}'),
+            ('mode == "READY"', 'mode != "\\u0052EADY"'),
+        )
+        for required, denied in counterexamples:
+            with self.subTest(required=required, denied=denied):
+                self.assert_acceptance_contradiction(required, denied)
+
+    def test_distinct_json_types_are_not_contradictory(self):
+        contract = self.valid_test_contract()
+        contract["acceptance"] = ["flag == true", "flag != 1"]
+        result = validate_test_contract(contract, base_dir=FIXTURES)
+        self.assertEqual(result.status, ValidationStatus.VALID)
+        self.assertNotIn("CONTRADICTORY_ACCEPTANCE", {issue.code for issue in result.issues})
 
     def test_visible_holdout(self):
         contract = self.valid_test_contract()
