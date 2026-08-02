@@ -4,14 +4,15 @@
 
 ```text
 STATUS: IMPLEMENTED IN STACKED DRAFT
-REAL DOCKER RUN: PENDING
+TECHNICAL GATE: PASSED
+HUMAN ACCEPTANCE: PENDING
 BASE PR: #24 CASE-002
 AI WORKER: NOT USED
 M3: NOT USED
 AUTO MERGE: FORBIDDEN
 ```
 
-CASE-003 jest trzecim i ostatnim kontrolowanym przypadkiem technicznym. Po jego wykonaniu nie wolno automatycznie dodawać kolejnego przypadku ani uogólniać runtime. Następną czynnością musi być porównanie CASE-001–003 i decyzja, co usunąć.
+CASE-003 jest trzecim i ostatnim kontrolowanym przypadkiem technicznym. Po jego wykonaniu nie wolno automatycznie dodawać kolejnego przypadku ani uogólniać runtime bez porównania CASE-001–003.
 
 ## Przypięte wejście
 
@@ -64,17 +65,44 @@ kanoniczną kolejnością:
 
 Nie zmienia `json.dumps`, obsługi UTF-8, końcowego znaku nowej linii ani CLI targetu.
 
-## Uruchomienie
+## Dowód wykonania
 
-```bash
-creative-os-executor-pilot \
-  --case 003 \
-  --repository-root /path/to/case-003-checkout \
-  --runs-root /path/outside/repository/pilot-runs \
-  --executor-root . \
-  --executor-commit "$(git rev-parse HEAD)" \
-  --image sha256:<64-hex-image-id>
+Ostateczny head:
+
+```text
+3490d474dcc983e5104b9ca4cf56432486196756
 ```
+
+GitHub Actions:
+
+```text
+workflow: Verify Executor foundations
+run: 30764964269
+conclusion: success
+```
+
+Jeden workflow potwierdził:
+
+- pełne foundation tests;
+- 10/10 istniejących testów bezpieczeństwa sandboxu;
+- realny CASE-001;
+- realny CASE-002;
+- realny CASE-003 na dokładnym przypiętym commicie;
+- `compileall` i pełne 13 testów każdego targetu;
+- brak zmian w trzech źródłowych checkoutach po wykonaniu;
+- cleanup kontenerów testowych oraz CASE-001–003.
+
+## Adversarial review
+
+Pierwszy zielony run potwierdzał trzy naprawy i cleanup, ale nie sprawdzał bezpośrednio po wykonaniu, czy źródłowe checkouty nadal wskazują przypięte commity i są czyste.
+
+Dodano więc obowiązkową bramkę CI:
+
+```text
+Verify source checkouts remain pinned and clean
+```
+
+Dla każdego przypadku sprawdzany jest dokładny `HEAD` oraz pusty `git status --porcelain --untracked-files=all`.
 
 ## Ochrona przed fałszywym zaliczeniem
 
@@ -88,19 +116,24 @@ Run blokuje:
 - więcej niż jeden commit wynikowy albo zły parent;
 - context CASE-001 lub CASE-002 użyty dla CASE-003;
 - globalne external execution, auto-merge, sieć albo sekrety;
-- nieudane testy, timeout lub niepotwierdzony cleanup.
+- nieudane testy, timeout lub niepotwierdzony cleanup;
+- zmianę albo przesunięcie źródłowego checkoutu.
 
-## Bramka
+## Koszt trzeciego przypadku
 
-CASE-003 może otrzymać `TECHNICAL GATE: PASSED` dopiero wtedy, gdy jeden workflow potwierdzi:
+Różnica względem CASE-002 obejmuje:
 
-1. pełne foundation tests;
-2. istniejące testy bezpieczeństwa sandboxu;
-3. realny CASE-001;
-4. realny CASE-002;
-5. realny CASE-003 na dokładnym przypiętym commicie;
-6. pełne 13 testów każdego targetu;
-7. cleanup wszystkich kontenerów.
+```text
+7 plików
+353 linie case-specific runtime
+168 linii testów jednostkowych
+88 linii realnego testu integracyjnego
+70 linii rozszerzenia testów CLI
+16 linii CI
+124 linie dokumentacji
+```
+
+To jest dowód, że obecna forma nie skaluje się przez kopiowanie kolejnych przypadków.
 
 ## Po CASE-003
 
@@ -109,10 +142,10 @@ Następny etap nie jest CASE-004.
 Wymagane jest porównanie:
 
 - powtórzonego kodu między trzema przypadkami;
-- czasu i liczby zmian potrzebnych do dodania przypadku;
 - mechanizmów faktycznie wspólnych;
 - elementów benchmarkowych do usunięcia;
-- tego, czy dalsze inwestowanie w deterministyczny pilot ma sens przed realnym workerem AI.
+- najmniejszego rdzenia potrzebnego przed realnym workerem AI;
+- tego, czy dalsze inwestowanie w deterministyczny pilot ma sens.
 
 ## Czego etap nie udowadnia
 
