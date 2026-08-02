@@ -26,6 +26,13 @@ class FoundationsTest(unittest.TestCase):
         self.assertEqual(result.status, ValidationStatus.INVALID)
         self.assertIn("CONTRADICTORY_ACCEPTANCE", {issue.code for issue in result.issues})
 
+    def assert_acceptance_not_contradictory(self, *assertions):
+        contract = self.valid_test_contract()
+        contract["acceptance"] = list(assertions)
+        result = validate_test_contract(contract, base_dir=FIXTURES)
+        self.assertEqual(result.status, ValidationStatus.VALID)
+        self.assertNotIn("CONTRADICTORY_ACCEPTANCE", {issue.code for issue in result.issues})
+
     def validate_source_text(self, source_text):
         with tempfile.TemporaryDirectory() as temp_name:
             base = Path(temp_name)
@@ -52,23 +59,42 @@ class FoundationsTest(unittest.TestCase):
         self.assertIn("CONTRADICTORY_ACCEPTANCE", {x.code for x in validate_test_contract(contract, base_dir=FIXTURES).issues})
 
     def test_equivalent_numeric_acceptance_is_contradictory(self):
-        self.assert_acceptance_contradiction("score == 1", "score != 1.0")
+        counterexamples = (
+            ("score == 1", "score != 1.0"),
+            ("score != 1.0", "score == 1"),
+        )
+        for first, second in counterexamples:
+            with self.subTest(first=first, second=second):
+                self.assert_acceptance_contradiction(first, second)
 
     def test_equivalent_json_acceptance_is_contradictory(self):
         counterexamples = (
             ('payload == {"a":1,"b":2}', 'payload != {"b":2,"a":1}'),
             ('mode == "READY"', 'mode != "\\u0052EADY"'),
+            ('payload == {"items":[1,{"score":2}]}', 'payload != {"items":[1.0,{"score":2.0}]}'),
         )
         for required, denied in counterexamples:
             with self.subTest(required=required, denied=denied):
                 self.assert_acceptance_contradiction(required, denied)
 
     def test_distinct_json_types_are_not_contradictory(self):
-        contract = self.valid_test_contract()
-        contract["acceptance"] = ["flag == true", "flag != 1"]
-        result = validate_test_contract(contract, base_dir=FIXTURES)
-        self.assertEqual(result.status, ValidationStatus.VALID)
-        self.assertNotIn("CONTRADICTORY_ACCEPTANCE", {issue.code for issue in result.issues})
+        counterexamples = (
+            ("flag == true", "flag != 1"),
+            ('payload == {"flag":true}', 'payload != {"flag":1}'),
+            ("payload == [true]", "payload != [1]"),
+            ('payload == {"items":[{"flag":true}]}', 'payload != {"items":[{"flag":1}]}'),
+            ('payload != {"flag":1}', 'payload == {"flag":true}'),
+        )
+        for first, second in counterexamples:
+            with self.subTest(first=first, second=second):
+                self.assert_acceptance_not_contradictory(first, second)
+
+    def test_nonstandard_acceptance_literals_are_not_silently_normalized(self):
+        self.assert_acceptance_contradiction("value == NaN", "value != NaN")
+        self.assert_acceptance_not_contradictory("value == NaN", "value != Infinity")
+        duplicate = 'payload == {"a":1,"a":2}'
+        self.assert_acceptance_contradiction(duplicate, duplicate.replace(" == ", " != "))
+        self.assert_acceptance_not_contradictory(duplicate, 'payload != {"a":2}')
 
     def test_visible_holdout(self):
         contract = self.valid_test_contract()
