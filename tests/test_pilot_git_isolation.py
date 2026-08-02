@@ -20,13 +20,14 @@ class PilotGitIsolationTest(unittest.TestCase):
         self.temp.cleanup()
 
     def execute(self):
-        return execute_case_001(
-            repository_root=self.fixture.source,
-            runs_root=self.fixture.runs,
-            sandbox_backend=FakeSandboxBackend(),
-            sandbox_spec=self.spec,
-            contract=self.fixture.contract,
-        )
+        with self.fixture.controlled_runtime():
+            return execute_case_001(
+                repository_root=None,
+                runs_root=self.fixture.runs,
+                sandbox_backend=FakeSandboxBackend(),
+                sandbox_spec=self.spec,
+                contract=self.fixture.contract,
+            )
 
     def _marker_program(self, name: str, *, passthrough: bool = True) -> tuple[Path, Path]:
         marker = self.root / f"{name}-executed"
@@ -62,50 +63,40 @@ class PilotGitIsolationTest(unittest.TestCase):
             encoding="utf-8",
         )
         hook.chmod(0o755)
-
         report = self.execute()
-
         self.assertEqual(report["status"], "ACTION_COMPLETED_REVIEW_REQUIRED")
-        self.assertFalse(marker.exists(), "Git post-checkout hook executed outside sandbox")
+        self.assertFalse(marker.exists())
 
     def test_local_smudge_filter_cannot_run_on_host(self):
         marker, program = self._marker_program("smudge")
         self._set_filter_attributes("host-smudge")
         self.fixture._git("config", "filter.host-smudge.smudge", str(program))
         self.fixture._git("config", "filter.host-smudge.clean", "cat")
-
         self.execute()
-
-        self.assertFalse(marker.exists(), "Git smudge filter executed outside sandbox")
+        self.assertFalse(marker.exists())
 
     def test_local_clean_filter_cannot_run_on_host(self):
         marker, program = self._marker_program("clean")
         self._set_filter_attributes("host-clean")
         self.fixture._git("config", "filter.host-clean.smudge", "cat")
         self.fixture._git("config", "filter.host-clean.clean", str(program))
-
         self.execute()
-
-        self.assertFalse(marker.exists(), "Git clean filter executed outside sandbox")
+        self.assertFalse(marker.exists())
 
     def test_local_process_filter_cannot_start_on_host(self):
         marker, program = self._marker_program("process", passthrough=False)
         self._set_filter_attributes("host-process")
         self.fixture._git("config", "filter.host-process.process", str(program))
-
         self.execute()
-
-        self.assertFalse(marker.exists(), "Git process filter started outside sandbox")
+        self.assertFalse(marker.exists())
 
     def test_include_path_cannot_load_executable_filter_configuration(self):
         marker, program = self._marker_program("include-path")
         self._set_filter_attributes("included-filter")
         included = self._included_filter_config("included-filter", program)
         self.fixture._git("config", "include.path", str(included))
-
         self.execute()
-
-        self.assertFalse(marker.exists(), "Git include.path loaded executable filter configuration")
+        self.assertFalse(marker.exists())
 
     def test_include_if_cannot_load_executable_filter_configuration(self):
         marker, program = self._marker_program("include-if")
@@ -118,10 +109,8 @@ class PilotGitIsolationTest(unittest.TestCase):
                 f'\n[includeIf "gitdir:{git_dir_pattern}"]\n'
                 f"\tpath = {included}\n"
             )
-
         self.execute()
-
-        self.assertFalse(marker.exists(), "Git includeIf loaded executable filter configuration")
+        self.assertFalse(marker.exists())
 
     def test_executor_never_runs_git_against_input_checkout_or_git_dir(self):
         original_run = subprocess.run
@@ -131,7 +120,7 @@ class PilotGitIsolationTest(unittest.TestCase):
             raw_command = args[0] if args else kwargs.get("args", ())
             command = tuple(os.fspath(item) for item in raw_command)
             executable = Path(command[0]).name if command else ""
-            if executable == "git":
+            if executable in {"git", "docker"}:
                 cwd = kwargs.get("cwd")
                 environment = dict(kwargs.get("env") or {})
                 observed.append(
@@ -150,8 +139,8 @@ class PilotGitIsolationTest(unittest.TestCase):
         git_dir = (source / ".git").resolve()
         violations = []
         for command, cwd, environment in observed:
-            argument_paths = {item for item in command[1:] if item}
-            if str(source) in argument_paths or str(git_dir) in argument_paths:
+            joined = "\0".join(command)
+            if str(source) in joined or str(git_dir) in joined:
                 violations.append((command, cwd, "argument"))
             if cwd is not None:
                 resolved_cwd = Path(cwd).resolve()
@@ -165,13 +154,12 @@ class PilotGitIsolationTest(unittest.TestCase):
         self.assertEqual(
             violations,
             [],
-            "Executor invoked Git against the untrusted input checkout: "
+            "Executor invoked a process against the untrusted input checkout: "
             + repr(violations),
         )
 
-    def test_rejected_runs_root_does_not_dirty_source(self):
+    def test_rejected_local_checkout_does_not_dirty_source(self):
         runs_root = self.fixture.source / "runs"
-
         report = execute_case_001(
             repository_root=self.fixture.source,
             runs_root=runs_root,
@@ -179,13 +167,9 @@ class PilotGitIsolationTest(unittest.TestCase):
             sandbox_spec=self.spec,
             contract=self.fixture.contract,
         )
-
         self.assertEqual(report["status"], "POLICY_BLOCKED")
         self.assertFalse(runs_root.exists())
-        self.assertEqual(
-            self.fixture._git("status", "--porcelain").stdout,
-            "",
-        )
+        self.assertEqual(self.fixture._git("status", "--porcelain").stdout, "")
 
 
 if __name__ == "__main__":
