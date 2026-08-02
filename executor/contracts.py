@@ -131,14 +131,15 @@ def _select_json(value: Any, tokens: list[str | int]) -> Any:
     return selected
 
 
-def _parse_assertion(text: str) -> tuple[str, str, Any, str] | None:
+def _parse_assertion(text: str, *, strict_json: bool = False) -> tuple[str, str, Any, str] | None:
     match = _ASSERTION.match(text)
     if match is None:
         return None
     field, operator, literal = match.groups()
     literal = literal.strip()
+    loader = _load_evidence_json if strict_json else json.loads
     try:
-        value = _load_evidence_json(literal)
+        value = loader(literal)
     except (json.JSONDecodeError, ValueError):
         value = literal
     return field, operator, value, literal
@@ -199,7 +200,7 @@ def _contradictions(assertions: list[str]) -> list[ValidationIssue]:
     not_equal: dict[str, list[tuple[Any, str]]] = {}
     issues: list[ValidationIssue] = []
     for index, text in enumerate(assertions):
-        parsed = _parse_assertion(text)
+        parsed = _parse_assertion(text, strict_json=True)
         if parsed is None:
             continue
         field, operator, value, literal = parsed
