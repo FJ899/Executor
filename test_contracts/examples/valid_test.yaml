@@ -1,6 +1,6 @@
 {
   "schema_version": "executor-test/1.0",
-  "test_id": "GINSENG_TEST-003",
+  "test_id": "EXECUTOR_VALIDATOR_FIXTURE-001",
   "source_claims": [
     {
       "claim": "blocking_gate_count_before == 7",
@@ -35,7 +35,7 @@
   ],
   "holdout": {
     "visibility": "HIDDEN_FROM_IMPLEMENTER",
-    "location": "holdout/GINSENG_TEST-003_HOLDOUT.enc",
+    "location": "holdout/EXECUTOR_VALIDATOR_FIXTURE-001.enc",
     "access": "REPLAY_ONLY"
   },
   "acceptance": [
