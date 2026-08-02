@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import re
 import shutil
 import subprocess
 import time
@@ -17,6 +19,12 @@ class SandboxUnavailable(RuntimeError):
 
 class SandboxExecutionError(RuntimeError):
     pass
+
+
+_MISSING_CONTAINER = re.compile(
+    r"(?:error:\s*)?(?:error response from daemon:\s*)?no such (?:object|container):\s*\S+",
+    re.IGNORECASE,
+)
 
 
 class DockerSandboxBackend:
@@ -71,22 +79,26 @@ class DockerSandboxBackend:
             raise SandboxExecutionError(f"Unverified sandbox repository context: {exc}") from exc
 
         source_input = Path(context.source_dir)
-        if source_input.is_symlink():
-            raise SandboxExecutionError("Sandbox source directory cannot be a symlink")
+        source_candidate = source_input if source_input.is_absolute() else repository_root / source_input
+        source_lexical = Path(os.path.abspath(source_candidate))
         try:
-            source = source_input.resolve(strict=True)
-            relative = source.relative_to(repository_root)
+            lexical_relative = source_lexical.relative_to(repository_root)
+        except ValueError as exc:
+            raise SandboxExecutionError("Sandbox source directory escapes the verified repository") from exc
+        current = repository_root
+        for part in lexical_relative.parts:
+            current = current / part
+            if current.is_symlink():
+                raise SandboxExecutionError(f"Sandbox source path contains a symlink component: {part}")
+        try:
+            source = source_lexical.resolve(strict=True)
+            source.relative_to(repository_root)
         except OSError as exc:
             raise SandboxExecutionError(f"Sandbox source directory cannot be resolved: {exc}") from exc
         except ValueError as exc:
             raise SandboxExecutionError("Sandbox source directory escapes the verified repository") from exc
         if not source.is_dir():
             raise SandboxExecutionError(f"Sandbox source directory does not exist: {source}")
-        current = repository_root
-        for part in relative.parts:
-            current = current / part
-            if current.is_symlink():
-                raise SandboxExecutionError(f"Sandbox source path contains a symlink component: {part}")
         return source
 
     def build_create_command(
@@ -147,8 +159,8 @@ class DockerSandboxBackend:
     def _is_confirmed_missing(completed: subprocess.CompletedProcess[str]) -> bool:
         if completed.returncode == 0:
             return False
-        message = f"{completed.stdout}\n{completed.stderr}".lower()
-        return "no such container" in message or "no such object" in message
+        lines = [line.strip() for line in f"{completed.stdout}\n{completed.stderr}".splitlines() if line.strip()]
+        return len(lines) == 1 and _MISSING_CONTAINER.fullmatch(lines[0]) is not None
 
     def _cleanup(self, container_name: str) -> tuple[bool, str]:
         diagnostics: list[str] = []
