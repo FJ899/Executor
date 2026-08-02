@@ -3,11 +3,13 @@
 ## Status
 
 ```text
-STATUS: IMPLEMENTED IN DRAFT
-REAL DOCKER RUN: PENDING
+STATUS: TECHNICALLY VERIFIED IN DRAFT
+REAL PINNED DOCKER RUN: VERIFIED
+ADVERSARIAL REVIEW: COMPLETED
 AI WORKER: NOT USED
 M3: NOT USED
 AUTO MERGE: FORBIDDEN
+HUMAN ACCEPTANCE: PENDING
 ```
 
 Ten etap sprawdza wyłącznie, czy Executor potrafi domknąć jeden przypięty przypadek techniczny od czystego wejścia do wyniku wymagającego przeglądu człowieka.
@@ -22,7 +24,7 @@ pilot contract blob: 0ae70e9f9a79e5e815f3d566ca5784059f461a9e
 allowed path: project_registry/registry.py
 ```
 
-## Przepływ
+## Zweryfikowany przepływ
 
 ```text
 verified local checkout at the pinned input commit
@@ -31,10 +33,52 @@ verified local checkout at the pinned input commit
 → exactly one allowed changed path
 → one result commit directly on the pinned input
 → compileall in Docker
-→ full unittest suite in Docker
+→ all 13 target tests in Docker
 → change.patch + report.json
+→ verified container cleanup
 → ACTION_COMPLETED_REVIEW_REQUIRED
 ```
+
+## Dowód CI
+
+```text
+workflow: Verify Executor foundations
+successful run: 30759542282
+foundation-tests: SUCCESS
+sandbox-security: SUCCESS
+existing Docker sandbox tests: 10/10 OK
+real pinned CASE-001 integration: OK
+container cleanup: VERIFIED
+```
+
+Wcześniejszy run `30759264604` zakończył się kontrolowanym `TESTS_FAILED`, ponieważ testy były uruchamiane z `/workspace`, a katalog `/source/tests` nie był importowalny. Naprawa nie poluzowała sandboxu: pilot uruchamia komendy z read-only `/source`, a cache bajtkodu kieruje do `/workspace/pycache`.
+
+## Znaleziska z adversarial review
+
+### 1. Git worktree metadata
+
+`verify_source_tree` traktował plik `.git` używany przez linked worktree jako dodatkowy plik źródłowy. Weryfikator ignoruje teraz wyłącznie główny wpis metadanych `.git`; wszystkie inne dodatkowe pliki nadal blokują wykonanie.
+
+### 2. Read-only source i cache Pythona
+
+`compileall` potrzebuje miejsca na cache. Pilot ustawia `PYTHONPYCACHEPREFIX=/workspace/pycache`, więc źródło pozostaje read-only i zgodne z commitem wynikowym.
+
+### 3. Kod wykonywany przez hooki Git na hoście
+
+`git worktree add`, `git switch` i `git commit` mogły uruchomić lokalne hooki poza sandboxem. Wszystkie wywołania Git używane przez pilot:
+
+- usuwają odziedziczone zmienne `GIT_*`;
+- wyłączają systemową konfigurację Git;
+- ustawiają `core.hooksPath=/dev/null`;
+- wyłączają fsmonitor i podpisywanie commitów;
+- wyłączają globalny plik atrybutów i automatyczne CRLF;
+- generują diff bez external diff i textconv.
+
+Test regresyjny tworzy faktycznie wykonywalny `post-checkout` hook i potwierdza, że nie może on uruchomić się na hoście.
+
+### 4. Blokada nie może sama zabrudzić repo
+
+Odrzucony `runs_root` wewnątrz checkoutu nie tworzy już raportu ani katalogu w blokowanym repo. Test potwierdza brak zmiany stanu źródła.
 
 ## Uruchomienie
 
@@ -57,7 +101,7 @@ creative-os-executor-pilot \
 
 ## Wynik
 
-Każdy run zapisuje:
+Każdy udany run zapisuje:
 
 - `report.json`;
 - `change.patch`;
@@ -81,7 +125,28 @@ Run jest blokowany, gdy:
 - globalne wykonywanie projektów zewnętrznych zostało włączone;
 - auto-merge, sieć albo domyślne sekrety są włączone;
 - sandbox otrzymuje inne repo, purpose, source albo commit;
-- testy lub cleanup kontenera nie kończą się poprawnie.
+- testy lub cleanup kontenera nie kończą się poprawnie;
+- lokalna konfiguracja Git próbuje uruchomić hook, fsmonitor, external diff albo textconv.
+
+## Pozostałe ograniczenia
+
+- Executor nie pobiera repozytorium; otrzymuje wcześniej przygotowany lokalny checkout.
+- Branch wynikowy nie jest wypychany do GitHub i nie powstaje PR targetu.
+- Dowód CI potwierdza powstanie raportu i patcha, ale nie zachowuje ich jako trwałego artefaktu workflow.
+- Worker jest świadomie zakodowany wyłącznie dla jednej znanej regresji.
+- CASE-002 i CASE-003 nie są zaimplementowane.
+
+## Elementy tymczasowe do usunięcia lub zastąpienia
+
+Po ukończeniu trzech przypadków technicznych nie wolno utrwalać jako platformy:
+
+- tekstowych stałych `_BROKEN_ADD_MANY` i `_FIXED_ADD_MANY`;
+- komendy `creative-os-executor-pilot`;
+- klasy `PilotCase001DockerSandboxBackend`;
+- kontraktu `PilotCase001Contract` w obecnej postaci;
+- case-specific statusu i dokumentu jako publicznego API.
+
+Dopiero porównanie CASE-001–003 może wskazać najmniejszy wspólny mechanizm. Nie tworzymy go wcześniej.
 
 ## Czego ten etap nie udowadnia
 
@@ -97,4 +162,11 @@ Nie jest to:
 
 ## Bramka
 
-Kod może przejść do następnego etapu dopiero po rzeczywistym opt-in teście Docker na przypiętym target repo. Sam test jednostkowy z fake backendem nie jest dowodem pełnego pionowego przepływu.
+```text
+CASE-001 TECHNICAL GATE: PASSED
+PR MERGE: NOT AUTHORIZED
+NEXT TECHNICAL CASE: CASE-002
+NEXT PRODUCT EVIDENCE: STILL NOT STARTED
+```
+
+Kod pozostaje w draft PR do decyzji człowieka. Zaliczenie tej bramki pozwala przygotować CASE-002 tym samym rygorem, ale nie pozwala jeszcze uogólniać architektury ani podłączać workera AI.
