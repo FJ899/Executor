@@ -1,10 +1,14 @@
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
+from executor.contracts import load_contract
 from executor.sandbox.docker import DockerSandboxBackend
-from executor.sandbox.spec import CommandRule, SandboxSpec
+from executor.sandbox.spec import CommandRule, SandboxExecutionContext, SandboxSpec
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 @unittest.skipUnless(os.environ.get("RUN_DOCKER_TESTS") == "1", "Docker integration tests are opt-in")
@@ -12,9 +16,17 @@ class SandboxIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.image = os.environ["EXECUTOR_SANDBOX_IMAGE"]
-        cls.backend = DockerSandboxBackend()
+        cls.backend = DockerSandboxBackend(executor_policy=load_contract(ROOT / "EXECUTOR_POLICY.yaml"))
         cls.backend.preflight()
         cls.source = Path(__file__).resolve().parent / "fixtures/sandbox"
+        cls.commit = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+        cls.context = SandboxExecutionContext(
+            repository="litrgratis-pixel/Executor",
+            commit=cls.commit,
+            repository_root=ROOT,
+            source_dir=cls.source,
+            purpose="EXECUTOR_FIXTURE",
+        )
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -40,7 +52,7 @@ class SandboxIntegrationTest(unittest.TestCase):
     def run_action(self, action, **changes):
         return self.backend.run(
             spec=self.spec(**changes),
-            source_dir=self.source,
+            context=self.context,
             output_dir=self.output,
             argv=["python", "/source/sandbox_fixture.py", action],
         )
