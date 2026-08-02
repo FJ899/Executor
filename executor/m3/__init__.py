@@ -6,10 +6,24 @@ from executor.m3.holdout import (
     IndependentHoldoutStore,
     ProvisionReceipt,
 )
+from executor.m3.authorization_ledger import (
+    ActionResult,
+    AuthorizationConsumptionLedger,
+    AuthorizationLedgerIntegrityError,
+    AuthorizationReplayError,
+    BoundResultReceipt,
+    ConsumptionReceipt,
+)
 
 __all__ = [
     "HoldoutIntegrityError",
     "HoldoutReplayReceipt",
     "IndependentHoldoutStore",
     "ProvisionReceipt",
+    "ActionResult",
+    "AuthorizationConsumptionLedger",
+    "AuthorizationLedgerIntegrityError",
+    "AuthorizationReplayError",
+    "BoundResultReceipt",
+    "ConsumptionReceipt",
 ]
