@@ -6,6 +6,7 @@ execution_lock: "EXTERNAL PROJECT EXECUTION FORBIDDEN UNTIL M0-M3 PASS"
 target_repository: "litrgratis-pixel/creative-os-executor"
 first_pilot: "GINSENG_TEST-003"
 audit_source: "CREATIVE_OS_EXECUTOR_AUDIT_v0.2.md"
+product_source: "CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md"
 ---
 
 # Creative OS Executor — instrukcja implementacyjna v0.2
@@ -13,6 +14,11 @@ audit_source: "CREATIVE_OS_EXECUTOR_AUDIT_v0.2.md"
 ## 0. Status dokumentu
 
 Ta wersja zastępuje v0.1 jako kontrakt implementacyjny.
+
+Jest kontraktem runtime Executora, a nie pełną definicją produktu Creative OS.
+Nadrzędny cel produktu, role Ginsenga, Company Loop, Creative OS i Executora oraz
+granice wyniku użytkowego określa
+`CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md`.
 
 V0.1 pozostaje materiałem projektowym. Nie należy na jej podstawie rozpoczynać pełnego wykonania.
 
@@ -33,6 +39,12 @@ Nie może jeszcze:
 
 ## 1. Cel
 
+Executor otrzymuje kierunek po rozpoznaniu rzeczywistego celu, poszerzeniu pola
+możliwości i rozstrzygnięciu zmian semantycznych przez użytkownika. Pierwsze
+rozwiązanie podane w poleceniu jest kandydatem, a nie automatycznie wiążącą
+architekturą. Budowa fundamentów wykonawczych przed Company Loop i Ginsengiem jest
+kolejnością implementacji, nie zmianą głównego celu produktu na bezpieczeństwo.
+
 Zbudować ograniczony system wykonawczy, który:
 
 1. przyjmuje cel użytkownika bez wymagania wiedzy technicznej;
@@ -49,6 +61,10 @@ Zbudować ograniczony system wykonawczy, który:
    - `BLOCKED`,
    - `FAILED_AFTER_MAX_ITERATIONS`,
    - `STALE`.
+
+Powyższe statusy są wynikami technicznymi runtime. Nie zastępują użytkowego
+`POTENTIAL_AND_DECISION_PACKET`, rekomendacji, decyzji ani wskazania dalszego
+działania zdefiniowanych w nadrzędnym dokumencie produktu.
 
 ## 2. Zasada władzy
 
@@ -148,6 +164,7 @@ COS pozostaje pamięcią i konstytucją. Executor jest runtime.
 creative-os-executor/
 ├── README.md
 ├── EXECUTOR_CHARTER.md
+├── CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md
 ├── EXECUTOR_POLICY.yaml
 ├── pyproject.toml
 ├── uv.lock | requirements.lock
@@ -513,6 +530,15 @@ Ryzyko nieblokujące.
 Model może proponować klasyfikację, ale kod zatwierdza możliwość `HARD_VETO`.
 
 ## 11. Adaptacyjny Company Loop
+
+Company Loop służy poszerzeniu przestrzeni rozwiązań, odkryciu niewidocznego
+potencjału oraz zakwestionowaniu wariantów z różnych perspektyw. Jego wartość jest
+mierzona jakością nowych możliwości, kontrargumentów, zależności i rozstrzygających
+mikroeksperymentów, a nie liczbą agentów lub zgodnością ich opinii.
+
+Company Loop przygotowuje rekomendację i alternatywy. Nie może sam nadać wynikowi
+statusu prawdy, zastąpić deterministycznego dowodu ani podjąć za użytkownika decyzji
+zmieniającej cel, kanon, koszt, zakres lub ryzyko.
 
 ### 11.1. Klasa ryzyka
 
