@@ -27,6 +27,10 @@
       "role": "authoritative_instruction"
     },
     {
+      "path": "M3_REPLAYABLE_EVIDENCE_CONTRACT_v1.0.md",
+      "role": "authoritative_instruction"
+    },
+    {
       "path": "README.md",
       "role": "state_owner"
     }
@@ -48,6 +52,10 @@
       "approval": "USER"
     },
     "ACTION_AUTHORIZATION_PACKET_v1.0.md": {
+      "class": "semantic",
+      "approval": "USER"
+    },
+    "M3_REPLAYABLE_EVIDENCE_CONTRACT_v1.0.md": {
       "class": "semantic",
       "approval": "USER"
     },
