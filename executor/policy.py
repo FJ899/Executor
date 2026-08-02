@@ -4,9 +4,10 @@ import shlex
 from dataclasses import dataclass
 from enum import StrEnum
 from fnmatch import fnmatch
-from pathlib import PurePosixPath
+from pathlib import Path
 from typing import Any
 
+from executor.repository_access import RepositoryPathError, canonical_repository_path, validate_repository_candidate, validate_scope_pattern
 from executor.sandbox.command_policy import CommandDenied, validate_argv
 from executor.sandbox.spec import CommandRule
 
@@ -63,20 +64,34 @@ def normalize_model_objection(payload: dict[str, Any]) -> Objection:
     return Objection(kind, summary, str(evidence_type) if evidence_type else None, evidence, str(resolution) if resolution else None)
 
 
+def _invalid_path_veto(path: str, error: Exception) -> Objection:
+    return hard_veto(
+        summary=f"Unsafe repository path: {path}",
+        evidence_type="forbidden_path_modified",
+        evidence={"path": path, "error": str(error)},
+        minimal_resolution="Use a normalized relative POSIX path without traversal, symlinks or hardlinks.",
+    )
+
+
 def classify_path(project_contract: dict[str, Any], path: str) -> tuple[str, str, str]:
+    canonical = canonical_repository_path(path)
     rules = project_contract["path_rules"]
     for pattern, rule in rules.items():
-        if pattern != "**" and fnmatch(path, pattern):
+        if pattern != "**" and fnmatch(canonical, validate_scope_pattern(pattern)):
             return pattern, str(rule["class"]), str(rule["approval"])
     rule = rules["**"]
     return "**", str(rule["class"]), str(rule["approval"])
 
 
 def wrap_repository_content(*, repository: str, commit: str, path: str, content: str, project_contract: dict[str, Any]) -> dict[str, Any]:
-    target = PurePosixPath(path).as_posix()
+    target = canonical_repository_path(path)
     role = None
     for item in project_contract.get("authoritative_sources", []):
-        if PurePosixPath(str(item.get("path", ""))).as_posix() == target:
+        try:
+            source_path = canonical_repository_path(str(item.get("path", "")))
+        except RepositoryPathError:
+            continue
+        if source_path == target:
             role = item.get("role")
             break
     if role == "authoritative_instruction":
@@ -101,20 +116,31 @@ class PolicyEngine:
         }
 
     def check_path_change(self, path: str, *, public_api_change: bool = False, data_schema_change: bool = False, result_semantics_change: bool = False) -> Objection:
-        pattern, path_class, approval = classify_path(self.contract, path)
+        try:
+            canonical = canonical_repository_path(path)
+            pattern, path_class, approval = classify_path(self.contract, canonical)
+        except RepositoryPathError as exc:
+            return _invalid_path_veto(path, exc)
         if approval == "USER":
-            return Objection(ObjectionKind.POLICY_VETO, f"{path} requires USER approval", "path_policy", {"path": path, "pattern": pattern, "class": path_class}, "Request owner approval or choose an AI-approved path.")
+            return Objection(ObjectionKind.POLICY_VETO, f"{canonical} requires USER approval", "path_policy", {"path": canonical, "pattern": pattern, "class": path_class}, "Request owner approval or choose an AI-approved path.")
         checks = {"public_api_change": public_api_change, "data_schema_change": data_schema_change, "result_semantics_change": result_semantics_change}
         impact = self.contract.get("change_impact_rules", {})
         blocked = [name for name, active in checks.items() if active and impact.get(name) == "USER"]
         if blocked:
-            return Objection(ObjectionKind.POLICY_VETO, f"Technical path escalated by semantic impact: {', '.join(blocked)}", "change_impact", {"path": path, "impact": blocked}, "Request USER approval or redesign.")
-        return Objection(ObjectionKind.PASS, f"Path change allowed: {path}", evidence={"path": path, "class": path_class})
+            return Objection(ObjectionKind.POLICY_VETO, f"Technical path escalated by semantic impact: {', '.join(blocked)}", "change_impact", {"path": canonical, "impact": blocked}, "Request USER approval or redesign.")
+        return Objection(ObjectionKind.PASS, f"Path change allowed: {canonical}", evidence={"path": canonical, "class": path_class})
 
-    def check_forbidden_path(self, path: str, allowed_patterns: list[str]) -> Objection:
-        if any(fnmatch(path, pattern) for pattern in allowed_patterns):
-            return Objection(ObjectionKind.PASS, f"Path within task scope: {path}")
-        return hard_veto(summary=f"Path outside task scope: {path}", evidence_type="forbidden_path_modified", evidence={"path": path, "allowed_patterns": allowed_patterns}, minimal_resolution="Revert path or extend scope through approved task contract.")
+    def check_forbidden_path(self, path: str, allowed_patterns: list[str], repository_root: str | Path | None = None) -> Objection:
+        try:
+            canonical = canonical_repository_path(path)
+            patterns = [validate_scope_pattern(pattern) for pattern in allowed_patterns]
+            if repository_root is not None:
+                validate_repository_candidate(repository_root, canonical)
+        except RepositoryPathError as exc:
+            return _invalid_path_veto(path, exc)
+        if any(fnmatch(canonical, pattern) for pattern in patterns):
+            return Objection(ObjectionKind.PASS, f"Path within task scope: {canonical}")
+        return hard_veto(summary=f"Path outside task scope: {canonical}", evidence_type="forbidden_path_modified", evidence={"path": canonical, "allowed_patterns": patterns}, minimal_resolution="Revert path or extend scope through approved task contract.")
 
     def check_capabilities(self, *, network: bool = False, secrets: list[str] | None = None, command: str | None = None) -> list[Objection]:
         objections: list[Objection] = []
