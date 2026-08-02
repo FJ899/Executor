@@ -1,4 +1,5 @@
 import io
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -17,6 +18,16 @@ class FoundationsTest(unittest.TestCase):
 
     def valid_test_contract(self):
         return load_contract(ROOT / "test_contracts/examples/valid_test.yaml")
+
+    def validate_source_text(self, source_text):
+        with tempfile.TemporaryDirectory() as temp_name:
+            base = Path(temp_name)
+            (base / "holdout").mkdir()
+            (base / "source.json").write_text(source_text, encoding="utf-8")
+            (base / "holdout" / "GINSENG_TEST-003_HOLDOUT.enc").write_text("fixture\n", encoding="utf-8")
+            contract = self.valid_test_contract()
+            contract["source_claims"][0]["source"]["file"] = "source.json"
+            return validate_test_contract(contract, base_dir=base)
 
     def test_valid_test_contract(self):
         result = validate_test_contract(self.valid_test_contract(), base_dir=FIXTURES)
@@ -42,6 +53,58 @@ class FoundationsTest(unittest.TestCase):
         contract = self.valid_test_contract()
         contract["source_claims"][0]["source"]["file"] = "missing.json"
         self.assertEqual(validate_test_contract(contract, base_dir=FIXTURES).status, ValidationStatus.INSUFFICIENT_EVIDENCE)
+
+    def test_false_source_claim_is_evidence_gap(self):
+        contract = self.valid_test_contract()
+        contract["source_claims"][0]["claim"] = "blocking_gate_count_before == 999"
+        result = validate_test_contract(contract, base_dir=FIXTURES)
+        self.assertEqual(result.status, ValidationStatus.INSUFFICIENT_EVIDENCE)
+        self.assertIn("SOURCE_CLAIM_MISMATCH", {issue.code for issue in result.issues})
+
+    def test_missing_source_selector_target_is_evidence_gap(self):
+        contract = self.valid_test_contract()
+        contract["source_claims"][0]["source"]["selector"] = "$.field_that_does_not_exist"
+        result = validate_test_contract(contract, base_dir=FIXTURES)
+        self.assertEqual(result.status, ValidationStatus.INSUFFICIENT_EVIDENCE)
+        self.assertIn("SOURCE_SELECTOR_NOT_FOUND", {issue.code for issue in result.issues})
+
+    def test_source_claim_requires_base_dir(self):
+        result = validate_test_contract(self.valid_test_contract())
+        self.assertEqual(result.status, ValidationStatus.INSUFFICIENT_EVIDENCE)
+        self.assertIn("SOURCE_BASE_DIR_REQUIRED", {issue.code for issue in result.issues})
+
+    def test_unsupported_source_selector_is_invalid(self):
+        contract = self.valid_test_contract()
+        contract["source_claims"][0]["source"]["selector"] = "$..blocking_gate_count"
+        result = validate_test_contract(contract, base_dir=FIXTURES)
+        self.assertEqual(result.status, ValidationStatus.INVALID)
+        self.assertIn("INVALID_SOURCE_SELECTOR", {issue.code for issue in result.issues})
+
+    def test_source_symlink_cannot_escape_base_dir(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            root = Path(temp_name)
+            base = root / "base"
+            outside = root / "outside"
+            (base / "holdout").mkdir(parents=True)
+            outside.mkdir()
+            (outside / "source.json").write_text('{"blocking_gate_count": 7}\n', encoding="utf-8")
+            (base / "source-link.json").symlink_to(outside / "source.json")
+            (base / "holdout" / "GINSENG_TEST-003_HOLDOUT.enc").write_text("fixture\n", encoding="utf-8")
+            contract = self.valid_test_contract()
+            contract["source_claims"][0]["source"]["file"] = "source-link.json"
+            result = validate_test_contract(contract, base_dir=base)
+            self.assertEqual(result.status, ValidationStatus.INVALID)
+            self.assertIn("UNSAFE_SOURCE_PATH", {issue.code for issue in result.issues})
+
+    def test_duplicate_source_json_key_is_evidence_gap(self):
+        result = self.validate_source_text('{"blocking_gate_count": 999, "blocking_gate_count": 7}\n')
+        self.assertEqual(result.status, ValidationStatus.INSUFFICIENT_EVIDENCE)
+        self.assertIn("SOURCE_FILE_INVALID", {issue.code for issue in result.issues})
+
+    def test_nonstandard_source_json_constant_is_evidence_gap(self):
+        result = self.validate_source_text('{"blocking_gate_count": NaN}\n')
+        self.assertEqual(result.status, ValidationStatus.INSUFFICIENT_EVIDENCE)
+        self.assertIn("SOURCE_FILE_INVALID", {issue.code for issue in result.issues})
 
     def test_tamper_must_be_detected(self):
         contract = self.valid_test_contract()
