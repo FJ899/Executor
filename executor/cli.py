@@ -6,7 +6,7 @@ import json
 from executor.checkpoints import build_snapshot
 from executor.contracts import ContractLoadError, load_contract, validate_project_contract, validate_task_contract, validate_test_contract
 from executor.policy import PolicyEngine
-from executor.state_machine import InvalidTransition, RunState, RunStore
+from executor.state_machine import InvalidTransition, RunIntegrityError, RunState, RunStore
 
 
 def _print(payload: object) -> None:
@@ -132,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
             result = RunStore(args.runs_root).revalidate(args.run_id, _snapshot_from_args(args))
             _print(result.to_dict())
             return 0 if result.unchanged else 3
-    except (ContractLoadError, InvalidTransition, OSError, ValueError) as exc:
+    except (ContractLoadError, InvalidTransition, RunIntegrityError, OSError, ValueError) as exc:
         _print({"status": "BLOCKED", "error": str(exc)})
         return 2
     return 2

@@ -60,28 +60,35 @@ def build_snapshot(
 
 
 def atomic_write_json(path: str | Path, payload: Any) -> None:
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    atomic_write_text(path, serialized)
+
+
+def atomic_write_text(path: str | Path, content: str) -> None:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, ensure_ascii=False, sort_keys=True, indent=2)
-            handle.write("\n")
+            handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temp_name, target)
-        try:
-            directory_fd = os.open(target.parent, os.O_DIRECTORY)
-        except (AttributeError, OSError):
-            directory_fd = None
-        if directory_fd is not None:
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
+        fsync_directory(target.parent)
     finally:
         if os.path.exists(temp_name):
             os.unlink(temp_name)
+
+
+def fsync_directory(path: str | Path) -> None:
+    try:
+        directory_fd = os.open(Path(path), os.O_DIRECTORY)
+    except (AttributeError, OSError):
+        return
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
 
 
 def append_jsonl(path: str | Path, payload: Any) -> None:
