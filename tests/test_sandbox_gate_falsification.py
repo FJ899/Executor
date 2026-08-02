@@ -12,6 +12,9 @@ class SandboxGateFalsificationTest(unittest.TestCase):
     def backend(self):
         return DockerSandboxBackend(executor_policy={"execution": {"external_projects": False}})
 
+    def completed(self, args, returncode=0, stdout="", stderr=""):
+        return subprocess.CompletedProcess(args, returncode, stdout=stdout, stderr=stderr)
+
     def test_parent_symlink_cannot_disappear_during_source_resolution(self):
         backend = self.backend()
         with tempfile.TemporaryDirectory() as temp_name:
@@ -32,32 +35,37 @@ class SandboxGateFalsificationTest(unittest.TestCase):
                 with self.assertRaisesRegex(SandboxExecutionError, "symlink component: link"):
                     backend.authorize(context)
 
-    def test_missing_text_mixed_with_daemon_error_is_not_confirmation(self):
-        ambiguous = subprocess.CompletedProcess(
-            ["docker", "inspect", "x"],
-            1,
-            stdout="",
-            stderr="Error: No such object: x\nCannot connect to the Docker daemon",
-        )
-        self.assertFalse(self.backend()._is_confirmed_missing(ambiguous, "x"))
+    def test_no_such_text_without_successful_list_query_is_not_proof(self):
+        responses = [
+            self.completed(["rm"], 0),
+            self.completed(["inspect"], 1, stderr="Error: No such object: x"),
+            self.completed(["ps"], 1, stderr="Cannot connect to the Docker daemon"),
+        ]
+        with patch("executor.sandbox.docker.subprocess.run", side_effect=responses):
+            verified, detail = self.backend()._cleanup("x")
+        self.assertFalse(verified)
+        self.assertIn("docker ps verification failed", detail)
 
-    def test_missing_message_for_different_name_is_not_confirmation(self):
-        missing = subprocess.CompletedProcess(
-            ["docker", "inspect", "x"],
-            1,
-            stdout="",
-            stderr="Error: No such object: another-container",
-        )
-        self.assertFalse(self.backend()._is_confirmed_missing(missing, "x"))
+    def test_successful_empty_exact_list_query_proves_absence(self):
+        responses = [
+            self.completed(["rm"], 0),
+            self.completed(["inspect"], 1, stderr="Error: No such object: x"),
+            self.completed(["ps"], 0, stdout=""),
+        ]
+        with patch("executor.sandbox.docker.subprocess.run", side_effect=responses):
+            verified, _ = self.backend()._cleanup("x")
+        self.assertTrue(verified)
 
-    def test_exact_missing_container_message_is_confirmation(self):
-        missing = subprocess.CompletedProcess(
-            ["docker", "inspect", "x"],
-            1,
-            stdout="",
-            stderr="Error: No such object: x",
-        )
-        self.assertTrue(self.backend()._is_confirmed_missing(missing, "x"))
+    def test_unexpected_name_from_exact_filter_is_not_proof(self):
+        responses = [
+            self.completed(["rm"], 0),
+            self.completed(["inspect"], 1, stderr="Error: No such object: x"),
+            self.completed(["ps"], 0, stdout="another-container\n"),
+        ]
+        with patch("executor.sandbox.docker.subprocess.run", side_effect=responses):
+            verified, detail = self.backend()._cleanup("x")
+        self.assertFalse(verified)
+        self.assertIn("unexpected names", detail)
 
 
 if __name__ == "__main__":
