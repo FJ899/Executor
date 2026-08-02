@@ -80,6 +80,8 @@ def verify_source_tree(root: str | Path, *, commit: str, source_dir: str | Path)
             if candidate.is_symlink():
                 raise RepositorySnapshotError(f"Source tree contains symlink directory: {candidate}")
         for file_name in file_names:
+            if current == repository_root and file_name == ".git":
+                continue
             candidate = current / file_name
             if candidate.is_symlink():
                 raise RepositorySnapshotError(f"Source tree contains symlink file: {candidate}")
