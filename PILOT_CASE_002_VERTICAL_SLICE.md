@@ -4,7 +4,8 @@
 
 ```text
 STATUS: IMPLEMENTED IN STACKED DRAFT
-REAL DOCKER RUN: PENDING
+CASE-002 TECHNICAL GATE: PASSED
+HUMAN ACCEPTANCE: PENDING
 BASE PR: #23 CASE-001
 AI WORKER: NOT USED
 M3: NOT USED
@@ -37,6 +38,22 @@ verified local checkout at pinned CASE-002 commit
 → change.patch + report.json
 → ACTION_COMPLETED_REVIEW_REQUIRED
 ```
+
+## Dowód wykonania
+
+```text
+Executor head: 1b0a90be3b3b36d918bb295a302556ee8ddbf63e
+workflow: Verify Executor foundations
+run: 30760104338
+foundation-tests: SUCCESS
+sandbox-security: SUCCESS
+CASE-001 regression run: SUCCESS
+CASE-002 pinned checkout: SUCCESS
+CASE-002 real Docker run: SUCCESS
+container cleanup: VERIFIED
+```
+
+Rzeczywisty run użył dokładnego commita `c3683bf37ad6a3f1d49c0ca05ebdd41627e9a5be`, utworzył jeden commit potomny, zmienił wyłącznie `project_registry/registry.py`, wykonał `compileall` oraz wszystkie 13 testów targetu w read-only Dockerze.
 
 ## Uruchomienie
 
@@ -81,6 +98,19 @@ Run blokuje:
 - globalne external execution, auto-merge, sieć albo sekrety;
 - nieudane testy, timeout lub niepotwierdzony cleanup.
 
+## Znalezisko adversarial review
+
+Pierwszy zielony realny run testował funkcję `execute_case_002`, ale nie sprawdzał nowej publicznej ścieżki `creative-os-executor-pilot --case 002`.
+
+Dodano osobny test dispatchu CLI, który potwierdza:
+
+- wybór wyłącznie pipeline CASE-002;
+- użycie kontraktu CASE-002;
+- brak wywołania CASE-001;
+- poprawny kod wyjścia i raport JSON.
+
+Ostateczny workflow `30760104338` przeszedł już z tym testem.
+
 ## Świadoma duplikacja
 
 `executor/pilot_case_002.py` powtarza część mechanicznego przepływu CASE-001 i importuje jego wąskie helpery Git. Jest to zamierzone.
@@ -100,6 +130,6 @@ Nie wyodrębniamy jeszcze wspólnego frameworka. Po CASE-003 porównamy trzy rze
 - terminalnego PASS;
 - zamknięcia `FIN-008`.
 
-## Bramka
+## Następna bramka
 
-CASE-002 może otrzymać `TECHNICAL GATE: PASSED` dopiero po rzeczywistym runie CI na dokładnym commicie wejściowym, pełnych 13 testach w Dockerze i potwierdzonym cleanupie. PR pozostaje draftem i nie jest autoryzowany do merge.
+CASE-002 ma zaliczoną bramkę techniczną, ale PR pozostaje draftem i nie jest autoryzowany do merge. Następny etap może dotyczyć wyłącznie CASE-003 na przypiętym commicie `c42bead2bbbff9c84486f17637ec80f35eeffa25`, nadal bez AI, M3 i uniwersalnego adaptera.
