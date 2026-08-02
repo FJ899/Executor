@@ -1,0 +1,13 @@
+source_status_before=
+Preparing worktree (detached HEAD 49d0f83)
+smudge_via_git_info_attributes=EXECUTED
+clean_via_git_info_attributes=EXECUTED
+source_status_after=
+source_head=49d0f83b67ae0c19f6d077350a243b027eadfc66
+worktree_head=49d0f83b67ae0c19f6d077350a243b027eadfc66
+git_version=git version 2.47.3
+marker_contents:
+smudge
+smudge
+clean
+clean
