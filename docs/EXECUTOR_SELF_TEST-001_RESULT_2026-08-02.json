@@ -1,0 +1,73 @@
+{
+  "schema_version": "executor-self-test-report/1.0",
+  "test_id": "EXECUTOR_SELF_TEST-001",
+  "verdict": "LOCAL_PASS_PENDING_EXTERNAL_ATTESTATION",
+  "final_acceptance_eligible": false,
+  "run_id": "RUN-SELF-784087E8A0137533",
+  "executor_commit": "71005eafd383eeeaf4ee97ab520126142c75475c",
+  "branch": "agent/executor-self-test-001",
+  "main_before": "986cb7ea6d1066b8e3d547674edf4f83cbaad731",
+  "main_after": "986cb7ea6d1066b8e3d547674edf4f83cbaad731",
+  "final_state": "PASS",
+  "final_event_hash": "7b1a2f7f2e675db1745c1ae5d281f62fd77f06560a2be42e1f7c13389efb77f8",
+  "authorization": {
+    "packet_id": "AAP-909F8503DE2A3466983FAD50B354F2FE",
+    "payload_sha256": "f175ebd5ba2195cbc75aa69af7014f5a55cfc05f3cccef8101a1e83766a0d89e",
+    "concurrent_attempts": 32,
+    "winner_count": 1,
+    "replay_blocks": 32,
+    "consumption_event_hash": "b5fd8f6b672345e157356969d20420cb04652e81d65996fc731e48ed4085eb91",
+    "action_result_event_hash": "d4bfc97b4972d943e7de86e21ab6344acea447344c95c55e725895fa7cad5722"
+  },
+  "holdout": {
+    "holdout_id": "HLD-46EE2F62BF3FC19B1229D1ED300FEF1E",
+    "artifact_sha256": "92af4bd74627f5410618573f921743d5bf05699ea50491f3368343204765a37d",
+    "replay_receipt_sha256": "90eb4ad916eaf9a3af2619a467515824b0d1243bce297fcefaca05a785a9e87e",
+    "verdict": "PASS",
+    "content_exposure_observed": false,
+    "isolation_level": "PROCESS_LOCAL_PRIVATE_ROOT",
+    "independent_certification": false
+  },
+  "evidence": {
+    "package_id": "EVP-E3FF13DE7F38622758198897D548803921C6E4F1F80CC0DB8C5C7D67B1FBC172",
+    "manifest_sha256": "e3ff13de7f38622758198897d548803921c6e4f1f80cc0db8c5c7d67b1fbc172",
+    "replay_receipt_sha256": "bb3890cc0af8ec92abc9fcb8cad63057225152e59b7bda2602d1731a683830b3",
+    "verdict": "PASS"
+  },
+  "controls": {
+    "positive_control": true,
+    "negative_control": true,
+    "concurrent_single_winner": true,
+    "authorization_replay_blocked": true,
+    "wrong_result_token_blocked": true,
+    "action_result_binding_verified": true,
+    "main_mutated_false": true,
+    "external_project_execution_blocked": true,
+    "auto_merge_false": true,
+    "holdout_content_logged_false": true
+  },
+  "tamper_controls": {
+    "direct_pass_blocked": true,
+    "forged_replay_receipt_blocked": true,
+    "stale_snapshot_blocked": true,
+    "checkpoint_tamper_blocked": true,
+    "holdout_receipt_tamper_blocked": true
+  },
+  "human_participation": {
+    "user_product_decisions": 1,
+    "manual_action_authorizations": 0,
+    "user_written_implementation_lines": 0,
+    "ai_execution_iterations": 1,
+    "failed_authorized_action_attempts": 0
+  },
+  "safeguards_triggered": [
+    "AUTHORIZATION_REPLAY",
+    "INVALID_RESULT_BINDING_TOKEN",
+    "DIRECT_PASS_BLOCKED",
+    "FORGED_REPLAY_RECEIPT_BLOCKED",
+    "STALE_SNAPSHOT_BLOCKED",
+    "CHECKPOINT_TAMPER_BLOCKED",
+    "HOLDOUT_RECEIPT_TAMPER_BLOCKED",
+    "FINAL_ACCEPTANCE_BLOCKED_WITHOUT_EXTERNAL_HOLDOUT_ATTESTATION"
+  ]
+}
