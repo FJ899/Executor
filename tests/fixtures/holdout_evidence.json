@@ -1,0 +1,11 @@
+{
+  "schema_version": "executor-holdout-evidence/1.0",
+  "attestation_id": "executor-validator-fixture-001",
+  "test_id": "EXECUTOR_VALIDATOR_FIXTURE-001",
+  "location": "holdout/EXECUTOR_VALIDATOR_FIXTURE-001.enc",
+  "artifact_sha256": "b4405b5dea9bad830cfb09dfe7cd42538a79f8d60a7c2fd8fa1565e6e9126d9b",
+  "visibility": "HIDDEN_FROM_IMPLEMENTER",
+  "access": "REPLAY_ONLY",
+  "verifier_role": "TEST_FIXTURE_VERIFIER",
+  "verifier": "executor-ci-fixture"
+}

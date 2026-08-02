@@ -51,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     p_test = sub.add_parser("validate-test")
     p_test.add_argument("path")
     p_test.add_argument("--base-dir", default=None)
+    p_test.add_argument("--holdout-evidence", default=None)
 
     p_task = sub.add_parser("validate-task")
     p_task.add_argument("path")
@@ -94,7 +95,8 @@ def main(argv: list[str] | None = None) -> int:
             _print(result.to_dict())
             return 0 if result.ok else 2
         if args.command == "validate-test":
-            result = validate_test_contract(load_contract(args.path), base_dir=args.base_dir)
+            evidence = load_contract(args.holdout_evidence) if args.holdout_evidence else None
+            result = validate_test_contract(load_contract(args.path), base_dir=args.base_dir, holdout_evidence=evidence)
             _print(result.to_dict())
             return 0 if result.ok else 2
         if args.command == "validate-task":
