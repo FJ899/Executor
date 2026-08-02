@@ -14,6 +14,12 @@ from executor.m3.authorization_ledger import (
     BoundResultReceipt,
     ConsumptionReceipt,
 )
+from executor.m3.evidence import (
+    EvidenceIntegrityError,
+    EvidencePackageReceipt,
+    M3ReplayReceipt,
+    ReplayableEvidenceStore,
+)
 
 __all__ = [
     "HoldoutIntegrityError",
@@ -26,4 +32,8 @@ __all__ = [
     "AuthorizationReplayError",
     "BoundResultReceipt",
     "ConsumptionReceipt",
+    "EvidenceIntegrityError",
+    "EvidencePackageReceipt",
+    "M3ReplayReceipt",
+    "ReplayableEvidenceStore",
 ]
