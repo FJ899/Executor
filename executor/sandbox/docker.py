@@ -148,28 +148,6 @@ class DockerSandboxBackend:
         command.extend(argv)
         return command
 
-    @staticmethod
-    def _is_confirmed_missing(completed: subprocess.CompletedProcess[str], container_name: str) -> bool:
-        if completed.returncode == 0:
-            return False
-        lines = [line.strip() for line in f"{completed.stdout or ''}\n{completed.stderr or ''}".splitlines() if line.strip()]
-        if len(lines) != 1:
-            return False
-        line = lines[0].casefold()
-        prefixes = (
-            "error: no such object: ",
-            "error: no such container: ",
-            "error response from daemon: no such object: ",
-            "error response from daemon: no such container: ",
-            "no such object: ",
-            "no such container: ",
-        )
-        for prefix in prefixes:
-            if line.startswith(prefix):
-                missing_name = line[len(prefix) :].strip().lstrip("/")
-                return missing_name == container_name.casefold()
-        return False
-
     def _cleanup(self, container_name: str) -> tuple[bool, str]:
         diagnostics: list[str] = []
         try:
@@ -199,8 +177,36 @@ class DockerSandboxBackend:
         if inspected.returncode == 0:
             diagnostics.append("container still exists after cleanup")
             return False, "; ".join(diagnostics)
-        if not self._is_confirmed_missing(inspected, container_name):
-            diagnostics.append(f"container absence is unverified: {inspected.stderr.strip() or inspected.stdout.strip()}")
+
+        try:
+            listed = subprocess.run(
+                [
+                    self.docker_binary,
+                    "ps",
+                    "-a",
+                    "--no-trunc",
+                    "--filter",
+                    f"name=^/{container_name}$",
+                    "--format",
+                    "{{.Names}}",
+                ],
+                text=True,
+                capture_output=True,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            diagnostics.append(f"docker ps verification unavailable: {exc}")
+            return False, "; ".join(diagnostics)
+        if listed.returncode != 0:
+            diagnostics.append(f"docker ps verification failed: {listed.stderr.strip() or listed.stdout.strip()}")
+            return False, "; ".join(diagnostics)
+        names = {line.strip() for line in listed.stdout.splitlines() if line.strip()}
+        if container_name in names:
+            diagnostics.append("container is still listed after cleanup")
+            return False, "; ".join(diagnostics)
+        if names:
+            diagnostics.append(f"unexpected names returned by exact cleanup filter: {sorted(names)}")
             return False, "; ".join(diagnostics)
         return True, "; ".join(diagnostics)
 
