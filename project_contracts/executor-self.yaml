@@ -7,6 +7,10 @@
   },
   "authoritative_sources": [
     {
+      "path": "CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md",
+      "role": "authoritative_instruction"
+    },
+    {
       "path": "EXECUTOR_POLICY.yaml",
       "role": "authoritative_instruction"
     },

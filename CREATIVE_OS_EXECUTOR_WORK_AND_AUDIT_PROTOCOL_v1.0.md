@@ -412,13 +412,55 @@ AUTO MERGE: DISABLED
 
 To są deklaracje stanu wymagające audytowalnych dowodów. Protokół nie zmienia ich automatycznie.
 
-### 19.1. Odzyskany plan kontynuacji
+### 19.1. Nadrzędna decyzja produktowa
+
+Użytkownik zatwierdził 2026-08-02 kierunek opisany w
+`CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md`.
+
+Obowiązuje rozróżnienie:
+
+```text
+GINSENG
+→ prowadzenie intencji, możliwości i rozwidleń
+
+COMPANY LOOP
+→ poszerzanie, kwestionowanie i porównywanie wariantów
+
+CREATIVE OS
+→ pamięć, kanon i mapa zależności
+
+EXECUTOR
+→ odwracalne wykonanie zatwierdzonego kierunku i sprawdzenie efektu
+
+AUDYT
+→ okresowa korekta dryfu, deklaracji i dowodu
+```
+
+Zabezpieczenia, sandbox, polityki i integralność stanu są fundamentami uczciwego
+wykonania. Nie są głównym produktem i nie mogą zastąpić odkrywania potencjału,
+rekomendacji ani decyzji użytkownika.
+
+`Action Authorization Packet` pozostaje przyszłym wewnętrznym mechanizmem
+pomocniczym. Jego kontrakt nie jest zamrożony, nie jest zaimplementowany i nie może
+samodzielnie definiować M3A, M3B ani M3C.
+
+Status:
+
+```text
+USER APPROVED
+AUTHORITATIVE PRODUCT DECISION
+DOCUMENTED
+RUNTIME ENFORCEMENT NOT CLAIMED
+```
+
+### 19.2. Odzyskany plan kontynuacji
 
 Status planu:
 
 ```text
 RECOVERED USER DECISION
-PENDING BASELINE AUDIT
+BASELINE AUDIT COMPLETED
+BLOCKING FIXES IN PROGRESS
 NOT IMPLEMENTED
 ```
 
@@ -437,15 +479,17 @@ Po przejściu obowiązkowej bramki audytowej praca ma przebiegać w następując
 
 Kolejność jest częścią decyzji użytkownika. Company Loop, kalibracja agentów i `GINSENG_TEST-003` nie mogą zostać przesunięte przed ocenę pierwszego wyniku Executora.
 
-### 19.2. Obowiązkowa bramka przed wykonaniem planu
+### 19.3. Obowiązkowa bramka przed wykonaniem planu
 
 Przed przygotowaniem i uruchomieniem `EXECUTOR_SELF_TEST-001` wymagane są kolejno:
 
-1. scalenie protokołu pracy i audytu;
-2. pełny audyt M0–M2B na aktualnym `main`;
-3. usunięcie blokad P0 i P1 wykrytych przez audyt;
-4. ukierunkowana ponowna weryfikacja poprawionych fundamentów;
-5. zamrożenie `EXECUTOR_SELF_TEST-001`, definicji M3A/M3B/M3C, kryteriów `PASS` i niewidocznego dla implementera holdoutu.
+1. scalenie protokołu pracy i audytu — `DONE`;
+2. pełny audyt M0–M2B na zamrożonym `main` — `DONE`;
+3. zapisanie nadrzędnego celu produktu i granic odpowiedzialności — `IN REVIEW`;
+4. zakończenie ukierunkowanej weryfikacji poprawki integralności M2A w PR #5;
+5. usunięcie pozostałych blokad P0 i P1 wykrytych przez audyt;
+6. ukierunkowana ponowna weryfikacja poprawionych fundamentów;
+7. zamrożenie `EXECUTOR_SELF_TEST-001`, definicji M3A/M3B/M3C, kryteriów `PASS` i niewidocznego dla implementera holdoutu.
 
 Na potrzeby tej bramki:
 
@@ -457,9 +501,11 @@ P1
 materialnie ogranicza działanie, egzekwowanie polityki albo wartość dowodową
 ```
 
-Jeżeli audyt nie wykryje P0 ani P1, krok trzeci i czwarty zamykają się wynikiem `NO_BLOCKING_FINDINGS`, a praca przechodzi do zamrożenia kontraktu self-testu.
+Jeżeli ukierunkowana ponowna weryfikacja nie wykryje pozostałych P0 ani P1, etap
+napraw fundamentów zamyka się wynikiem `NO_BLOCKING_FINDINGS`, a praca przechodzi
+do zamrożenia kontraktu self-testu.
 
-### 19.3. Blokada definicji M3A/M3B/M3C
+### 19.4. Blokada definicji M3A/M3B/M3C
 
 Na dzień 2026-08-02 repozytorium nie zawiera zatwierdzonych definicji zakresów M3A, M3B i M3C.
 
@@ -505,7 +551,19 @@ Obowiązkowe próby adwersarialne dla `EXECUTOR_SELF_TEST-001` obejmują:
 - niedostępną zależność;
 - sytuację, w której ten sam kontekst wykonuje i zatwierdza pracę.
 
-## 20. Pełne polecenie następnego kroku
+## 20. Historyczne polecenie audytu baseline — wykonane
+
+Status sekcji:
+
+```text
+COMPLETED ON 2026-08-02
+RETAINED AS DECISION AND AUDIT HISTORY
+NOT THE CURRENT NEXT ACTION
+```
+
+Poniższe polecenie pozostaje w dokumencie jako zapis pełnej instrukcji, która
+doprowadziła do audytu baseline M0–M2B. Nie należy uruchamiać go ponownie jako
+bieżącego następnego kroku bez nowej decyzji.
 
 ### REKOMENDOWANE DZIAŁANIE
 
@@ -558,3 +616,89 @@ Na końcu wskaż jeden najlepszy następny krok. Podaj REKOMENDOWANE DZIAŁANIE,
 ### DOWÓD ZAKOŃCZENIA
 
 Powstaje raport odnoszący każdą deklarację M0–M2B do kodu i wykonania, zawierający odtwarzalne komendy, `MINIMAL TRUTH VERSION`, jednoznaczny werdykt oraz kompletny następny krok. Stan bazowej gałęzi pozostaje niezmieniony.
+
+## 21. Aktualne pełne polecenie następnego kroku
+
+### REKOMENDOWANE DZIAŁANIE
+
+Po udokumentowaniu nadrzędnego celu produktu dokończyć ukierunkowaną weryfikację
+integralności M2A w draft PR #5. Jeżeli weryfikacja potwierdzi lukę w tym samym
+zakresie, poprawić ją w PR #5 i ponowić dokładnie ukierunkowane próby.
+
+### DLACZEGO TERAZ
+
+Stan i checkpointy będą podstawą późniejszego M3. Nie wolno rozwijać dowodu ani
+Company Loop na fundamencie, który może cicho utracić terminalny stan lub przyjąć
+nieprawdziwy wynik.
+
+### PEŁNE POLECENIE
+
+```text
+Dokończ ukierunkowaną weryfikację draft PR #5 w repozytorium
+https://github.com/litrgratis-pixel/Executor.
+
+PUNKT ODNIESIENIA
+- PR: https://github.com/litrgratis-pixel/Executor/pull/5
+- gałąź: agent/fix-m2a-state-integrity
+- zweryfikuj najpierw head 3cbc1c15866c8df12b2a934622efc7653ccb582d;
+- baza: main @ bbe4f8f8c99349378b59af366c615e3b6c7a9ff2;
+- jeżeli head PR zmienił się przed rozpoczęciem, zapisz nowy SHA i porównaj zmianę
+  z powyższym punktem odniesienia przed wykonaniem testów.
+
+CEL
+Sprawdź, czy PR #5 rzeczywiście usuwa fałszywy PASS, ukrywanie STALE, niespójność
+state/event/checkpoint, niebezpieczny run_id, partial writes i błędy współbieżności.
+Nie ograniczaj się do uruchomienia istniejących regresji. Szukaj kontrprzykładu dla
+mechanizmu transakcji i recovery.
+
+OBOWIĄZKOWE PRÓBY
+1. Uruchom pełne testy repozytorium oraz tests.test_state_machine osobno.
+2. Uruchom compileall, validate-project, poprawny kontrakt testu i negatywną
+   kontrolę invalid_missing_negative.
+3. Powtórz ADV-M2A-002–006 na dokładnym head PR.
+4. Przerwij osobny proces bez obsługi wyjątku kolejno po zapisie journal,
+   checkpointu, event logu i state; następny proces ma odzyskać poprzedni spójny
+   stan albo zwrócić jawny RunIntegrityError, nigdy pozorny sukces.
+5. Spróbuj dodać poprawnie wyglądający, hashowany journal transakcji do już
+   zatwierdzonego terminalnego STALE lub BLOCKED. Journal nie może cicho cofnąć
+   zatwierdzonego stanu ani pozwolić na dalsze przejścia.
+6. Sprawdź zmieniony, brakujący, dodatkowy, symlinkowany i hardlinkowany checkpoint.
+7. Sprawdź traversal, separator, ścieżkę absolutną, Unicode i symlink escape run_id.
+8. Sprawdź równoległe przejścia w wątkach i osobnych procesach. Dwa procesy nie
+   mogą zatwierdzić tego samego sequence ani użyć różnych plików blokady.
+9. Sprawdź CLI: uszkodzenie integralności ma dawać BLOCKED i kod 2.
+
+POSTĘPOWANIE Z NOWYM USTALENIEM
+- Jeżeli próba ujawni SILENTLY_WRONG w zakresie M2A, nie oznaczaj PR jako gotowego.
+- Dodaj minimalną regresję odtwarzającą problem.
+- Popraw wyłącznie PR #5 i mechanizmy M2A konieczne do zamknięcia regresji.
+- Recovery po niejednoznacznym stanie ma działać fail-closed. Nie może ufać
+  samemu niekluczowanemu hashowi artefaktu stworzonemu w tym samym zapisywalnym
+  katalogu jako dowodowi autentyczności.
+- Po poprawce uruchom ponownie cały zestaw obowiązkowych prób.
+
+OGRANICZENIA
+- nie zmieniaj main;
+- nie scalaj PR;
+- nie używaj auto-merge;
+- nie implementuj M3, replayable evidence, Company Loop, Ginsenga,
+  EXECUTOR_SELF_TEST-001 ani holdoutu;
+- nie rozszerzaj PR na pozostałe P0/P1 z M0, M1 lub M2B;
+- nie przedstawiaj SHA-256 bez zewnętrznej granicy zaufania jako dowodu
+  kryptograficznej autentyczności;
+- testy destrukcyjne wykonuj wyłącznie w katalogu tymczasowym.
+
+RAPORT I PR
+- zaktualizuj opis draft PR #5 dokładnym head SHA;
+- podaj pełne polecenia, kody wyjścia i wyniki;
+- przypisz każdą próbę do wymagania M2A;
+- wymień ograniczenia dowodu i pozostałe blokady poza zakresem;
+- pozostaw PR jako draft i zatrzymaj się przed scaleniem.
+```
+
+### DOWÓD ZAKOŃCZENIA
+
+Każdy obowiązkowy przypadek ma odtwarzalny wynik `HANDLED` albo jawny,
+zaakceptowany `RunIntegrityError`; żaden nie kończy się `SILENTLY_WRONG`. Pełny
+suite, compileall, walidatory i CI przechodzą, opis PR #5 zawiera dokładny head SHA
+i wyniki, a PR pozostaje draftem bez zmian w `main`.
