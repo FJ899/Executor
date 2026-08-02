@@ -4,27 +4,25 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
+from executor.repository_access import RepositoryPathError, canonical_repository_path, resolve_repository_file, validate_repository_candidate
+
 
 HoldoutFinding = tuple[str, str, str]
 
 
 def _safe_path(value: str) -> bool:
-    path = Path(value)
-    return bool(value) and not path.is_absolute() and ".." not in path.parts
+    try:
+        canonical_repository_path(value)
+    except RepositoryPathError:
+        return False
+    return True
 
 
 def _resolve_holdout(base_dir: str | Path, location: str) -> tuple[Path, bytes]:
-    root = Path(base_dir).resolve(strict=True)
-    candidate = root / location
-    if candidate.is_symlink():
-        raise ValueError("Holdout file cannot be a symlink")
-    resolved = candidate.resolve(strict=True)
-    try:
-        resolved.relative_to(root)
-    except ValueError as exc:
-        raise ValueError("Holdout file escapes base_dir") from exc
-    if not resolved.is_file():
+    _, candidate = validate_repository_candidate(base_dir, location)
+    if not candidate.exists():
         raise FileNotFoundError(location)
+    _, resolved = resolve_repository_file(base_dir, location)
     payload = resolved.read_bytes()
     if not payload:
         raise RuntimeError("Holdout file is empty")
@@ -44,7 +42,7 @@ def verify_holdout(
     gaps: list[HoldoutFinding] = []
     location = str(holdout.get("location", ""))
     if not _safe_path(location):
-        issues.append(("UNSAFE_HOLDOUT_PATH", "Holdout path must be safe and relative", "$.holdout.location"))
+        issues.append(("UNSAFE_HOLDOUT_PATH", "Holdout path must be a normalized safe relative path", "$.holdout.location"))
         return issues, gaps
     if base_dir is None:
         gaps.append(("HOLDOUT_BASE_DIR_REQUIRED", "base_dir is required to inspect the holdout artifact", "$.holdout.location"))
@@ -57,7 +55,7 @@ def verify_holdout(
     except OSError as exc:
         gaps.append(("HOLDOUT_UNREADABLE", f"Cannot read holdout file: {exc}", "$.holdout.location"))
         return issues, gaps
-    except ValueError as exc:
+    except (ValueError, RepositoryPathError) as exc:
         issues.append(("UNSAFE_HOLDOUT_PATH", str(exc), "$.holdout.location"))
         return issues, gaps
     except RuntimeError as exc:
