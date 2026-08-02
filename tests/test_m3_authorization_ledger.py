@@ -14,7 +14,7 @@ from executor.m3.authorization_ledger import (
 )
 
 
-ZERO = "0" * 64
+ZERO = "a" * 64
 ONE = "1" * 64
 TWO = "2" * 64
 
