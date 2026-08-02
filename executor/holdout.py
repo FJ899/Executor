@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from executor.repository_access import RepositoryPathError, canonical_repository_path, resolve_repository_file, validate_repository_candidate
+from executor.repository_access import RepositoryPathError, canonical_repository_path, read_repository_bytes, validate_repository_candidate
 
 
 HoldoutFinding = tuple[str, str, str]
@@ -18,17 +18,16 @@ def _safe_path(value: str) -> bool:
     return True
 
 
-def _resolve_holdout(base_dir: str | Path, location: str) -> tuple[Path, bytes]:
+def _resolve_holdout(base_dir: str | Path, location: str) -> tuple[str, bytes]:
     _, candidate = validate_repository_candidate(base_dir, location)
     if not candidate.exists():
         raise FileNotFoundError(location)
-    _, resolved = resolve_repository_file(base_dir, location)
-    payload = resolved.read_bytes()
+    canonical, payload = read_repository_bytes(base_dir, location)
     if not payload:
         raise RuntimeError("Holdout file is empty")
     if b"PLACEHOLDER" in payload.upper():
         raise RuntimeError("Holdout file is a placeholder")
-    return resolved, payload
+    return canonical, payload
 
 
 def verify_holdout(
