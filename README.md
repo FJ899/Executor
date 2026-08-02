@@ -38,6 +38,7 @@ Pliki `.yaml` używają składni JSON, która jest poprawnym podzbiorem YAML 1.2
 - `CREATIVE_OS_EXECUTOR_BUILD_INSTRUCTION_v0.2.md` — kontrakt implementacyjny;
 - `CREATIVE_OS_EXECUTOR_WORK_AND_AUDIT_PROTOCOL_v1.0.md` — zaakceptowane zasady autonomicznej pracy, rozmowy, pełnych instrukcji oraz audytu dowodowego;
 - `ACTION_AUTHORIZATION_PACKET_v1.0.md` — zamrożony terminalny kontrakt jednorazowej autoryzacji konkretnego działania.
+- `M3_REPLAYABLE_EVIDENCE_CONTRACT_v1.0.md` — zamrożone definicje M3A/M3B/M3C, terminalnego `PASS` i `EXECUTOR_SELF_TEST-001`.
 
 Protokół pracy i audytu jest obowiązującym źródłem instrukcji dla projektu `executor-self`. Jego obecność nie jest dowodem implementacji mechanizmów runtime; egzekwowanie każdej reguły wymaga osobnego testu.
 
@@ -53,6 +54,8 @@ M1: IMPLEMENTED
 M2A: IMPLEMENTED
 M2B: IMPLEMENTED / FIXTURES VERIFIED
 M3+: LOCKED
+M3 CONTRACT: FROZEN / IMPLEMENTATION NOT YET CLAIMED
+EXECUTOR_SELF_TEST-001: FROZEN / BLOCKED UNTIL INDEPENDENT HOLDOUT AND M3
 PRODUCT PURPOSE: USER APPROVED / DOCUMENTED
 POTENTIAL AND DECISION PACKET: LOGICAL CONTRACT / NOT IMPLEMENTED
 ACTION AUTHORIZATION PACKET: CONTRACT FROZEN / VALIDATOR IMPLEMENTED / LEDGER PENDING M3
