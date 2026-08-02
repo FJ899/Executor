@@ -131,15 +131,24 @@ def _select_json(value: Any, tokens: list[str | int]) -> Any:
     return selected
 
 
-def _claim_expected_value(text: str) -> tuple[str, Any] | None:
+def _parse_assertion(text: str) -> tuple[str, str, Any, str] | None:
     match = _ASSERTION.match(text)
     if match is None:
         return None
-    _, operator, literal = match.groups()
+    field, operator, literal = match.groups()
+    literal = literal.strip()
     try:
-        expected = json.loads(literal)
+        value = json.loads(literal)
     except json.JSONDecodeError:
-        expected = literal.strip()
+        value = literal
+    return field, operator, value, literal
+
+
+def _claim_expected_value(text: str) -> tuple[str, Any] | None:
+    parsed = _parse_assertion(text)
+    if parsed is None:
+        return None
+    _, operator, expected, _ = parsed
     return operator, expected
 
 
@@ -178,25 +187,27 @@ def _control(contract: dict[str, Any], name: str, issues: list[ValidationIssue])
 
 
 def _contradictions(assertions: list[str]) -> list[ValidationIssue]:
-    equal: dict[str, str] = {}
-    not_equal: dict[str, set[str]] = {}
+    equal: dict[str, list[tuple[Any, str]]] = {}
+    not_equal: dict[str, list[tuple[Any, str]]] = {}
     issues: list[ValidationIssue] = []
     for index, text in enumerate(assertions):
-        match = _ASSERTION.match(text)
-        if not match:
+        parsed = _parse_assertion(text)
+        if parsed is None:
             continue
-        field, operator, value = match.groups()
-        value = value.strip()
+        field, operator, value, literal = parsed
         if operator == "==":
-            if field in equal and equal[field] != value:
-                issues.append(ValidationIssue("CONTRADICTORY_ACCEPTANCE", f"{field} cannot equal both {equal[field]} and {value}", f"$.acceptance[{index}]"))
-            if value in not_equal.get(field, set()):
-                issues.append(ValidationIssue("CONTRADICTORY_ACCEPTANCE", f"{field} is required to equal and not equal {value}", f"$.acceptance[{index}]"))
-            equal[field] = value
+            for previous, previous_literal in equal.get(field, []):
+                if not _json_values_equal(previous, value):
+                    issues.append(ValidationIssue("CONTRADICTORY_ACCEPTANCE", f"{field} cannot equal both {previous_literal} and {literal}", f"$.acceptance[{index}]"))
+            for denied, denied_literal in not_equal.get(field, []):
+                if _json_values_equal(denied, value):
+                    issues.append(ValidationIssue("CONTRADICTORY_ACCEPTANCE", f"{field} is required to equal {literal} and not equal {denied_literal}", f"$.acceptance[{index}]"))
+            equal.setdefault(field, []).append((value, literal))
         else:
-            if equal.get(field) == value:
-                issues.append(ValidationIssue("CONTRADICTORY_ACCEPTANCE", f"{field} is required to equal and not equal {value}", f"$.acceptance[{index}]"))
-            not_equal.setdefault(field, set()).add(value)
+            for required, required_literal in equal.get(field, []):
+                if _json_values_equal(required, value):
+                    issues.append(ValidationIssue("CONTRADICTORY_ACCEPTANCE", f"{field} is required to equal {required_literal} and not equal {literal}", f"$.acceptance[{index}]"))
+            not_equal.setdefault(field, []).append((value, literal))
     return issues
 
 
