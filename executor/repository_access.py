@@ -82,30 +82,7 @@ def validate_repository_candidate(root_value: str | Path, relative: str) -> tupl
     return canonical, candidate
 
 
-def resolve_repository_file(root_value: str | Path, relative: str) -> tuple[str, Path]:
-    canonical, candidate = validate_repository_candidate(root_value, relative)
-    root = _root(root_value)
-    try:
-        resolved = candidate.resolve(strict=True)
-    except OSError as exc:
-        raise RepositoryPathError(f"Repository file cannot be resolved: {exc}") from exc
-    try:
-        resolved.relative_to(root)
-    except ValueError as exc:
-        raise RepositoryPathError("Repository file escapes repository root") from exc
-    try:
-        file_stat = resolved.stat()
-    except OSError as exc:
-        raise RepositoryPathError(f"Repository file cannot be inspected: {exc}") from exc
-    if not stat.S_ISREG(file_stat.st_mode):
-        raise RepositoryPathError("Repository path must identify a regular file")
-    if file_stat.st_nlink != 1:
-        raise RepositoryPathError("Repository file must not be hard-linked")
-    return canonical, resolved
-
-
-def read_repository_bytes(root_value: str | Path, relative: str) -> tuple[str, bytes]:
-    canonical, resolved = resolve_repository_file(root_value, relative)
+def _read_resolved_bytes(resolved: Path) -> bytes:
     flags = os.O_RDONLY
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
@@ -129,13 +106,48 @@ def read_repository_bytes(root_value: str | Path, relative: str) -> tuple[str, b
             raise RepositoryPathError("Repository file changed during read")
     finally:
         os.close(descriptor)
-    return canonical, content
+    return content
+
+
+class _VerifiedPath(type(Path())):
+    def read_bytes(self) -> bytes:
+        return _read_resolved_bytes(self)
+
+    def read_text(self, encoding: str | None = None, errors: str | None = None) -> str:
+        selected_encoding = encoding or "utf-8"
+        try:
+            return self.read_bytes().decode(selected_encoding, errors or "strict")
+        except UnicodeError as exc:
+            raise RepositoryPathError(f"Repository file must use {selected_encoding}: {exc}") from exc
+
+
+def resolve_repository_file(root_value: str | Path, relative: str) -> tuple[str, Path]:
+    canonical, candidate = validate_repository_candidate(root_value, relative)
+    root = _root(root_value)
+    try:
+        resolved = candidate.resolve(strict=True)
+    except OSError as exc:
+        raise RepositoryPathError(f"Repository file cannot be resolved: {exc}") from exc
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise RepositoryPathError("Repository file escapes repository root") from exc
+    try:
+        file_stat = resolved.stat()
+    except OSError as exc:
+        raise RepositoryPathError(f"Repository file cannot be inspected: {exc}") from exc
+    if not stat.S_ISREG(file_stat.st_mode):
+        raise RepositoryPathError("Repository path must identify a regular file")
+    if file_stat.st_nlink != 1:
+        raise RepositoryPathError("Repository file must not be hard-linked")
+    return canonical, _VerifiedPath(resolved)
+
+
+def read_repository_bytes(root_value: str | Path, relative: str) -> tuple[str, bytes]:
+    canonical, resolved = resolve_repository_file(root_value, relative)
+    return canonical, resolved.read_bytes()
 
 
 def read_repository_text(root_value: str | Path, relative: str) -> tuple[str, str]:
-    canonical, content = read_repository_bytes(root_value, relative)
-    try:
-        text = content.decode("utf-8")
-    except UnicodeError as exc:
-        raise RepositoryPathError(f"Repository file must be UTF-8 text: {exc}") from exc
-    return canonical, text
+    canonical, resolved = resolve_repository_file(root_value, relative)
+    return canonical, resolved.read_text(encoding="utf-8")
