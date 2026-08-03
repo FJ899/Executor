@@ -31,6 +31,7 @@ python -m executor.cli validate-test test_contracts/examples/valid_test.yaml --b
 Pliki `.yaml` używają składni JSON, która jest poprawnym podzbiorem YAML 1.2.
 
 ## Dokumenty sterujące
+  * `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md` — kanoniczna drabina poziomów produktu, poziome osie dojrzałości, bramki i reguła odrzucania bocznych odnóg;
 
 - `CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md` — nadrzędny cel produktu, role Ginsenga, Company Loop, Creative OS, Executora i audytu oraz kolejność dalszej budowy;
 - `EXECUTOR_CHARTER.md` — misja Executora, hierarchia zaufania i warunki zatrzymania;
@@ -44,6 +45,22 @@ Protokół pracy i audytu jest obowiązującym źródłem instrukcji dla projekt
 Action Authorization Packet jest zamrożonym kontraktem semantycznym i posiada walidator. Poprawny pakiet oznacza wyłącznie `READY_FOR_ATOMIC_CONSUMPTION`. Nie jest dowodem wykonania. Atomowy ledger konsumpcji i związanie wyniku akcji należą do projektu M3.
 
 Dokument celu produktu jest zatwierdzoną decyzją semantyczną, ale nie stanowi dowodu implementacji Ginsenga, Company Loop, `POTENTIAL_AND_DECISION_PACKET` ani M3.
+
+## Poziom produktu
+
+```text
+CURRENT MAIN PRODUCT LEVEL: P0 — FOUNDATION / ACHIEVED IN DECLARED SCOPE
+P0 ACHIEVED SHA: b092a85e82eb81ec6dc7db4a7064409c6c383359
+P0 EVIDENCE PR: #16
+P0 EVIDENCE RUN ID: 30755381646
+P0 HUMAN DECISION: ACCEPTED THROUGH MERGE OF PR #16
+CURRENT TARGET: P1 — CONTROLLED PILOT RUNTIME
+FIRST TRUE PRODUCT MVP: P3 — REAL VALUE MVP
+M3: T3 TRUST AXIS / LOCKED UNTIL P3 PRODUCT DECISION CONTINUE
+COMPANY LOOP: TARGETED AT P5
+```
+
+Pełne definicje, dowody i non-goals zawiera `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md`.
 
 ## Status
 
