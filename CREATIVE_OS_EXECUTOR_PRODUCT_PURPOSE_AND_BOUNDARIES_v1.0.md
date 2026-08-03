@@ -209,44 +209,24 @@ wybrać kierunek i rzeczywiście go zrealizować.
 
 ## 9. Kolejność dalszej budowy
 
-### Etap A — prawdziwe fundamenty
+Kanoniczne poziomy produktu, minimalne progi osi i bramki zawiera `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md`. Ten dokument zachowuje nadrzędny cel i role komponentów; drabina odpowiada za kolejność dojrzałości produktu.
 
-1. zakończyć ukierunkowaną weryfikację draftu PR #5;
-2. poprawić wykryte w niej błędy integralności M2A w tym samym zakresie;
-3. usunąć pozostałe blokady P0 i P1 audytu M0–M2B w izolowanych PR-ach;
-4. przeprowadzić ukierunkowaną ponowną weryfikację fundamentów.
+Obowiązująca krytyczna ścieżka:
 
-### Etap B — zamrożenie kontraktu pierwszego wyniku
+```text
+P1 — kontrolowany pilot runtime i exact-SHA evidence
+→ P1 ACCEPT / REWORK / STOP
+→ P2 — jeden rzeczywisty worker AI na CASE-001–003
+→ P3 — jeden realny pilot wartości
+→ decyzja CONTINUE / REWORK / STOP
+→ dopiero potem inwestycje w powtarzalność, M3 lub Company Loop według zmierzonego ograniczenia
+```
 
-Dopiero po Etapie A:
+M3 jest rozwojem osi zaufania i dowodu, a nie samodzielnym wynikiem użytkowym. Nie wolno rozpoczynać M3 przed pozytywną decyzją produktową po P3, chyba że użytkownik jawnie zmieni tę bramkę z powodu potwierdzonego ryzyka.
 
-1. przygotować `EXECUTOR_SELF_TEST-001`;
-2. zdefiniować M3A, M3B i M3C bez domyślania ich znaczenia;
-3. zamrozić kryteria `PASS`;
-4. przygotować niezależny, niewidoczny dla implementera holdout;
-5. ustalić, czy i jak wewnętrzny `Action Authorization Packet` uczestniczy w M3.
+Company Loop może wejść do aktywnej roadmapy dopiero po pierwszym realnym dowodzie wartości Executora. Musi zostać oceniony przez porównanie z jednym mocnym agentem, a nie przez liczbę agentów lub raportów.
 
-Projekt M3 i niezależnego holdoutu wymaga pracy w `SOL MAX / WORK`. Wcześniejsze
-poprawki fundamentów, dokumentacji i zwykłe kontrole nie wymagają tego trybu,
-o ile nowa decyzja użytkownika nie zwiększy ich złożoności.
-
-### Etap C — pierwszy wynik Executora
-
-1. uruchomić agenta AI jako wykonawcę;
-2. przeprowadzić zatwierdzone M3A, M3B i M3C jako osobne PR-y;
-3. zmierzyć udział człowieka i działanie zabezpieczeń;
-4. ocenić, czy Executor osiągnął cel, a nie wyłącznie wykonał workflow.
-
-### Etap D — poszerzanie i kalibracja
-
-Dopiero po pierwszym zweryfikowanym wyniku Executora przejść do Company Loop
-i kalibracji agentów. Company Loop ma zostać oceniony według jakości odkrytych
-wariantów, kontrargumentów i decyzji, nie według liczby agentów.
-
-### Etap E — test pełnej wizji
-
-Następnie wykonać `GINSENG_TEST-003`, sprawdzając połączenie intencji, mapy
-zależności, poszerzenia możliwości, decyzji, wykonania oraz oceny skutku.
+Każdy nowy PR musi wskazać bieżący i docelowy poziom produktu, usuwany blocker, rezultat widoczny dla użytkownika, rozwijaną oś oraz dowód. Infrastruktura, panel, provider framework, M3 i wielorepozytoryjność pozostają odroczone, jeżeli nie usuwają aktualnego mierzonego ograniczenia.
 
 ## 10. Ochrona kierunku
 
