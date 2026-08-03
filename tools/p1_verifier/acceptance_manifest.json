@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "document": "Executor P1 Authoritative Acceptance Manifest",
+  "status": "TRUSTED / MAIN-OWNED",
+  "authorized_target_ref": "agent/pilot-runtime-replacement",
+  "required_parent_sha": "bf18638caeb1a01cd2e14e625d72a20893a04bb3",
+  "candidate_tests_authority": "OBSERVATIONAL",
+  "candidate_declared_result_authority": "IGNORED_FOR_AUTHORITY",
+  "allowed_changed_paths": [
+    ".github/workflows/verify.yml",
+    "executor/pilot_cli.py",
+    "executor/pilot_core.py",
+    "executor/source_acquisition.py",
+    "tests/test_pilot_case_001.py",
+    "tests/test_pilot_case_001_integration.py",
+    "tests/test_pilot_case_002.py",
+    "tests/test_pilot_case_002_integration.py",
+    "tests/test_pilot_case_003.py",
+    "tests/test_pilot_case_003_integration.py",
+    "tests/test_pilot_cli.py",
+    "tests/test_pilot_git_isolation.py",
+    "tests/test_pilot_source_acquisition.py"
+  ],
+  "required_controller_files": [
+    "controller-manifest.json",
+    "workflow-identities.json",
+    "scope-report.json",
+    "candidate-source.bundle",
+    "controller-workflow.yml",
+    "candidate-verify.yml",
+    "trusted-verifier.py",
+    "acceptance-manifest.json"
+  ],
+  "required_execution_files": [
+    "observation-manifest.json",
+    "process-tree.txt",
+    "network-observation.json",
+    "cleanup-state.json",
+    "logs/candidate-tests.log",
+    "logs/acquisition.log",
+    "logs/case-001.log",
+    "logs/case-002.log",
+    "logs/case-003.log",
+    "traces/acquisition.execve",
+    "traces/case-001.execve",
+    "traces/case-002.execve",
+    "traces/case-003.execve",
+    "results/case-001.bundle",
+    "results/case-002.bundle",
+    "results/case-003.bundle"
+  ],
+  "forbidden_candidate_environment": [
+    "ACTIONS_RUNTIME_TOKEN",
+    "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+    "ACTIONS_ID_TOKEN_REQUEST_URL",
+    "ACTIONS_RESULTS_URL",
+    "ACTIONS_CACHE_URL",
+    "GITHUB_TOKEN",
+    "GH_TOKEN",
+    "GITHUB_ENV",
+    "GITHUB_OUTPUT",
+    "GITHUB_PATH",
+    "GITHUB_STEP_SUMMARY"
+  ],
+  "forbidden_candidate_mount_fragments": [
+    "/var/run/docker.sock",
+    "controller",
+    "evidence",
+    "authoritative-verification",
+    "p1_verifier"
+  ],
+  "cases": {
+    "001": {"input_commit": "3934a94a5eebf750079200589d6dc40e024d44a0", "allowed_path": "project_registry/registry.py", "required_status": "ACTION_COMPLETED_REVIEW_REQUIRED"},
+    "002": {"input_commit": "c3683bf37ad6a3f1d49c0ca05ebdd41627e9a5be", "allowed_path": "project_registry/registry.py", "required_status": "ACTION_COMPLETED_REVIEW_REQUIRED"},
+    "003": {"input_commit": "c42bead2bbbff9c84486f17637ec80f35eeffa25", "allowed_path": "project_registry/registry.py", "required_status": "ACTION_COMPLETED_REVIEW_REQUIRED"}
+  }
+}
