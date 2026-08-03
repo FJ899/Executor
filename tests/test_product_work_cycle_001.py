@@ -40,6 +40,18 @@ class ProductWorkCycle001Tests(unittest.TestCase):
             ladder,
         )
 
+    def test_cycle_binds_p0_achievement_to_exact_evidence(self) -> None:
+        text = CYCLE.read_text(encoding="utf-8")
+        for value in (
+            "b092a85e82eb81ec6dc7db4a7064409c6c383359",
+            "#16",
+            "30755381646",
+            "docs/M0_M2B_FINAL_ENTRY_GATE_2026-08-02.md",
+            "ACCEPTED THROUGH MERGE OF PR #16",
+        ):
+            with self.subTest(value=value):
+                self.assertIn(value, text)
+
 
 if __name__ == "__main__":
     unittest.main()

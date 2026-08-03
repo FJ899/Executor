@@ -81,6 +81,49 @@ class ProductCapabilityLadderTests(unittest.TestCase):
                     path.read_text(encoding="utf-8"),
                 )
 
+    def test_p0_achieved_claim_is_bound_to_exact_evidence(self) -> None:
+        required = (
+            "P0 ACHIEVED SHA: b092a85e82eb81ec6dc7db4a7064409c6c383359",
+            "P0 EVIDENCE PR: #16",
+            "P0 EVIDENCE RUN ID: 30755381646",
+            "P0 HUMAN DECISION: ACCEPTED THROUGH MERGE OF PR #16",
+        )
+        for path in (LADDER, README):
+            text = path.read_text(encoding="utf-8")
+            for field in required:
+                with self.subTest(path=path, field=field):
+                    self.assertIn(field, text)
+        self.assertIn(
+            "P0 EVIDENCE DOCUMENT: docs/M0_M2B_FINAL_ENTRY_GATE_2026-08-02.md",
+            LADDER.read_text(encoding="utf-8"),
+        )
+
+    def test_p1_exit_gate_preserves_formal_rework_contract(self) -> None:
+        text = LADDER.read_text(encoding="utf-8")
+        start = text.index("## P1 — CONTROLLED PILOT RUNTIME")
+        end = text.index("## P2 — AI WORKER MVP")
+        p1 = text[start:end]
+        required = (
+            "REWORK SCOPE COMPLIANCE: PASS",
+            "INPUT MODEL COMPLIANCE: PASS",
+            "OBJECT IDENTITY: PASS",
+            "ORIGIN ANCHOR: PASS",
+            "GIT INPUT ISOLATION: PASS",
+            "INPUT IMMUTABILITY: PASS",
+            "CASE-001: PASS",
+            "CASE-002: PASS",
+            "CASE-003: PASS",
+            "DEFINED ADVERSARIAL SUITE: PASS",
+            "EXACT-SHA EVIDENCE: PRESENT",
+            "RAW EVIDENCE ARTIFACT: PRESENT + HASHED",
+            "FALSE SUCCESS FOUND WITHIN DEFINED THREAT MODEL: NO",
+            "FINAL DECISION: ACCEPT",
+        )
+        for field in required:
+            with self.subTest(field=field):
+                self.assertIn(field, p1)
+        self.assertNotIn("SOURCE IMMUTABILITY:", p1)
+
 
 if __name__ == "__main__":
     unittest.main()
