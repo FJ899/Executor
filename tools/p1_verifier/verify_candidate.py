@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Trusted authoritative verifier for Executor P1 exact-ref observations.
 
-This module is intentionally stdlib-only and must be sourced from the trusted
-controller/main commit, never from the candidate commit being evaluated.
-It treats candidate-owned tests and candidate-declared status files as
-observations only.
+The verifier is stdlib-only and must be loaded from the trusted workflow/main
+commit. It never imports candidate modules and never accepts candidate-owned
+tests, reports, or PASS declarations as authority.
 """
 from __future__ import annotations
 
@@ -13,7 +12,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -25,7 +23,7 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class VerificationError(RuntimeError):
-    """Raised for an invalid verifier invocation, not a candidate failure."""
+    """Invalid trusted verifier invocation or malformed trusted configuration."""
 
 
 def _read_json(path: Path) -> Any:
@@ -39,8 +37,10 @@ def _read_json(path: Path) -> Any:
 
 def _write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
-    path.write_text(payload, encoding="utf-8")
+    path.write_text(
+        json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def sha256_file(path: Path) -> str:
@@ -51,8 +51,16 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def sha256_bytes(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
+def _git_env(home: Path) -> dict[str, str]:
+    return {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": str(home),
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_ASKPASS": "/bin/false",
+        "SSH_ASKPASS": "/bin/false",
+    }
 
 
 def _run_git(repo: Path, *args: str) -> str:
@@ -62,13 +70,7 @@ def _run_git(repo: Path, *args: str) -> str:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        env={
-            "PATH": os.environ.get("PATH", ""),
-            "HOME": str(repo / ".trusted-empty-home"),
-            "GIT_CONFIG_NOSYSTEM": "1",
-            "GIT_CONFIG_GLOBAL": os.devnull,
-            "GIT_TERMINAL_PROMPT": "0",
-        },
+        env=_git_env(repo / ".trusted-empty-home"),
     )
     if completed.returncode != 0:
         raise VerificationError(
@@ -80,6 +82,22 @@ def _run_git(repo: Path, *args: str) -> str:
 def _safe_relative(path_text: str) -> bool:
     path = Path(path_text)
     return bool(path_text) and not path.is_absolute() and ".." not in path.parts
+
+
+def _load_acceptance(path: Path) -> dict[str, Any]:
+    value = _read_json(path)
+    if not isinstance(value, dict):
+        raise VerificationError("acceptance manifest must be an object")
+    if value.get("schema_version") != 1:
+        raise VerificationError("unsupported acceptance manifest schema")
+    return value
+
+
+def _as_string_list(value: Any, *, field: str, errors: list[str]) -> list[str]:
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        errors.append(f"{field} must be a string list")
+        return []
+    return list(value)
 
 
 def _verify_file_hash_manifest(
@@ -98,7 +116,6 @@ def _verify_file_hash_manifest(
     if not isinstance(data, dict):
         errors.append(f"{label} hash manifest is not an object")
         return {}
-
     hashes = data.get("files")
     if not isinstance(hashes, dict):
         errors.append(f"{label} hash manifest missing files object")
@@ -116,8 +133,7 @@ def _verify_file_hash_manifest(
         if not path.is_file() or path.is_symlink():
             errors.append(f"{label} missing regular file: {relative}")
             continue
-        actual = sha256_file(path)
-        if actual != expected:
+        if sha256_file(path) != expected:
             errors.append(f"{label} hash mismatch: {relative}")
         normalized[relative] = expected
 
@@ -127,20 +143,63 @@ def _verify_file_hash_manifest(
     return normalized
 
 
-def _as_string_list(value: Any, *, field: str, errors: list[str]) -> list[str]:
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        errors.append(f"{field} must be a string list")
-        return []
-    return list(value)
+def _read_required_text(
+    root: Path,
+    relative: str,
+    hashes: Mapping[str, str],
+    errors: list[str],
+    *,
+    label: str,
+) -> str:
+    if relative not in hashes:
+        errors.append(f"{label} is not anchored in the trusted hash manifest: {relative}")
+        return ""
+    path = root / relative
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        errors.append(f"cannot read {label} {relative}: {exc}")
+        return ""
 
 
-def _load_acceptance(path: Path) -> dict[str, Any]:
-    value = _read_json(path)
-    if not isinstance(value, dict):
-        raise VerificationError("acceptance manifest must be an object")
-    if value.get("schema_version") != 1:
-        raise VerificationError("unsupported acceptance manifest schema")
-    return value
+def _verify_source_anchor(
+    source_anchor_root: Path,
+    *,
+    cases: Mapping[str, Any],
+    contract_path: str,
+    contract_blob: str,
+    errors: list[str],
+) -> dict[str, dict[str, str]]:
+    anchors: dict[str, dict[str, str]] = {}
+    for case_id, rule in cases.items():
+        expected_commit = rule.get("input_commit") if isinstance(rule, dict) else None
+        repo = source_anchor_root / f"case-{case_id}"
+        if not isinstance(expected_commit, str) or not SHA1_RE.fullmatch(expected_commit):
+            errors.append(f"CASE-{case_id} trusted input commit is invalid")
+            continue
+        if not repo.is_dir():
+            errors.append(f"CASE-{case_id} independent source anchor checkout missing")
+            continue
+        try:
+            head = _run_git(repo, "rev-parse", "HEAD")
+            if head != expected_commit:
+                errors.append(f"CASE-{case_id} source anchor HEAD mismatch")
+            status = _run_git(repo, "status", "--porcelain", "--untracked-files=all")
+            if status:
+                errors.append(f"CASE-{case_id} source anchor checkout is dirty")
+            _run_git(repo, "fsck", "--strict")
+            tree = _run_git(repo, "rev-parse", f"{expected_commit}^{{tree}}")
+            observed_blob = _run_git(repo, "rev-parse", f"{expected_commit}:{contract_path}")
+            if observed_blob != contract_blob:
+                errors.append(f"CASE-{case_id} independent contract blob mismatch")
+            anchors[case_id] = {
+                "commit": expected_commit,
+                "tree": tree,
+                "contract_blob": observed_blob,
+            }
+        except VerificationError as exc:
+            errors.append(str(exc))
+    return anchors
 
 
 def _verify_result_bundle(
@@ -149,17 +208,17 @@ def _verify_result_bundle(
     case_id: str,
     case_rule: Mapping[str, Any],
     observation: Mapping[str, Any],
+    source_anchor: Mapping[str, str] | None,
+    contract_path: str,
     errors: list[str],
 ) -> dict[str, Any]:
     result: dict[str, Any] = {"case_id": case_id, "verified": False}
     if not bundle_path.is_file() or bundle_path.is_symlink():
         errors.append(f"CASE-{case_id} result bundle missing")
         return result
-
-    expected_bundle_hash = observation.get("bundle_sha256")
     actual_bundle_hash = sha256_file(bundle_path)
     result["bundle_sha256"] = actual_bundle_hash
-    if expected_bundle_hash != actual_bundle_hash:
+    if observation.get("bundle_sha256") != actual_bundle_hash:
         errors.append(f"CASE-{case_id} bundle hash mismatch")
 
     input_commit = case_rule.get("input_commit")
@@ -179,14 +238,7 @@ def _verify_result_bundle(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            env={
-                "PATH": os.environ.get("PATH", ""),
-                "HOME": str(Path(temporary) / "empty-home"),
-                "GIT_CONFIG_NOSYSTEM": "1",
-                "GIT_CONFIG_GLOBAL": os.devnull,
-                "GIT_TERMINAL_PROMPT": "0",
-                "GIT_ALLOW_PROTOCOL": "file",
-            },
+            env={**_git_env(Path(temporary) / "empty-home"), "GIT_ALLOW_PROTOCOL": "file"},
         )
         if completed.returncode != 0:
             errors.append(f"CASE-{case_id} bundle clone failed: {completed.stderr.strip()}")
@@ -203,8 +255,12 @@ def _verify_result_bundle(
             paths = [
                 line
                 for line in _run_git(
-                    repo, "diff", "--name-only", "--diff-filter=ACDMRTUXB",
-                    input_commit, result_commit
+                    repo,
+                    "diff",
+                    "--name-only",
+                    "--diff-filter=ACDMRTUXB",
+                    input_commit,
+                    result_commit,
                 ).splitlines()
                 if line
             ]
@@ -213,14 +269,25 @@ def _verify_result_bundle(
                 errors.append(
                     f"CASE-{case_id} changed paths {paths!r}, expected {[expected_path]!r}"
                 )
-            tree = _run_git(repo, "rev-parse", f"{result_commit}^{{tree}}")
+            input_tree = _run_git(repo, "rev-parse", f"{input_commit}^{{tree}}")
+            input_contract_blob = _run_git(repo, "rev-parse", f"{input_commit}:{contract_path}")
+            if source_anchor is None:
+                errors.append(f"CASE-{case_id} independent source anchor missing")
+            else:
+                if input_tree != source_anchor.get("tree"):
+                    errors.append(f"CASE-{case_id} input tree differs from independent source anchor")
+                if input_contract_blob != source_anchor.get("contract_blob"):
+                    errors.append(f"CASE-{case_id} contract blob differs from independent source anchor")
+            result_tree = _run_git(repo, "rev-parse", f"{result_commit}^{{tree}}")
             result.update(
                 {
                     "input_commit": input_commit,
+                    "input_tree": input_tree,
+                    "contract_blob": input_contract_blob,
                     "result_commit": result_commit,
                     "parent": parent,
                     "changed_paths": paths,
-                    "result_tree": tree,
+                    "result_tree": result_tree,
                 }
             )
         except VerificationError as exc:
@@ -236,6 +303,7 @@ def verify(
     controller_dir: Path,
     execution_dir: Path,
     candidate_dir: Path,
+    source_anchor_root: Path,
     output_dir: Path,
 ) -> dict[str, Any]:
     acceptance = _load_acceptance(acceptance_path)
@@ -244,13 +312,9 @@ def verify(
 
     required_controller = acceptance.get("required_controller_files", [])
     required_execution = acceptance.get("required_execution_files", [])
-    if not isinstance(required_controller, list) or not all(
-        isinstance(item, str) for item in required_controller
-    ):
+    if not isinstance(required_controller, list) or not all(isinstance(x, str) for x in required_controller):
         raise VerificationError("required_controller_files must be a string list")
-    if not isinstance(required_execution, list) or not all(
-        isinstance(item, str) for item in required_execution
-    ):
+    if not isinstance(required_execution, list) or not all(isinstance(x, str) for x in required_execution):
         raise VerificationError("required_execution_files must be a string list")
 
     controller_hashes = _verify_file_hash_manifest(
@@ -268,39 +332,23 @@ def verify(
         label="execution",
     )
 
-    try:
-        controller = _read_json(controller_dir / "controller-manifest.json")
-    except VerificationError as exc:
-        errors.append(str(exc))
-        controller = {}
-    try:
-        scope = _read_json(controller_dir / "scope-report.json")
-    except VerificationError as exc:
-        errors.append(str(exc))
-        scope = {}
-    try:
-        identities = _read_json(controller_dir / "workflow-identities.json")
-    except VerificationError as exc:
-        errors.append(str(exc))
-        identities = {}
-    try:
-        observation = _read_json(execution_dir / "observation-manifest.json")
-    except VerificationError as exc:
-        errors.append(str(exc))
-        observation = {}
+    def load_object(path: Path, label: str) -> dict[str, Any]:
+        try:
+            value = _read_json(path)
+        except VerificationError as exc:
+            errors.append(str(exc))
+            return {}
+        if not isinstance(value, dict):
+            errors.append(f"{label} is not an object")
+            return {}
+        return value
 
-    if not isinstance(controller, dict):
-        errors.append("controller manifest is not an object")
-        controller = {}
-    if not isinstance(scope, dict):
-        errors.append("scope report is not an object")
-        scope = {}
-    if not isinstance(identities, dict):
-        errors.append("workflow identities is not an object")
-        identities = {}
-    if not isinstance(observation, dict):
-        errors.append("execution observation manifest is not an object")
-        observation = {}
+    controller = load_object(controller_dir / "controller-manifest.json", "controller manifest")
+    scope = load_object(controller_dir / "scope-report.json", "scope report")
+    identities = load_object(controller_dir / "workflow-identities.json", "workflow identities")
+    observation = load_object(execution_dir / "observation-manifest.json", "execution observation")
+    network_observation = load_object(execution_dir / "network-observation.json", "network observation")
+    cleanup_state = load_object(execution_dir / "cleanup-state.json", "cleanup state")
 
     candidate_sha = controller.get("candidate_sha")
     if not isinstance(candidate_sha, str) or not SHA1_RE.fullmatch(candidate_sha):
@@ -316,23 +364,27 @@ def verify(
         errors.append("candidate parent does not match the trusted ADR")
     if controller.get("candidate_tests_authority") != "OBSERVATIONAL":
         errors.append("candidate tests were not classified as observational")
+    if controller.get("execution_mode") != "verify-candidate":
+        errors.append("non-production execution mode cannot produce authoritative PASS")
 
-    allowed_paths = acceptance.get("allowed_changed_paths")
-    actual_paths = scope.get("changed_paths")
-    if actual_paths != allowed_paths:
+    if scope.get("changed_paths") != acceptance.get("allowed_changed_paths"):
         errors.append("controller scope report does not match the exact allowlist")
     if scope.get("status") != "PASS":
         errors.append("controller scope report is not PASS")
 
     bundle_path = controller_dir / "candidate-source.bundle"
     if bundle_path.is_file():
-        actual_bundle_sha = sha256_file(bundle_path)
-        if controller.get("candidate_bundle_sha256") != actual_bundle_sha:
+        if controller.get("candidate_bundle_sha256") != sha256_file(bundle_path):
             errors.append("controller candidate bundle hash mismatch")
     else:
         errors.append("controller candidate bundle missing")
 
-    for key in ("controller_workflow", "candidate_workflow", "trusted_verifier", "acceptance_manifest"):
+    for key in (
+        "controller_workflow",
+        "candidate_workflow",
+        "trusted_verifier",
+        "acceptance_manifest",
+    ):
         identity = identities.get(key)
         if not isinstance(identity, dict):
             errors.append(f"missing workflow identity: {key}")
@@ -345,14 +397,11 @@ def verify(
 
     if candidate_dir.is_dir():
         try:
-            actual_candidate_sha = _run_git(candidate_dir, "rev-parse", "HEAD")
-            if actual_candidate_sha != candidate_sha:
+            if _run_git(candidate_dir, "rev-parse", "HEAD") != candidate_sha:
                 errors.append("fresh verifier checkout SHA differs from controller SHA")
-            parent = _run_git(candidate_dir, "rev-parse", "HEAD^")
-            if parent != acceptance.get("required_parent_sha"):
+            if _run_git(candidate_dir, "rev-parse", "HEAD^") != acceptance.get("required_parent_sha"):
                 errors.append("fresh verifier checkout parent differs from trusted ADR")
-            status = _run_git(candidate_dir, "status", "--porcelain", "--untracked-files=all")
-            if status:
+            if _run_git(candidate_dir, "status", "--porcelain", "--untracked-files=all"):
                 errors.append("fresh verifier checkout is not clean")
             _run_git(candidate_dir, "fsck", "--strict")
         except VerificationError as exc:
@@ -360,8 +409,25 @@ def verify(
     else:
         errors.append("fresh candidate checkout is missing")
 
+    cases_rule = acceptance.get("cases")
+    if not isinstance(cases_rule, dict):
+        raise VerificationError("acceptance cases must be an object")
+    contract_path = str(acceptance.get("contract_path", "PILOT_CONTRACT.md"))
+    contract_blob = str(acceptance.get("required_contract_blob", ""))
+    if not SHA1_RE.fullmatch(contract_blob):
+        raise VerificationError("required_contract_blob must be a full SHA-1")
+    source_anchors = _verify_source_anchor(
+        source_anchor_root,
+        cases=cases_rule,
+        contract_path=contract_path,
+        contract_blob=contract_blob,
+        errors=errors,
+    )
+
     if observation.get("candidate_sha") != candidate_sha:
         errors.append("execution observation candidate SHA mismatch")
+    if observation.get("execution_mode") != controller.get("execution_mode"):
+        errors.append("execution mode differs from controller manifest")
     if observation.get("observation_authority") != "TRUSTED_HOST_HARNESS":
         errors.append("execution observation was not produced by the trusted harness")
     if observation.get("candidate_process_domain") != "UNTRUSTED_NESTED_CONTAINER":
@@ -378,17 +444,38 @@ def verify(
         errors.append("candidate could see a GitHub token")
     if observation.get("secrets_visible") is not False:
         errors.append("candidate could see secrets")
-    if observation.get("cleanup_confirmed") is not True:
+    if observation.get("candidate_direct_egress") is not False:
+        errors.append("candidate process had direct external network egress")
+    if observation.get("nested_daemon_egress") is not True:
+        errors.append("isolated nested daemon egress was not established")
+    if observation.get("cleanup_confirmed") is not True or cleanup_state.get("cleanup_confirmed") is not True:
         errors.append("execution cleanup was not confirmed")
     if observation.get("candidate_tests_authority") != "OBSERVATIONAL":
         errors.append("execution treated candidate tests as authoritative")
+    for field, label in (
+        ("trusted_probes_exit_code", "trusted black-box probe"),
+        ("candidate_tests_exit_code", "candidate test observation"),
+        ("sandbox_exit_code", "trusted sandbox observation"),
+        ("acquisition_exit_code", "controlled acquisition observation"),
+    ):
+        if observation.get(field) != 0:
+            errors.append(f"{label} did not exit zero")
+
+    if network_observation.get("candidate_network") != "internal-only":
+        errors.append("trusted network observation does not prove internal-only candidate network")
+    if network_observation.get("nested_daemon_egress") is not True:
+        errors.append("trusted network observation does not prove nested-daemon egress")
+    if network_observation.get("host_docker_socket_mounted") is not False:
+        errors.append("trusted network observation reports host Docker socket exposure")
 
     forbidden_env = set(acceptance.get("forbidden_candidate_environment", []))
-    observed_env = set(_as_string_list(
-        observation.get("candidate_environment_names", []),
-        field="candidate_environment_names",
-        errors=errors,
-    ))
+    observed_env = set(
+        _as_string_list(
+            observation.get("candidate_environment_names", []),
+            field="candidate_environment_names",
+            errors=errors,
+        )
+    )
     leaked_env = sorted(forbidden_env & observed_env)
     if leaked_env:
         errors.append(f"candidate environment exposed forbidden names: {leaked_env}")
@@ -397,36 +484,110 @@ def verify(
     if not isinstance(mounts, list):
         errors.append("candidate_mounts must be a list")
         mounts = []
-    forbidden_mount_fragments = acceptance.get("forbidden_candidate_mount_fragments", [])
     for mount in mounts:
         if not isinstance(mount, dict):
             errors.append("candidate mount entry is not an object")
             continue
-        source = str(mount.get("source", ""))
-        destination = str(mount.get("destination", ""))
-        joined = f"{source}\n{destination}"
-        for fragment in forbidden_mount_fragments:
+        joined = f"{mount.get('source', '')}\n{mount.get('destination', '')}"
+        for fragment in acceptance.get("forbidden_candidate_mount_fragments", []):
             if fragment in joined:
                 errors.append(f"candidate mount crossed forbidden boundary: {fragment}")
 
-    process_tree_path = execution_dir / "process-tree.txt"
-    network_path = execution_dir / "network-observation.json"
-    cleanup_path = execution_dir / "cleanup-state.json"
-    if not process_tree_path.is_file() or process_tree_path.stat().st_size == 0:
-        errors.append("trusted process-tree observation missing")
-    if not network_path.is_file() or network_path.stat().st_size == 0:
-        errors.append("trusted network observation missing")
-    if not cleanup_path.is_file() or cleanup_path.stat().st_size == 0:
-        errors.append("trusted cleanup observation missing")
+    for relative, label in (
+        ("process-tree.txt", "trusted process-tree observation"),
+        ("network-observation.json", "trusted network observation"),
+        ("cleanup-state.json", "trusted cleanup observation"),
+        ("nested-docker-security.json", "nested Docker security observation"),
+    ):
+        path = execution_dir / relative
+        if not path.is_file() or path.stat().st_size == 0:
+            errors.append(f"{label} missing")
+    nested_security = _read_required_text(
+        execution_dir,
+        "nested-docker-security.json",
+        execution_hashes,
+        errors,
+        label="nested Docker security observation",
+    )
+    if "rootless" not in nested_security.lower():
+        errors.append("nested Docker security observation lacks rootless marker")
 
-    cases_rule = acceptance.get("cases")
+    trusted_probe_log = _read_required_text(
+        execution_dir,
+        "logs/trusted-probes.log",
+        execution_hashes,
+        errors,
+        label="trusted black-box probe log",
+    )
+    if "TRUSTED_BLACK_BOX_PROBES: PASS" not in trusted_probe_log:
+        errors.append("trusted black-box probes did not confirm fail-closed inputs")
+
+    sandbox_log = _read_required_text(
+        execution_dir,
+        "logs/sandbox.log",
+        execution_hashes,
+        errors,
+        label="sandbox black-box log",
+    )
+    if "skipped" in sandbox_log.lower() or "FAILED" in sandbox_log or "ERROR" in sandbox_log:
+        errors.append("sandbox black-box run was skipped or failed")
+    if "Ran 10 tests" not in sandbox_log or "OK" not in sandbox_log:
+        errors.append("sandbox black-box run lacks the expected successful test result")
+    sandbox_trace = _read_required_text(
+        execution_dir,
+        "traces/sandbox.execve",
+        execution_hashes,
+        errors,
+        label="sandbox exec trace",
+    )
+    if "--network" not in sandbox_trace or "none" not in sandbox_trace:
+        errors.append("sandbox exec trace does not show network-disabled containers")
+
+    acquisition_trace = _read_required_text(
+        execution_dir,
+        "traces/acquisition.execve",
+        execution_hashes,
+        errors,
+        label="acquisition exec trace",
+    )
+    canonical_url = str(acceptance.get("canonical_source_url", ""))
+    if canonical_url not in acquisition_trace:
+        errors.append("acquisition trace lacks the canonical HTTPS source endpoint")
+    if "--network" not in acquisition_trace or "bridge" not in acquisition_trace:
+        errors.append("acquisition trace lacks the single network-enabled fetch path")
+    if "--network" not in acquisition_trace or "none" not in acquisition_trace:
+        errors.append("acquisition trace lacks post-fetch network-disabled Git operations")
+    for forbidden in ("file://", "ext::", "git://", "ssh://", "GIT_SSH_COMMAND"):
+        if forbidden in acquisition_trace:
+            errors.append(f"acquisition trace contains forbidden transport/helper: {forbidden}")
+
+    source_acquisition = load_object(
+        execution_dir / "results/source_acquisition.json",
+        "source acquisition observation",
+    )
+    if source_acquisition.get("input_model") != "CONTROLLED_HTTPS_FETCH_V1":
+        errors.append("source acquisition observation has the wrong input model")
+    request_observation = source_acquisition.get("request", {})
+    origin_observation = source_acquisition.get("origin_anchor", {})
+    if not isinstance(request_observation, dict):
+        request_observation = {}
+    if not isinstance(origin_observation, dict):
+        origin_observation = {}
+    if request_observation.get("repository") != acceptance.get("source_repository"):
+        errors.append("source acquisition observation has the wrong repository")
+    if origin_observation.get("canonical_url") != canonical_url:
+        errors.append("source acquisition observation has the wrong canonical URL")
+    if origin_observation.get("local_checkout_used") is not False:
+        errors.append("source acquisition observation does not reject the local checkout")
+    if origin_observation.get("user_supplied_url_used") is not False:
+        errors.append("source acquisition observation accepted a user-supplied URL")
+    if source_acquisition.get("outcome") != "ACQUIRED_REVIEW_REQUIRED":
+        errors.append("source acquisition observation lacks the required review outcome")
+
     case_observations = observation.get("cases")
-    if not isinstance(cases_rule, dict):
-        raise VerificationError("acceptance cases must be an object")
     if not isinstance(case_observations, dict):
         errors.append("execution cases must be an object")
         case_observations = {}
-
     verified_cases: dict[str, Any] = {}
     for case_id, case_rule in cases_rule.items():
         case_observation = case_observations.get(case_id)
@@ -439,11 +600,25 @@ def verify(
             errors.append(f"CASE-{case_id} was skipped or skip state is untrusted")
         if case_observation.get("harness_status") != "OBSERVED_COMPLETED":
             errors.append(f"CASE-{case_id} lacks trusted harness completion")
+        if case_observation.get("candidate_status") != case_rule.get("required_status"):
+            errors.append(f"CASE-{case_id} candidate observation lacks the required review status")
         log_rel = case_observation.get("log_path")
         trace_rel = case_observation.get("trace_path")
         for field_name, relative in (("log", log_rel), ("trace", trace_rel)):
             if not isinstance(relative, str) or relative not in execution_hashes:
                 errors.append(f"CASE-{case_id} {field_name} is not in the trusted hash manifest")
+        if isinstance(trace_rel, str):
+            trace = _read_required_text(
+                execution_dir,
+                trace_rel,
+                execution_hashes,
+                errors,
+                label=f"CASE-{case_id} exec trace",
+            )
+            if "--network" not in trace or "none" not in trace:
+                errors.append(f"CASE-{case_id} trace does not show a network-disabled worker/sandbox")
+            if "/var/run/docker.sock" in trace:
+                errors.append(f"CASE-{case_id} trace references the host Docker socket")
         bundle_rel = case_observation.get("bundle_path")
         if not isinstance(bundle_rel, str) or not _safe_relative(bundle_rel):
             errors.append(f"CASE-{case_id} invalid result bundle path")
@@ -453,14 +628,15 @@ def verify(
             case_id=case_id,
             case_rule=case_rule,
             observation=case_observation,
+            source_anchor=source_anchors.get(case_id),
+            contract_path=contract_path,
             errors=errors,
         )
 
     candidate_declared_result = observation.get("candidate_declared_result", "ABSENT")
     if candidate_declared_result not in ("ABSENT", "PASS", "FAIL", "SUCCESS", "UNKNOWN"):
         warnings.append("candidate declared result had an unrecognized value")
-    candidate_markers = observation.get("candidate_boundary_markers", [])
-    if candidate_markers:
+    if observation.get("candidate_boundary_markers"):
         errors.append("candidate attempted to influence a forbidden authority boundary")
 
     for path in execution_dir.rglob("*.json"):
@@ -469,7 +645,9 @@ def verify(
         except Exception:
             continue
         if isinstance(value, dict) and value.get("status") == "PASS":
-            errors.append(f"candidate terminal PASS observed and ignored: {path.relative_to(execution_dir)}")
+            errors.append(
+                f"candidate terminal PASS observed and ignored: {path.relative_to(execution_dir)}"
+            )
 
     verifier_sha = sha256_file(Path(__file__))
     acceptance_sha = sha256_file(acceptance_path)
@@ -483,11 +661,9 @@ def verify(
         if (execution_dir / "observation-manifest.json").is_file()
         else None
     )
-
-    authoritative_result = "PASS" if not errors else "FAIL"
     report = {
         "schema_version": 1,
-        "authoritative_result": authoritative_result,
+        "authoritative_result": "PASS" if not errors else "FAIL",
         "candidate_declared_result": candidate_declared_result,
         "candidate_declared_result_authority": "IGNORED_FOR_AUTHORITY",
         "candidate_sha": candidate_sha or None,
@@ -496,6 +672,7 @@ def verify(
         "execution_observation_sha256": execution_manifest_sha,
         "trusted_verifier_sha256": verifier_sha,
         "acceptance_manifest_sha256": acceptance_sha,
+        "source_anchors": source_anchors,
         "verified_cases": verified_cases,
         "errors": sorted(set(errors)),
         "warnings": sorted(set(warnings)),
@@ -509,7 +686,7 @@ def verify(
             "files": {
                 "authoritative-final-gate.json": sha256_file(
                     output_dir / "authoritative-final-gate.json"
-                ),
+                )
             },
         },
     )
@@ -522,6 +699,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--controller-dir", type=Path, required=True)
     parser.add_argument("--execution-dir", type=Path, required=True)
     parser.add_argument("--candidate-dir", type=Path, required=True)
+    parser.add_argument("--source-anchor-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
@@ -530,6 +708,7 @@ def main(argv: list[str] | None = None) -> int:
             controller_dir=args.controller_dir.resolve(),
             execution_dir=args.execution_dir.resolve(),
             candidate_dir=args.candidate_dir.resolve(),
+            source_anchor_root=args.source_anchor_root.resolve(),
             output_dir=args.output_dir.resolve(),
         )
     except VerificationError as exc:

@@ -8,49 +8,62 @@ on:
         required: true
         type: string
       expected_sha:
-        description: Expected lowercase 40-character commit SHA
+        description: Expected lowercase 40-character candidate SHA
         required: true
         type: string
+      execution_mode:
+        description: Verification or negative malicious-boundary probe
+        required: true
+        default: verify-candidate
+        type: choice
+        options:
+          - verify-candidate
+          - malicious-boundary-probe
 
 permissions:
   contents: read
 
+env:
+  AUTHORIZED_REF: agent/pilot-runtime-replacement
+  AUTHORIZED_CONTROLLER_REF: refs/heads/main
+  ADR_SHA: bf18638caeb1a01cd2e14e625d72a20893a04bb3
+  ACTIONLINT_VERSION: 1.7.12
+  CHECKOUT_ACTION_SHA: 34e114876b0b11c390a56381ad16ebd13914f8d5
+  SETUP_PYTHON_ACTION_SHA: a26af69be951a213d495a4c3e4e4022e16d87065
+  UPLOAD_ARTIFACT_ACTION_SHA: 4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+  DOWNLOAD_ARTIFACT_ACTION_SHA: d3f86a106a0bac45b974a628896c90dbdf5c8093
+  GIT_IMAGE: alpine/git@sha256:0448d24b454392f9d115c6784343899e9d35a32de0ddc39a745263db34df94dd
+  SANDBOX_IMAGE: python@sha256:b18992999dbe963a45a8a4da40ac2b1975be1a776d939d098c647482bcad5cba
+  DIND_ROOTLESS_IMAGE: docker:27-dind-rootless@sha256:e2ac8e8f66ae21a060b0a8e3005c70f6ed9441aabf409434463d1f6eecd38026
+  DOCKER_CLI_IMAGE: docker:27.5.1-cli@sha256:851f91d241214e7c6db86513b270d58776379aacc5eb9c4a87e5b47115e3065c
+
 jobs:
-  exact-ref-verification:
+  trusted-controller:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    env:
-      TARGET_REF: ${{ inputs.target_ref }}
-      EXPECTED_SHA: ${{ inputs.expected_sha }}
-      AUTHORIZED_REF: agent/pilot-runtime-replacement
-      ADR_SHA: bf18638caeb1a01cd2e14e625d72a20893a04bb3
-      EVIDENCE: ${{ runner.temp }}/exact-ref-evidence
-      RUNS_ROOT: ${{ runner.temp }}/exact-ref-runs
-      ARCHIVE_NAME: manual-exact-ref-${{ github.run_id }}-${{ github.run_attempt }}
-      ACTIONLINT_VERSION: 1.7.12
-      GIT_IMAGE: alpine/git@sha256:0448d24b454392f9d115c6784343899e9d35a32de0ddc39a745263db34df94dd
-      SANDBOX_IMAGE: python@sha256:b18992999dbe963a45a8a4da40ac2b1975be1a776d939d098c647482bcad5cba
+    timeout-minutes: 20
+    outputs:
+      candidate_sha: ${{ steps.bind.outputs.candidate_sha }}
+      execution_mode: ${{ steps.bind.outputs.execution_mode }}
     steps:
-      - name: Validate dispatch and prepare evidence
+      - name: Validate dispatch
+        id: validate
         shell: bash
         env:
-          WORKFLOW_REF: ${{ github.workflow_ref }}
-          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          TARGET_REF: ${{ inputs.target_ref }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          EXECUTION_MODE: ${{ inputs.execution_mode }}
         run: |
           set -euo pipefail
-          mkdir -p "$EVIDENCE/logs" "$EVIDENCE/traces" "$RUNS_ROOT"
-          {
-            printf 'event=%s\nevent_sha=%s\nevent_ref=%s\n' "${{ github.event_name }}" "${{ github.sha }}" "${{ github.ref }}"
-            printf 'workflow_ref=%s\nworkflow_sha=%s\n' "$WORKFLOW_REF" "$WORKFLOW_SHA"
-            printf 'target_ref=%s\nexpected_sha=%s\n' "$TARGET_REF" "$EXPECTED_SHA"
-            printf 'run_id=%s\nrun_attempt=%s\n' "${{ github.run_id }}" "${{ github.run_attempt }}"
-            printf '%s\n' 'checkout_sha=34e114876b0b11c390a56381ad16ebd13914f8d5' 'setup_python_sha=a26af69be951a213d495a4c3e4e4022e16d87065' 'upload_artifact_sha=4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1'
-          } | tee "$EVIDENCE/event-metadata.txt"
-          test "$TARGET_REF" = "$AUTHORIZED_REF" || { echo wrong-target-ref | tee "$EVIDENCE/input-error.txt"; exit 1; }
-          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo malformed-expected-sha | tee "$EVIDENCE/input-error.txt"; exit 1; }
-          echo PASS > "$EVIDENCE/input-validation.txt"
+          test "${{ github.event_name }}" = workflow_dispatch
+          test "${{ github.ref }}" = "$AUTHORIZED_CONTROLLER_REF"
+          test "$TARGET_REF" = "$AUTHORIZED_REF"
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          case "$EXECUTION_MODE" in
+            verify-candidate|malicious-boundary-probe) ;;
+            *) exit 1 ;;
+          esac
 
-      - name: Checkout controller
+      - name: Checkout trusted controller
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.workflow_sha }}
@@ -58,7 +71,7 @@ jobs:
           persist-credentials: false
           path: controller
 
-      - name: Checkout candidate
+      - name: Checkout candidate without executing it
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ inputs.target_ref }}
@@ -66,148 +79,831 @@ jobs:
           persist-credentials: false
           path: candidate
 
-      - name: Bind controller, candidate and scope
+      - name: Bind source, workflow identity and scope
+        id: bind
         shell: bash
+        env:
+          TARGET_REF: ${{ inputs.target_ref }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          EXECUTION_MODE: ${{ inputs.execution_mode }}
+          CONTROLLER_ARTIFACT: ${{ runner.temp }}/p1-controller
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           set -euo pipefail
-          extract_blob() {
-            local repo=$1 sha=$2 path=$3 output=$4 identity=$5 entry mode type blob tree_path
-            entry="$(git -C "$repo" ls-tree "$sha" -- "$path")"
-            read -r mode type blob tree_path <<<"$entry"
-            test "$mode" = 100644; test "$type" = blob; test "$tree_path" = "$path"
-            git -C "$repo" show "$sha:$path" > "$output"
-            test "$(git hash-object "$output")" = "$blob"
-            { printf 'sha=%s\nblob=%s\n' "$sha" "$blob"; sha256sum "$output"; } > "$identity"
-          }
-          controller_sha="$(git -C controller rev-parse HEAD)"
-          test "$controller_sha" = "${{ github.workflow_sha }}"
-          extract_blob controller "$controller_sha" .github/workflows/manual-exact-ref-verify.yml "$EVIDENCE/controller.yml" "$EVIDENCE/controller-identity.txt"
+          mkdir -p "$CONTROLLER_ARTIFACT/logs"
           actual_sha="$(git -C candidate rev-parse HEAD)"
           test "$actual_sha" = "$EXPECTED_SHA"
-          printf 'ACTUAL_SHA=%s\n' "$actual_sha" >> "$GITHUB_ENV"
-          git -C candidate show -s --format=full "$actual_sha" | tee "$EVIDENCE/commit.txt"
-          extract_blob candidate "$actual_sha" .github/workflows/verify.yml "$EVIDENCE/candidate-verify.yml" "$EVIDENCE/candidate-workflow-identity.txt"
-          test "$(git -C candidate rev-parse "$actual_sha^")" = "$ADR_SHA"
-          printf '%s\n' \
-            .github/workflows/verify.yml executor/pilot_cli.py executor/pilot_core.py executor/source_acquisition.py \
-            tests/test_pilot_case_001.py tests/test_pilot_case_001_integration.py \
-            tests/test_pilot_case_002.py tests/test_pilot_case_002_integration.py \
-            tests/test_pilot_case_003.py tests/test_pilot_case_003_integration.py \
-            tests/test_pilot_cli.py tests/test_pilot_git_isolation.py tests/test_pilot_source_acquisition.py \
-            > "$EVIDENCE/expected-paths.txt"
-          git -C candidate diff --name-only --diff-filter=ACDMRTUXB "$ADR_SHA" "$actual_sha" | LC_ALL=C sort > "$EVIDENCE/actual-paths.txt"
-          diff -u "$EVIDENCE/expected-paths.txt" "$EVIDENCE/actual-paths.txt" | tee "$EVIDENCE/logs/scope-diff.log"
-          echo PASS > "$EVIDENCE/rework-scope-compliance.txt"
+          parent_sha="$(git -C candidate rev-parse HEAD^)"
+          test "$parent_sha" = "$ADR_SHA"
+          test "$(git -C controller rev-parse HEAD)" = "$WORKFLOW_SHA"
+          test -z "$(git -C controller status --porcelain --untracked-files=all)"
+          test -z "$(git -C candidate status --porcelain --untracked-files=all)"
 
-      - name: Verify actionlint and lint both workflows
+          extract_blob() {
+            local repo=$1 sha=$2 path=$3 output=$4
+            local entry mode type blob tree_path
+            entry="$(git -C "$repo" ls-tree "$sha" -- "$path")"
+            read -r mode type blob tree_path <<<"$entry"
+            test "$mode" = 100644
+            test "$type" = blob
+            test "$tree_path" = "$path"
+            git -C "$repo" show "$sha:$path" > "$output"
+            test "$(git hash-object "$output")" = "$blob"
+          }
+
+          extract_blob controller "$WORKFLOW_SHA" \
+            .github/workflows/manual-exact-ref-verify.yml \
+            "$CONTROLLER_ARTIFACT/controller-workflow.yml"
+          extract_blob controller "$WORKFLOW_SHA" \
+            tools/p1_verifier/verify_candidate.py \
+            "$CONTROLLER_ARTIFACT/trusted-verifier.py"
+          extract_blob controller "$WORKFLOW_SHA" \
+            tools/p1_verifier/acceptance_manifest.json \
+            "$CONTROLLER_ARTIFACT/acceptance-manifest.json"
+          extract_blob candidate "$actual_sha" \
+            .github/workflows/verify.yml \
+            "$CONTROLLER_ARTIFACT/candidate-verify.yml"
+
+          cat > "$CONTROLLER_ARTIFACT/expected-paths.txt" <<'PATHS'
+          .github/workflows/verify.yml
+          executor/pilot_cli.py
+          executor/pilot_core.py
+          executor/source_acquisition.py
+          tests/test_pilot_case_001.py
+          tests/test_pilot_case_001_integration.py
+          tests/test_pilot_case_002.py
+          tests/test_pilot_case_002_integration.py
+          tests/test_pilot_case_003.py
+          tests/test_pilot_case_003_integration.py
+          tests/test_pilot_cli.py
+          tests/test_pilot_git_isolation.py
+          tests/test_pilot_source_acquisition.py
+          PATHS
+          git -C candidate diff --name-only --diff-filter=ACDMRTUXB \
+            "$ADR_SHA" "$actual_sha" | LC_ALL=C sort \
+            > "$CONTROLLER_ARTIFACT/actual-paths.txt"
+          diff -u "$CONTROLLER_ARTIFACT/expected-paths.txt" \
+            "$CONTROLLER_ARTIFACT/actual-paths.txt" \
+            | tee "$CONTROLLER_ARTIFACT/logs/scope-diff.log"
+
+          git -C candidate show -s --format=full "$actual_sha" \
+            > "$CONTROLLER_ARTIFACT/commit-message.txt"
+          git -C candidate fsck --strict \
+            > "$CONTROLLER_ARTIFACT/logs/candidate-fsck.log" 2>&1
+          git -C candidate bundle create \
+            "$CONTROLLER_ARTIFACT/candidate-source.bundle" --all
+          git bundle verify "$CONTROLLER_ARTIFACT/candidate-source.bundle" \
+            > "$CONTROLLER_ARTIFACT/logs/bundle-verify.log" 2>&1
+
+          python - "$CONTROLLER_ARTIFACT" "$actual_sha" "$parent_sha" \
+            "$TARGET_REF" "$EXPECTED_SHA" "$EXECUTION_MODE" \
+            "$WORKFLOW_SHA" "$WORKFLOW_REF" <<'PY'
+          import hashlib, json, pathlib, sys
+          root=pathlib.Path(sys.argv[1])
+          candidate_sha,parent,target,expected,mode,workflow_sha,workflow_ref=sys.argv[2:]
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+          paths=(root/"actual-paths.txt").read_text().splitlines()
+          controller={
+              "schema_version":1,
+              "event_name":"workflow_dispatch",
+              "target_ref":target,
+              "expected_sha":expected,
+              "candidate_sha":candidate_sha,
+              "parent_sha":parent,
+              "workflow_sha":workflow_sha,
+              "workflow_ref":workflow_ref,
+              "execution_mode":mode,
+              "candidate_bundle_sha256":digest(root/"candidate-source.bundle"),
+              "candidate_tests_authority":"OBSERVATIONAL",
+          }
+          (root/"controller-manifest.json").write_text(
+              json.dumps(controller,sort_keys=True,indent=2)+"\n")
+          (root/"scope-report.json").write_text(json.dumps({
+              "schema_version":1,"status":"PASS","changed_paths":paths
+          },sort_keys=True,indent=2)+"\n")
+          identities={}
+          for key,name in {
+              "controller_workflow":"controller-workflow.yml",
+              "candidate_workflow":"candidate-verify.yml",
+              "trusted_verifier":"trusted-verifier.py",
+              "acceptance_manifest":"acceptance-manifest.json",
+          }.items():
+              identities[key]={"artifact_path":name,"sha256":digest(root/name)}
+          (root/"workflow-identities.json").write_text(
+              json.dumps(identities,sort_keys=True,indent=2)+"\n")
+          PY
+
+          printf 'candidate_sha=%s\n' "$actual_sha" >> "$GITHUB_OUTPUT"
+          printf 'execution_mode=%s\n' "$EXECUTION_MODE" >> "$GITHUB_OUTPUT"
+
+      - name: Verify actionlint release and lint trusted and candidate workflows
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          CONTROLLER_ARTIFACT: ${{ runner.temp }}/p1-controller
         run: |
           set -euo pipefail
-          d="$RUNNER_TEMP/actionlint-$ACTIONLINT_VERSION"; mkdir -p "$d"
-          a="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          curl -fL --proto '=https' --tlsv1.2 -o "$d/$a" "https://github.com/rhysd/actionlint/releases/download/v$ACTIONLINT_VERSION/$a"
-          gh release verify-asset "v$ACTIONLINT_VERSION" "$d/$a" --repo rhysd/actionlint --format json | tee "$EVIDENCE/actionlint-attestation.json"
-          tar -xzf "$d/$a" -C "$d" actionlint
-          sha256sum "$d/$a" "$d/actionlint" > "$EVIDENCE/actionlint-sha256.txt"
-          "$d/actionlint" -version | tee "$EVIDENCE/actionlint-version.txt"
-          { "$d/actionlint" "$EVIDENCE/controller.yml" "$EVIDENCE/candidate-verify.yml"; echo 'ACTIONLINT: PASS'; } 2>&1 | tee "$EVIDENCE/logs/actionlint.log"
+          tool_dir="$RUNNER_TEMP/actionlint-$ACTIONLINT_VERSION"
+          mkdir -p "$tool_dir"
+          asset="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          archive="$tool_dir/$asset"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${asset}"
+          gh release verify-asset "v${ACTIONLINT_VERSION}" "$archive" \
+            --repo rhysd/actionlint --format json \
+            > "$CONTROLLER_ARTIFACT/actionlint-attestation.json"
+          tar -xzf "$archive" -C "$tool_dir" actionlint
+          sha256sum "$archive" "$tool_dir/actionlint" \
+            > "$CONTROLLER_ARTIFACT/actionlint-sha256.txt"
+          "$tool_dir/actionlint" -version \
+            > "$CONTROLLER_ARTIFACT/actionlint-version.txt"
+          "$tool_dir/actionlint" \
+            "$CONTROLLER_ARTIFACT/controller-workflow.yml" \
+            "$CONTROLLER_ARTIFACT/candidate-verify.yml" \
+            > "$CONTROLLER_ARTIFACT/logs/actionlint.log" 2>&1
+          printf '%s\n' 'ACTIONLINT: PASS' \
+            >> "$CONTROLLER_ARTIFACT/logs/actionlint.log"
 
-      - name: Set up Python
+      - name: Seal trusted controller artifact
+        shell: bash
+        env:
+          CONTROLLER_ARTIFACT: ${{ runner.temp }}/p1-controller
+        run: |
+          set -euo pipefail
+          python - "$CONTROLLER_ARTIFACT" <<'PY'
+          import hashlib, json, pathlib, sys
+          root=pathlib.Path(sys.argv[1])
+          files={}
+          for path in sorted(root.rglob("*")):
+              if path.is_file() and not path.is_symlink() and path.name!="files-sha256.json":
+                  files[path.relative_to(root).as_posix()]=hashlib.sha256(path.read_bytes()).hexdigest()
+          (root/"files-sha256.json").write_text(
+              json.dumps({"schema_version":1,"files":files},sort_keys=True,indent=2)+"\n")
+          PY
+
+      - name: Upload trusted controller artifact
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: P1_TRUSTED_CONTROLLER_${{ github.run_id }}_${{ github.run_attempt }}
+          path: ${{ runner.temp }}/p1-controller
+          if-no-files-found: error
+          retention-days: 30
+
+  untrusted-candidate-execution:
+    needs: trusted-controller
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      CANDIDATE_SHA: ${{ needs.trusted-controller.outputs.candidate_sha }}
+      EXECUTION_MODE: ${{ needs.trusted-controller.outputs.execution_mode }}
+      OBSERVATION: ${{ runner.temp }}/p1-execution-observation
+      CONTROLLER_INPUT: ${{ runner.temp }}/p1-controller-input
+      SOURCE_VOLUME: p1-candidate-source-${{ github.run_id }}-${{ github.run_attempt }}
+      RUNS_VOLUME: p1-candidate-runs-${{ github.run_id }}-${{ github.run_attempt }}
+      PROBE_VOLUME: p1-trusted-probe-${{ github.run_id }}-${{ github.run_attempt }}
+      DIND_VOLUME: p1-dind-data-${{ github.run_id }}-${{ github.run_attempt }}
+      INTERNAL_NETWORK: p1-internal-${{ github.run_id }}-${{ github.run_attempt }}
+      EGRESS_NETWORK: p1-egress-${{ github.run_id }}-${{ github.run_attempt }}
+      DIND_CONTAINER: p1-dind-${{ github.run_id }}-${{ github.run_attempt }}
+      CANDIDATE_IMAGE: p1-candidate-runner:${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Download trusted controller artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: P1_TRUSTED_CONTROLLER_${{ github.run_id }}_${{ github.run_attempt }}
+          path: ${{ runner.temp }}/p1-controller-input
+
+      - name: Verify controller transport and prepare isolated volumes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$OBSERVATION/logs" "$OBSERVATION/traces" \
+            "$OBSERVATION/results" "$OBSERVATION/inspect"
+          python - "$CONTROLLER_INPUT" <<'PY'
+          import hashlib,json,pathlib,sys
+          root=pathlib.Path(sys.argv[1])
+          data=json.loads((root/"files-sha256.json").read_text())
+          for rel,expected in data["files"].items():
+              path=root/rel
+              if not path.is_file() or path.is_symlink():
+                  raise SystemExit(f"bad controller artifact path: {rel}")
+              actual=hashlib.sha256(path.read_bytes()).hexdigest()
+              if actual!=expected:
+                  raise SystemExit(f"controller artifact hash mismatch: {rel}")
+          PY
+          test "$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["candidate_sha"])' \
+            "$CONTROLLER_INPUT/controller-manifest.json")" = "$CANDIDATE_SHA"
+
+          git clone --quiet "$CONTROLLER_INPUT/candidate-source.bundle" \
+            "$RUNNER_TEMP/candidate-source"
+          test "$(git -C "$RUNNER_TEMP/candidate-source" rev-parse HEAD)" = "$CANDIDATE_SHA"
+          git -C "$RUNNER_TEMP/candidate-source" fsck --strict
+
+          docker volume create "$SOURCE_VOLUME" >/dev/null
+          docker volume create "$RUNS_VOLUME" >/dev/null
+          docker volume create "$PROBE_VOLUME" >/dev/null
+          docker volume create "$DIND_VOLUME" >/dev/null
+          docker network create --internal "$INTERNAL_NETWORK" >/dev/null
+          docker network create "$EGRESS_NETWORK" >/dev/null
+
+          docker run --rm \
+            --mount "type=bind,src=$RUNNER_TEMP/candidate-source,dst=/input,readonly" \
+            --mount "type=volume,src=$SOURCE_VOLUME,dst=/candidate" \
+            --entrypoint /bin/sh "$SANDBOX_IMAGE" -c \
+            'cp -a /input/. /candidate/ && chown -R 1000:1000 /candidate'
+          docker run --rm \
+            --mount "type=volume,src=$RUNS_VOLUME,dst=/runs" \
+            --entrypoint /bin/sh "$SANDBOX_IMAGE" -c \
+            'chown -R 1000:1000 /runs'
+
+          cat > "$RUNNER_TEMP/trusted-probe.py" <<'PY'
+          import subprocess, sys, tempfile
+          from pathlib import Path
+          from executor.pilot_case_001 import execute_case_001
+          from executor.source_acquisition import (
+              ALLOWED_REPOSITORY, CANONICAL_REPOSITORY_URL,
+              InputModelViolation, SourceAcquisitionRequest, validate_request,
+          )
+
+          def expect_cli_reject(option, value):
+              completed=subprocess.run(
+                  [sys.executable,"-m","executor.pilot_cli","--case","001",
+                   "--runs-root","/runs/probe-cli","--executor-root","/candidate",
+                   "--executor-commit","0"*40,"--image","invalid",option,value],
+                  stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,
+              )
+              assert completed.returncode != 0, (option, completed.stdout, completed.stderr)
+
+          expect_cli_reject("--repository-root","/candidate")
+          expect_cli_reject("--repository-url","https://example.invalid/repo.git")
+          with tempfile.TemporaryDirectory(dir="/runs") as tmp:
+              report=execute_case_001(
+                  repository_root="/candidate", runs_root=Path(tmp),
+                  sandbox_backend=object(), sandbox_spec=None,
+              )
+              assert report["status"] == "POLICY_BLOCKED", report
+              root=Path(tmp).resolve()
+              base=dict(
+                  run_id="probe", repository=ALLOWED_REPOSITORY,
+                  commit="0"*40, contract_blob="1"*40, runs_root=root,
+              )
+              for change in (
+                  {"repository":"attacker/repository"},
+                  {"commit":"main"},
+                  {"contract_blob":"short"},
+              ):
+                  values={**base,**change}
+                  try:
+                      validate_request(SourceAcquisitionRequest(**values))
+                  except InputModelViolation:
+                      pass
+                  else:
+                      raise AssertionError(f"request unexpectedly accepted: {change}")
+          assert CANONICAL_REPOSITORY_URL == "https://github.com/litrgratis-pixel/executor-pilot-target.git"
+          print("TRUSTED_BLACK_BOX_PROBES: PASS")
+          PY
+          docker run --rm \
+            --mount "type=bind,src=$RUNNER_TEMP/trusted-probe.py,dst=/input/trusted-probe.py,readonly" \
+            --mount "type=volume,src=$PROBE_VOLUME,dst=/trusted-probe" \
+            --entrypoint /bin/sh "$SANDBOX_IMAGE" -c \
+            'cp /input/trusted-probe.py /trusted-probe/probe.py && chmod 0444 /trusted-probe/probe.py'
+
+      - name: Start isolated rootless nested Docker authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull --platform linux/amd64 "$DIND_ROOTLESS_IMAGE" \
+            > "$OBSERVATION/logs/pull-dind.log" 2>&1
+          docker run -d --privileged \
+            --name "$DIND_CONTAINER" \
+            --network "$INTERNAL_NETWORK" \
+            --network-alias p1-dind \
+            --env DOCKER_TLS_CERTDIR= \
+            --mount "type=volume,src=$DIND_VOLUME,dst=/home/rootless/.local/share/docker" \
+            --mount "type=volume,src=$SOURCE_VOLUME,dst=/candidate,readonly" \
+            --mount "type=volume,src=$RUNS_VOLUME,dst=/runs" \
+            "$DIND_ROOTLESS_IMAGE" \
+            --host=tcp://0.0.0.0:2375 --storage-driver=fuse-overlayfs
+          docker network connect "$EGRESS_NETWORK" "$DIND_CONTAINER"
+          for attempt in $(seq 1 60); do
+            if docker run --rm --network "$INTERNAL_NETWORK" \
+              "$DOCKER_CLI_IMAGE" \
+              -H tcp://p1-dind:2375 info >/dev/null 2>&1; then
+              break
+            fi
+            test "$attempt" -lt 60
+            sleep 1
+          done
+          docker run --rm --network "$INTERNAL_NETWORK" \
+            "$DOCKER_CLI_IMAGE" -H tcp://p1-dind:2375 \
+            info --format '{{json .SecurityOptions}}' \
+            | tee "$OBSERVATION/nested-docker-security.json" \
+            | grep -F rootless
+          for image in "$GIT_IMAGE" "$SANDBOX_IMAGE"; do
+            docker run --rm --network "$INTERNAL_NETWORK" \
+              "$DOCKER_CLI_IMAGE" -H tcp://p1-dind:2375 \
+              pull --platform linux/amd64 "$image" \
+              >> "$OBSERVATION/logs/pull-nested-images.log" 2>&1
+          done
+
+      - name: Build trusted candidate runner image
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_dir="$RUNNER_TEMP/p1-candidate-image"
+          mkdir -p "$build_dir"
+          cat > "$build_dir/Dockerfile" <<EOF
+          FROM $DOCKER_CLI_IMAGE AS dockercli
+          FROM $SANDBOX_IMAGE
+          USER root
+          COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
+          RUN apt-get update \
+              && apt-get install -y --no-install-recommends git ca-certificates strace \
+              && rm -rf /var/lib/apt/lists/* \
+              && useradd --uid 1000 --create-home candidate
+          USER candidate
+          WORKDIR /candidate
+          ENV HOME=/home/candidate PYTHONDONTWRITEBYTECODE=1
+          EOF
+          docker build --pull=false --no-cache \
+            --tag "$CANDIDATE_IMAGE" "$build_dir" \
+            > "$OBSERVATION/logs/build-candidate-image.log" 2>&1
+          docker image inspect "$CANDIDATE_IMAGE" \
+            > "$OBSERVATION/inspect/candidate-image.json"
+          docker run --rm --network none "$CANDIDATE_IMAGE" \
+            /bin/sh -lc 'python --version && git --version && docker --version && strace --version' \
+            > "$OBSERVATION/logs/candidate-toolchain.log" 2>&1
+
+      - name: Run candidate only inside the untrusted nested domain
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_untrusted() {
+            local name=$1 log=$2 trace=$3 command=$4
+            local container="p1-${name}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            docker create \
+              --name "$container" \
+              --network "$INTERNAL_NETWORK" \
+              --read-only \
+              --cap-drop ALL \
+              --security-opt no-new-privileges \
+              --pids-limit 256 \
+              --memory 1g \
+              --cpus 2 \
+              --user 1000:1000 \
+              --tmpfs /tmp:rw,noexec,nosuid,size=256m \
+              --tmpfs /home/candidate:rw,nosuid,size=64m \
+              --mount "type=volume,src=$SOURCE_VOLUME,dst=/candidate,readonly" \
+              --mount "type=volume,src=$RUNS_VOLUME,dst=/runs" \
+              --mount "type=volume,src=$PROBE_VOLUME,dst=/trusted-probe,readonly" \
+              --env DOCKER_HOST=tcp://p1-dind:2375 \
+              --env PYTHONDONTWRITEBYTECODE=1 \
+              --env EXECUTOR_COMMIT="$CANDIDATE_SHA" \
+              --env EXECUTOR_SANDBOX_IMAGE="$SANDBOX_IMAGE" \
+              --env PILOT_RUNS_ROOT=/runs \
+              "$CANDIDATE_IMAGE" /usr/bin/strace -f -s 4096 \
+              -e trace=execve /bin/sh -lc "$command" >/dev/null
+            docker inspect "$container" \
+              > "$OBSERVATION/inspect/${name}-container.json"
+            set +e
+            docker start -a "$container" \
+              > "$OBSERVATION/logs/$log" \
+              2> "$OBSERVATION/traces/$trace"
+            local rc=$?
+            set -e
+            printf '%s\n' "$rc" > "$OBSERVATION/logs/${name}.exit-code"
+            docker rm -f "$container" >/dev/null
+          }
+
+          if test "$EXECUTION_MODE" = malicious-boundary-probe; then
+            run_untrusted malicious-probe malicious-probe.log malicious-probe.execve \
+              'set +e
+               mkdir -p /runs/candidate-declared
+               printf "{\"status\":\"PASS\"}\n" > /runs/candidate-declared/final_gate.json
+               for p in /evidence /controller /authoritative-verification; do
+                 touch "$p/candidate-marker" 2>/dev/null
+               done
+               test -n "${GITHUB_OUTPUT:-}" && echo forged >> "$GITHUB_OUTPUT"
+               test -n "${GITHUB_ENV:-}" && echo FORGED=1 >> "$GITHUB_ENV"
+               test -S /var/run/docker.sock && echo host-socket-visible > /runs/host-socket-visible
+               docker run --rm -v /:/nested-root:ro alpine:3.21 \
+                 sh -c "test -e /nested-root/home/runner" \
+                 && echo runner-root-visible > /runs/runner-root-visible
+               exit 23'
+          else
+            run_untrusted trusted-probes trusted-probes.log trusted-probes.execve \
+              'python /trusted-probe/probe.py'
+            run_untrusted candidate-tests candidate-tests.log candidate-tests.execve \
+              'python -m unittest discover -s tests -v'
+            run_untrusted sandbox sandbox.log sandbox.execve \
+              'RUN_DOCKER_TESTS=1 python -m unittest tests.test_sandbox_integration -v'
+            run_untrusted acquisition acquisition.log acquisition.execve \
+              'RUN_PILOT_SOURCE_ACQUISITION=1 PILOT_RUNS_ROOT=/runs \
+               python -m unittest \
+               tests.test_pilot_source_acquisition.RealPinnedAcquisitionIntegrationTests -v'
+            for n in 001 002 003; do
+              run_untrusted "case-$n" "case-$n.log" "case-$n.execve" \
+                "python -m executor.pilot_cli --case $n \
+                 --runs-root /runs/case-$n --executor-root /candidate \
+                 --executor-commit $CANDIDATE_SHA --image $SANDBOX_IMAGE"
+            done
+          fi
+
+      - name: Collect trusted observation outside candidate reach
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker inspect "$DIND_CONTAINER" \
+            > "$OBSERVATION/inspect/dind-container.json" 2>/dev/null || true
+          docker logs "$DIND_CONTAINER" \
+            > "$OBSERVATION/logs/dind.log" 2>&1 || true
+          docker ps -a --no-trunc \
+            > "$OBSERVATION/process-tree.txt"
+          python - "$OBSERVATION" "$INTERNAL_NETWORK" "$EGRESS_NETWORK" <<'PY'
+          import json,pathlib,subprocess,sys
+          root=pathlib.Path(sys.argv[1]); internal=sys.argv[2]; egress=sys.argv[3]
+          def inspect(name):
+              p=subprocess.run(["docker","network","inspect",name],text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+              return json.loads(p.stdout) if p.returncode==0 and p.stdout.strip() else []
+          value={
+              "schema_version":1,
+              "candidate_network":"internal-only",
+              "nested_daemon_egress":True,
+              "host_docker_socket_mounted":False,
+              "internal_network":inspect(internal),
+              "egress_network":inspect(egress),
+          }
+          (root/"network-observation.json").write_text(json.dumps(value,sort_keys=True,indent=2)+"\n")
+          PY
+
+          if test "$EXECUTION_MODE" = verify-candidate; then
+            docker run --rm \
+              --mount "type=volume,src=$RUNS_VOLUME,dst=/runs,readonly" \
+              --mount "type=bind,src=$OBSERVATION,dst=/observation" \
+              --entrypoint /bin/sh "$GIT_IMAGE" -c '
+                set -eu
+                for n in 001 002 003; do
+                  repo="$(find "/runs/case-$n" -type d -path "*/acquisition/repository.git" | head -n1)"
+                  test -n "$repo"
+                  git --git-dir="$repo" bundle create \
+                    "/observation/results/case-$n.bundle" --all
+                  report="$(find "/runs/case-$n" -name report.json -type f | head -n1)"
+                  test -n "$report"
+                  cp "$report" "/observation/results/case-$n-report.json"
+                done
+                acquisition="$(find /runs -path "*/evidence/source_acquisition.json" -type f | head -n1)"
+                manifest="$(find /runs -path "*/evidence/source_manifest.json" -type f | head -n1)"
+                test -n "$acquisition"; test -n "$manifest"
+                cp "$acquisition" /observation/results/source_acquisition.json
+                cp "$manifest" /observation/results/source_manifest.json
+              '
+          else
+            docker run --rm \
+              --mount "type=volume,src=$RUNS_VOLUME,dst=/runs,readonly" \
+              --mount "type=bind,src=$OBSERVATION,dst=/observation" \
+              --entrypoint /bin/sh "$SANDBOX_IMAGE" -c \
+              'cp -a /runs/. /observation/malicious-output/'
+          fi
+
+      - name: Seal untrusted execution observation
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - "$OBSERVATION" "$CANDIDATE_SHA" "$EXECUTION_MODE" <<'PY'
+          import hashlib,json,pathlib,sys
+          root=pathlib.Path(sys.argv[1]); candidate_sha=sys.argv[2]; mode=sys.argv[3]
+          inspect_dir=root/"inspect"
+          inspections=[]
+          for path in sorted(inspect_dir.glob("*-container.json")):
+              try: inspections.extend(json.loads(path.read_text()))
+              except Exception: pass
+          mounts=[]; env_names=set()
+          for item in inspections:
+              for mount in item.get("Mounts",[]):
+                  mounts.append({
+                      "source":mount.get("Name") or mount.get("Source",""),
+                      "destination":mount.get("Destination",""),
+                  })
+              for entry in item.get("Config",{}).get("Env",[]) or []:
+                  env_names.add(entry.split("=",1)[0])
+          cases={}
+          for n in ("001","002","003"):
+              exit_path=root/"logs"/f"case-{n}.exit-code"
+              report_path=root/"results"/f"case-{n}-report.json"
+              bundle=root/"results"/f"case-{n}.bundle"
+              if exit_path.exists() and report_path.exists() and bundle.exists():
+                  report=json.loads(report_path.read_text())
+                  log_rel=f"logs/case-{n}.log"
+                  trace_rel=f"traces/case-{n}.execve"
+                  cases[n]={
+                      "exit_code":int(exit_path.read_text().strip()),
+                      "skipped":"skipped" in (root/log_rel).read_text().lower(),
+                      "harness_status":"OBSERVED_COMPLETED",
+                      "log_path":log_rel,
+                      "trace_path":trace_rel,
+                      "bundle_path":f"results/case-{n}.bundle",
+                      "bundle_sha256":hashlib.sha256(bundle.read_bytes()).hexdigest(),
+                      "result_commit":report.get("output_commit"),
+                      "candidate_status":report.get("status"),
+                  }
+          def exit_code(name):
+              path=root/"logs"/f"{name}.exit-code"
+              try: return int(path.read_text().strip())
+              except Exception: return None
+          declared="ABSENT"
+          declared_path=root/"malicious-output"/"candidate-declared"/"final_gate.json"
+          if declared_path.exists():
+              try: declared=json.loads(declared_path.read_text()).get("status","UNKNOWN")
+              except Exception: declared="UNKNOWN"
+          markers=[]
+          for marker in ("host-socket-visible","runner-root-visible"):
+              if (root/"malicious-output"/marker).exists(): markers.append(marker)
+          observation={
+              "schema_version":1,
+              "candidate_sha":candidate_sha,
+              "execution_mode":mode,
+              "observation_authority":"TRUSTED_HOST_HARNESS",
+              "candidate_process_domain":"UNTRUSTED_NESTED_CONTAINER",
+              "nested_daemon_rootless":(root/"nested-docker-security.json").is_file() and "rootless" in (root/"nested-docker-security.json").read_text(),
+              "host_docker_socket_mounted":any(
+                  "/var/run/docker.sock" in (m["source"]+"\n"+m["destination"])
+                  for m in mounts),
+              "controller_evidence_visible":any(
+                  "controller" in (m["source"]+"\n"+m["destination"]) or "evidence" in (m["source"]+"\n"+m["destination"])
+                  for m in mounts),
+              "verifier_bundle_visible":any(
+                  "p1_verifier" in (m["source"]+"\n"+m["destination"]) or "authoritative-verification" in (m["source"]+"\n"+m["destination"])
+                  for m in mounts),
+              "candidate_direct_egress":False,
+              "nested_daemon_egress":True,
+              "github_token_visible":"GITHUB_TOKEN" in env_names or "GH_TOKEN" in env_names,
+              "secrets_visible":any("SECRET" in name or "TOKEN" in name for name in env_names),
+              "cleanup_confirmed":False,
+              "candidate_tests_authority":"OBSERVATIONAL",
+              "trusted_probes_exit_code":exit_code("trusted-probes"),
+              "candidate_tests_exit_code":exit_code("candidate-tests"),
+              "sandbox_exit_code":exit_code("sandbox"),
+              "acquisition_exit_code":exit_code("acquisition"),
+              "candidate_environment_names":sorted(env_names),
+              "candidate_mounts":mounts,
+              "candidate_declared_result":declared,
+              "candidate_boundary_markers":markers,
+              "cases":cases,
+          }
+          (root/"observation-manifest.json").write_text(
+              json.dumps(observation,sort_keys=True,indent=2)+"\n")
+          PY
+
+      - name: Destroy untrusted authority and confirm cleanup
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker rm -f "$DIND_CONTAINER" >/dev/null 2>&1 || true
+          docker network rm "$INTERNAL_NETWORK" >/dev/null 2>&1 || true
+          docker network rm "$EGRESS_NETWORK" >/dev/null 2>&1 || true
+          docker volume rm "$SOURCE_VOLUME" >/dev/null 2>&1 || true
+          docker volume rm "$RUNS_VOLUME" >/dev/null 2>&1 || true
+          docker volume rm "$PROBE_VOLUME" >/dev/null 2>&1 || true
+          docker volume rm "$DIND_VOLUME" >/dev/null 2>&1 || true
+          docker image rm "$CANDIDATE_IMAGE" >/dev/null 2>&1 || true
+          remaining="$(docker ps -aq \
+            --filter "name=p1-.*-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}")"
+          test -z "$remaining"
+          python - "$OBSERVATION" "$CANDIDATE_SHA" "$EXECUTION_MODE" <<'PY'
+          import json,pathlib,sys
+          root=pathlib.Path(sys.argv[1]); candidate_sha=sys.argv[2]; execution_mode=sys.argv[3]
+          path=root/"observation-manifest.json"
+          if path.is_file():
+              data=json.loads(path.read_text())
+          else:
+              data={
+                  "schema_version":1,
+                  "candidate_sha":candidate_sha,
+                  "execution_mode":execution_mode,
+                  "observation_authority":"TRUSTED_HOST_HARNESS",
+                  "candidate_process_domain":"UNTRUSTED_NESTED_CONTAINER",
+                  "candidate_tests_authority":"OBSERVATIONAL",
+                  "candidate_boundary_markers":["observation-manifest-missing-before-cleanup"],
+                  "cases":{},
+              }
+          data["cleanup_confirmed"]=True
+          path.write_text(json.dumps(data,sort_keys=True,indent=2)+"\n")
+          (root/"cleanup-state.json").write_text(
+              json.dumps({"cleanup_confirmed":True},sort_keys=True,indent=2)+"\n")
+          PY
+
+      - name: Hash trusted observation
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - "$OBSERVATION" <<'PY'
+          import hashlib,json,pathlib,sys
+          root=pathlib.Path(sys.argv[1]); files={}
+          for path in sorted(root.rglob("*")):
+              if path.is_file() and not path.is_symlink() and path.name!="files-sha256.json":
+                  files[path.relative_to(root).as_posix()]=hashlib.sha256(path.read_bytes()).hexdigest()
+          (root/"files-sha256.json").write_text(
+              json.dumps({"schema_version":1,"files":files},sort_keys=True,indent=2)+"\n")
+          PY
+
+      - name: Upload UNTRUSTED_EXECUTION_OBSERVATION
+        if: always()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: UNTRUSTED_EXECUTION_OBSERVATION_${{ github.run_id }}_${{ github.run_attempt }}
+          path: ${{ runner.temp }}/p1-execution-observation
+          if-no-files-found: error
+          retention-days: 30
+
+  trusted-authoritative-verifier:
+    if: always()
+    needs: [trusted-controller, untrusted-candidate-execution]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CANDIDATE_SHA: ${{ needs.trusted-controller.outputs.candidate_sha }}
+      CONTROLLER_INPUT: ${{ runner.temp }}/p1-controller-input
+      EXECUTION_INPUT: ${{ runner.temp }}/p1-execution-input
+      AUTHORITATIVE: ${{ runner.temp }}/p1-authoritative
+      FINAL_ROOT: ${{ runner.temp }}/p1-final-artifact
+      FINAL_ARCHIVE: p1-authoritative-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout trusted verifier from workflow SHA
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: trusted
+
+      - name: Download trusted controller artifact
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: P1_TRUSTED_CONTROLLER_${{ github.run_id }}_${{ github.run_attempt }}
+          path: ${{ runner.temp }}/p1-controller-input
+
+      - name: Download execution observation
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: UNTRUSTED_EXECUTION_OBSERVATION_${{ github.run_id }}_${{ github.run_attempt }}
+          path: ${{ runner.temp }}/p1-execution-input
+
+      - name: Checkout candidate independently without executing it
+        if: ${{ needs.trusted-controller.result == 'success' }}
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ needs.trusted-controller.outputs.candidate_sha }}
+          fetch-depth: 2
+          persist-credentials: false
+          path: verifier-candidate
+
+      - name: Checkout independent CASE-001 source anchor
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: litrgratis-pixel/executor-pilot-target
+          ref: 3934a94a5eebf750079200589d6dc40e024d44a0
+          fetch-depth: 1
+          persist-credentials: false
+          path: source-anchors/case-001
+
+      - name: Checkout independent CASE-002 source anchor
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: litrgratis-pixel/executor-pilot-target
+          ref: c3683bf37ad6a3f1d49c0ca05ebdd41627e9a5be
+          fetch-depth: 1
+          persist-credentials: false
+          path: source-anchors/case-002
+
+      - name: Checkout independent CASE-003 source anchor
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: litrgratis-pixel/executor-pilot-target
+          ref: c42bead2bbbff9c84486f17637ec80f35eeffa25
+          fetch-depth: 1
+          persist-credentials: false
+          path: source-anchors/case-003
+
+      - name: Prepare authoritative directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$AUTHORITATIVE" "$FINAL_ROOT"
+
+      - name: Set up trusted Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.11'
 
-      - name: Execute exact verification
-        working-directory: candidate
+      - name: Run trusted verifier
+        id: authoritative
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          python trusted/tools/p1_verifier/verify_candidate.py \
+            --acceptance-manifest trusted/tools/p1_verifier/acceptance_manifest.json \
+            --controller-dir "$CONTROLLER_INPUT" \
+            --execution-dir "$EXECUTION_INPUT" \
+            --candidate-dir verifier-candidate \
+            --source-anchor-root source-anchors \
+            --output-dir "$AUTHORITATIVE" \
+            > "$AUTHORITATIVE/verifier-stdout.json" \
+            2> "$AUTHORITATIVE/verifier-stderr.txt"
+          rc=$?
+          printf '%s\n' "$rc" > "$AUTHORITATIVE/verifier-exit-code.txt"
+          exit 0
+
+      - name: Build authoritative evidence artifact
+        if: always()
         shell: bash
         env:
-          RUN_DOCKER_TESTS: '1'
-          PILOT_RUNS_ROOT: ${{ env.RUNS_ROOT }}
+          CONTROLLER_RESULT: ${{ needs.trusted-controller.result }}
+          EXECUTION_RESULT: ${{ needs.untrusted-candidate-execution.result }}
         run: |
           set -euo pipefail
-          CLEAN=(env -u GITHUB_ENV -u GITHUB_PATH -u GITHUB_OUTPUT -u GITHUB_STEP_SUMMARY -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_RUNTIME_TOKEN -u ACTIONS_RUNTIME_URL -u ACTIONS_RESULTS_URL -u ACTIONS_CACHE_URL -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u EVIDENCE)
-          reject_skip() { ! grep -Eqi 'skipped|FAILED|ERROR' "$1"; grep -Eq '^OK( \(.*\))?$' "$1"; }
-          { python --version; git --version; docker version; } 2>&1 | tee "$EVIDENCE/tool-versions.txt"
-          command -v strace >/dev/null || { sudo apt-get update; sudo apt-get install -y --no-install-recommends strace; }
-          strace --version 2>&1 | tee "$EVIDENCE/strace-version.txt"
-          docker pull --platform linux/amd64 "$SANDBOX_IMAGE" |& tee "$EVIDENCE/logs/pull-sandbox.log"
-          s="$(docker image inspect --format '{{json .RepoDigests}}|{{.Os}}/{{.Architecture}}|{{.Id}}' "$SANDBOX_IMAGE")"
-          echo "$s" | tee "$EVIDENCE/sandbox-image.txt"; echo "$s" | grep -F "$SANDBOX_IMAGE"; test "$(cut -d'|' -f2 <<<"$s")" = linux/amd64
-          export EXECUTOR_SANDBOX_IMAGE="$(cut -d'|' -f3 <<<"$s")"
-          docker pull --platform linux/amd64 "$GIT_IMAGE" |& tee "$EVIDENCE/logs/pull-git.log"
-          g="$(docker image inspect --format '{{json .RepoDigests}}|{{.Os}}/{{.Architecture}}|{{.Id}}' "$GIT_IMAGE")"
-          echo "$g" | tee "$EVIDENCE/git-image.txt"; echo "$g" | grep -F "$GIT_IMAGE"; test "$(cut -d'|' -f2 <<<"$g")" = linux/amd64
-          docker run --rm --platform linux/amd64 --network none --read-only --cap-drop ALL --security-opt no-new-privileges --entrypoint /bin/busybox "$GIT_IMAGE" env -i PATH=/usr/bin:/bin /usr/bin/git --version | tee "$EVIDENCE/git-version.txt" | grep -Fx 'git version 2.54.0'
-          "${CLEAN[@]}" python -m compileall -q executor tests |& tee "$EVIDENCE/logs/compileall.log"
-          "${CLEAN[@]}" python -m unittest discover -s tests -v |& tee "$EVIDENCE/logs/unit-tests.log"
-          "${CLEAN[@]}" python -m executor.cli validate-project project_contracts/executor-self.yaml --policy EXECUTOR_POLICY.yaml --base-dir . |& tee "$EVIDENCE/logs/validate-project.log"
-          "${CLEAN[@]}" python -m executor.cli validate-task tasks/examples/EXECUTOR_TASK_FIXTURE-001.yaml --policy EXECUTOR_POLICY.yaml --base-dir . --repository-root litrgratis-pixel/Executor=. |& tee "$EVIDENCE/logs/validate-task.log"
-          "${CLEAN[@]}" python -m executor.cli validate-test test_contracts/examples/valid_test.yaml --base-dir tests/fixtures --holdout-evidence tests/fixtures/holdout_evidence.json |& tee "$EVIDENCE/logs/validate-test.log"
-          set +e
-          out="$("${CLEAN[@]}" python -m executor.cli validate-task tasks/examples/GINSENG_TEST-003.yaml --policy EXECUTOR_POLICY.yaml --base-dir .)"; rc=$?; set -e
-          test "$rc" -eq 2; grep -F UNLOCKED_REPOSITORY <<<"$out"; grep -F UNLOCKED_TEST_CONTRACT <<<"$out"
-          "${CLEAN[@]}" python -m unittest tests.test_sandbox_integration -v |& tee "$EVIDENCE/logs/sandbox.log"
-          reject_skip "$EVIDENCE/logs/sandbox.log"; grep -F 'Ran 10 tests' "$EVIDENCE/logs/sandbox.log"
-          strace -ff -s 4096 -e trace=execve -o "$EVIDENCE/traces/acquisition" "${CLEAN[@]}" env RUN_PILOT_SOURCE_ACQUISITION=1 python -m unittest tests.test_pilot_source_acquisition.RealPinnedAcquisitionIntegrationTests -v |& tee "$EVIDENCE/logs/acquisition.log"
-          reject_skip "$EVIDENCE/logs/acquisition.log"; find "$EVIDENCE/traces" -name 'acquisition.*' -type f -size +0c | grep -q .
-          for n in 001 002 003; do
-            strace -ff -s 4096 -e trace=execve -o "$EVIDENCE/traces/case-$n" "${CLEAN[@]}" env "RUN_PILOT_CASE_$n=1" EXECUTOR_COMMIT="$ACTUAL_SHA" EXECUTOR_SANDBOX_IMAGE="$EXECUTOR_SANDBOX_IMAGE" PILOT_RUNS_ROOT="$RUNS_ROOT" python -m unittest "tests.test_pilot_case_${n}_integration" -v |& tee "$EVIDENCE/logs/case-$n.log"
-            reject_skip "$EVIDENCE/logs/case-$n.log"; find "$EVIDENCE/traces" -name "case-$n.*" -type f -size +0c | grep -q .
-          done
-          test -s "$RUNS_ROOT/source-acquisition/real-case-001/evidence/source_acquisition.json"
-          test -s "$RUNS_ROOT/source-acquisition/real-case-001/evidence/source_manifest.json"
-          test "$(git rev-parse HEAD)" = "$ACTUAL_SHA"; test -z "$(git status --porcelain --untracked-files=all)"; git fsck --strict |& tee "$EVIDENCE/logs/git-fsck.log"
-          git show "$ACTUAL_SHA:.github/workflows/verify.yml" | cmp - "$EVIDENCE/candidate-verify.yml"
-          test "$(git -C ../controller rev-parse HEAD)" = "${{ github.workflow_sha }}"; test -z "$(git -C ../controller status --porcelain --untracked-files=all)"
-          git -C ../controller show "${{ github.workflow_sha }}:.github/workflows/manual-exact-ref-verify.yml" | cmp - "$EVIDENCE/controller.yml"
-          python - "$RUNS_ROOT" <<'PY'
-          import json, pathlib, sys
-          root=pathlib.Path(sys.argv[1]); found=set(); bad=[]
-          for p in root.rglob('*.json'):
-              try: d=json.loads(p.read_text())
-              except Exception: continue
-              if not isinstance(d,dict): continue
-              if d.get('status')=='PASS': bad.append(str(p))
-              if d.get('status')=='ACTION_COMPLETED_REVIEW_REQUIRED':
-                  for c in ('001','002','003'):
-                      if f'case-{c}' in str(p): found.add(c)
-                  if d.get('source_acquisition',{}).get('input_model')!='CONTROLLED_HTTPS_FETCH_V1': raise SystemExit(f'bad input model: {p}')
-          if bad or found!={'001','002','003'}: raise SystemExit(f'bad results: pass={bad}, found={found}')
+          mkdir -p "$FINAL_ROOT/controller" \
+            "$FINAL_ROOT/execution-observation" \
+            "$FINAL_ROOT/authoritative-verification"
+          test ! -d "$CONTROLLER_INPUT" || cp -a "$CONTROLLER_INPUT/." "$FINAL_ROOT/controller/"
+          test ! -d "$EXECUTION_INPUT" || cp -a "$EXECUTION_INPUT/." "$FINAL_ROOT/execution-observation/"
+          test ! -d "$AUTHORITATIVE" || cp -a "$AUTHORITATIVE/." "$FINAL_ROOT/authoritative-verification/"
+          python - "$FINAL_ROOT" "$CANDIDATE_SHA" "${{ github.workflow_sha }}" \
+            "$CONTROLLER_RESULT" "$EXECUTION_RESULT" <<'PY'
+          import hashlib,json,pathlib,sys
+          root=pathlib.Path(sys.argv[1])
+          candidate_sha,workflow_sha,controller_result,execution_result=sys.argv[2:]
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+          gate=root/"authoritative-verification"/"authoritative-final-gate.json"
+          gate_data=json.loads(gate.read_text()) if gate.is_file() else {
+              "authoritative_result":"FAIL",
+              "candidate_declared_result":"UNKNOWN",
+              "errors":["trusted verifier did not produce a final gate"],
+          }
+          manifest={
+              "schema_version":1,
+              "controller_manifest_sha256":digest(root/"controller"/"controller-manifest.json"),
+              "execution_observation_sha256":digest(root/"execution-observation"/"observation-manifest.json"),
+              "trusted_verifier_sha256":digest(pathlib.Path("trusted/tools/p1_verifier/verify_candidate.py")),
+              "candidate_sha":candidate_sha or None,
+              "workflow_sha":workflow_sha,
+              "controller_job_result":controller_result,
+              "execution_job_result":execution_result,
+              "authoritative_result":gate_data.get("authoritative_result","FAIL"),
+              "candidate_declared_result":gate_data.get("candidate_declared_result","UNKNOWN"),
+              "candidate_declared_result_authority":"IGNORED_FOR_AUTHORITY",
+          }
+          (root/"final-manifest.json").write_text(
+              json.dumps(manifest,sort_keys=True,indent=2)+"\n")
+          files={}
+          for path in sorted(root.rglob("*")):
+              if path.is_file() and not path.is_symlink() and path.name!="final-files-sha256.json":
+                  files[path.relative_to(root).as_posix()]=hashlib.sha256(path.read_bytes()).hexdigest()
+          (root/"final-files-sha256.json").write_text(
+              json.dumps({"schema_version":1,"files":files},sort_keys=True,indent=2)+"\n")
           PY
-          required=(event-metadata.txt input-validation.txt controller.yml controller-identity.txt candidate-verify.yml candidate-workflow-identity.txt expected-paths.txt actual-paths.txt rework-scope-compliance.txt actionlint-attestation.json actionlint-sha256.txt actionlint-version.txt tool-versions.txt strace-version.txt sandbox-image.txt git-image.txt git-version.txt logs/actionlint.log logs/unit-tests.log logs/sandbox.log logs/acquisition.log logs/case-001.log logs/case-002.log logs/case-003.log logs/git-fsck.log)
-          for f in "${required[@]}"; do test -s "$EVIDENCE/$f"; done
-          printf '%s\n' 'CHECKED OUT SHA: '"$ACTUAL_SHA" 'REWORK SCOPE COMPLIANCE: PASS' 'REAL HTTPS ACQUISITION: PASS' 'CASE-001: PASS' 'CASE-002: PASS' 'CASE-003: PASS' 'TERMINAL PASS STATUS: ABSENT' | tee "$EVIDENCE/success-gate.txt"
+          tar --sort=name --mtime='UTC 1970-01-01' \
+            --owner=0 --group=0 --numeric-owner \
+            -cf - -C "$FINAL_ROOT" . | gzip -n \
+            > "$RUNNER_TEMP/$FINAL_ARCHIVE.tar.gz"
+          gzip -t "$RUNNER_TEMP/$FINAL_ARCHIVE.tar.gz"
+          sha256sum "$RUNNER_TEMP/$FINAL_ARCHIVE.tar.gz" \
+            > "$RUNNER_TEMP/$FINAL_ARCHIVE.tar.gz.sha256"
 
-      - name: Verify cleanup
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker ps -a --no-trunc | tee "$EVIDENCE/logs/cleanup.log"
-          for f in 'creative-os-executor-test=true' 'creative-os-executor-pilot=case-001' 'creative-os-executor-pilot=case-002' 'creative-os-executor-pilot=case-003' 'creative-os-executor-source-git=true'; do test -z "$(docker ps -aq --filter label=$f)"; done
-
-      - name: Build evidence archive
-        if: always()
-        shell: bash
-        env:
-          JOB_STATUS: ${{ job.status }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$EVIDENCE/runs"; test ! -d "$RUNS_ROOT" || cp -a "$RUNS_ROOT/." "$EVIDENCE/runs/"
-          printf 'job_status=%s\n' "$JOB_STATUS" > "$EVIDENCE/job-status.txt"
-          (cd "$EVIDENCE"; find . -type f ! -name file-sha256.txt -print0 | sort -z | xargs -0 sha256sum) > "$EVIDENCE/file-sha256.txt"
-          a="$RUNNER_TEMP/$ARCHIVE_NAME.tar.gz"; tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - -C "$EVIDENCE" . | gzip -n > "$a"
-          gzip -t "$a"; sha256sum "$a" > "$a.sha256"; test -s "$a"; test -s "$a.sha256"
-
-      - name: Upload evidence
+      - name: Upload authoritative final artifact
         if: always()
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
-          name: ${{ env.ARCHIVE_NAME }}
+          name: P1_AUTHORITATIVE_EVIDENCE_${{ github.run_id }}_${{ github.run_attempt }}
           path: |
-            ${{ runner.temp }}/${{ env.ARCHIVE_NAME }}.tar.gz
-            ${{ runner.temp }}/${{ env.ARCHIVE_NAME }}.tar.gz.sha256
+            ${{ runner.temp }}/${{ env.FINAL_ARCHIVE }}.tar.gz
+            ${{ runner.temp }}/${{ env.FINAL_ARCHIVE }}.tar.gz.sha256
           if-no-files-found: error
           retention-days: 30
+
+      - name: Enforce authoritative result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - "$AUTHORITATIVE/authoritative-final-gate.json" <<'PY'
+          import json,pathlib,sys
+          path=pathlib.Path(sys.argv[1])
+          if not path.is_file():
+              raise SystemExit("authoritative final gate missing")
+          data=json.loads(path.read_text())
+          if data.get("authoritative_result")!="PASS":
+              raise SystemExit("authoritative result is not PASS")
+          if data.get("candidate_declared_result_authority")!="IGNORED_FOR_AUTHORITY":
+              raise SystemExit("candidate declaration gained authority")
+          PY
