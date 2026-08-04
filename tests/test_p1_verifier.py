@@ -311,9 +311,14 @@ def _write_valid_broker(fixture: Any, baseline: Any) -> None:
     baseline._write_json(network_path, network)
     observation_path = fixture.execution / "observation-manifest.json"
     observation = json.loads(observation_path.read_text())
+    observed_environment = [
+        name for name in observation.get("candidate_environment_names", [])
+        if name != "DOCKER_HOST"
+    ]
     observation.update(
         candidate_direct_daemon_access=False,
         docker_command_broker_authority=BROKER_AUTHORITY,
+        candidate_environment_names=observed_environment,
     )
     baseline._write_json(observation_path, observation)
     baseline._hash_manifest(fixture.execution)
