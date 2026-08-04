@@ -1,0 +1,97 @@
+name: PR32 minimal materializer transport
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: ${{ github.event.pull_request.number == 37 && github.head_ref == 'agent/pr32-ledger-fix-trigger' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout materializer source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: agent/pr32-ledger-red-test-helper
+          fetch-depth: 1
+          persist-credentials: false
+          path: generator-source
+
+      - name: Checkout exact PR32 red baseline
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: litrgratis-pixel/Executor
+          ref: 43a873f62164f86bb6ebff361b86211925f60066
+          fetch-depth: 2
+          persist-credentials: true
+          path: work
+
+      - name: Extract content-addressed readable implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64
+          import gzip
+          import hashlib
+          from pathlib import Path
+
+          source = Path(
+              'generator-source/.github/workflows/pr32-generator-trigger.yml'
+          ).read_text(encoding='utf-8')
+          marker = 'cat > "$RUNNER_TEMP/test_p1_verifier.py.gz.b64" <<\'PAYLOAD\'\n'
+          start = source.index(marker) + len(marker)
+          end = source.index('\nPAYLOAD', start)
+          encoded = ''.join(source[start:end].split())
+          payload = gzip.decompress(base64.b64decode(encoded, validate=True))
+          expected = '029ff0b3e3a790c1b83ebd637608eb4fc3ebaeef9090655cecd4ba072db091a5'
+          actual = hashlib.sha256(payload).hexdigest()
+          if actual != expected:
+              raise SystemExit(f'materializer payload SHA-256 mismatch: {actual}')
+          Path('work/tests/test_p1_verifier.py').write_bytes(payload)
+          PY
+          cd work
+          test "$(git diff --name-only)" = "tests/test_p1_verifier.py"
+
+      - name: Validate exact minimal patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          python -m compileall -q tools/p1_verifier tests/test_p1_verifier.py
+          python -m unittest tests.test_p1_verifier -v
+          python -m unittest discover -s tests -v
+
+      - name: Run pinned actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=1.7.12
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${version}/actionlint_${version}_linux_amd64.tar.gz"
+          printf '%s  %s\n' '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' "$archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" \
+            work/.github/workflows/manual-exact-ref-verify.yml \
+            work/.github/workflows/verify.yml
+
+      - name: Commit exact tested file to PR32 branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          expected=43a873f62164f86bb6ebff361b86211925f60066
+          branch=agent/manual-exact-ref-verification
+          remote="$(git ls-remote origin "refs/heads/$branch" | cut -f1)"
+          test "$remote" = "$expected"
+          git config user.name 'OpenAI Executor Worker'
+          git config user.email 'executor-worker@users.noreply.github.com'
+          git add tests/test_p1_verifier.py
+          test "$(git diff --cached --name-only)" = "tests/test_p1_verifier.py"
+          git commit -m 'Harden trusted Docker broker false-success boundary'
+          git push origin "HEAD:refs/heads/$branch" \
+            "--force-with-lease=refs/heads/$branch:$expected"
