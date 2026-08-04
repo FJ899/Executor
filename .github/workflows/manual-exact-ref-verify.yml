@@ -1,837 +1,140 @@
-name: Manual exact-ref verification
+name: PR32 adversarial red-test materializer
 
 on:
   pull_request:
-    paths:
-      - .github/workflows/manual-exact-ref-verify.yml
-      - tools/p1_verifier/verify_candidate.py
-      - tools/p1_verifier/acceptance_manifest.json
-      - tests/test_p1_verifier.py
-  workflow_dispatch:
-    inputs:
-      target_ref:
-        description: Exact authorized branch to verify
-        required: true
-        type: string
-      expected_sha:
-        description: Expected lowercase 40-character candidate SHA
-        required: true
-        type: string
-      execution_mode:
-        description: Verification or negative malicious-boundary probe
-        required: true
-        default: verify-candidate
-        type: choice
-        options:
-          - verify-candidate
-          - malicious-boundary-probe
 
 permissions:
-  contents: read
-
-env:
-  AUTHORIZED_REF: agent/pilot-runtime-replacement
-  AUTHORIZED_CONTROLLER_REF: refs/heads/main
-  ADR_SHA: bf18638caeb1a01cd2e14e625d72a20893a04bb3
-  ACTIONLINT_VERSION: 1.7.12
-  GIT_IMAGE: alpine/git@sha256:0448d24b454392f9d115c6784343899e9d35a32de0ddc39a745263db34df94dd
-  SANDBOX_IMAGE: python@sha256:b18992999dbe963a45a8a4da40ac2b1975be1a776d939d098c647482bcad5cba
-  DIND_ROOTLESS_IMAGE: docker:27-dind-rootless@sha256:e2ac8e8f66ae21a060b0a8e3005c70f6ed9441aabf409434463d1f6eecd38026
+  contents: write
 
 jobs:
-  actionlint-exact-head:
-    if: github.event_name == 'pull_request'
+  materialize-red-tests:
+    if: ${{ github.head_ref == 'agent/pr32-adversarial-red-generator' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - name: Checkout exact PR head
+      - name: Checkout exact reviewed baseline
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: 62a25e2c1f38f7986f484e78e50cc7e322ebf808
           fetch-depth: 1
-          persist-credentials: false
+          persist-credentials: true
 
-      - name: Run pinned actionlint
+      - name: Add adversarial tests only
         shell: bash
         run: |
           set -euo pipefail
-          archive="$RUNNER_TEMP/actionlint.tar.gz"
-          tool_dir="$RUNNER_TEMP/actionlint"
-          mkdir -p "$tool_dir"
-          curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz"
-          printf '%s  %s\n' '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' "$archive" | sha256sum -c -
-          tar -xzf "$archive" -C "$tool_dir" actionlint
-          "$tool_dir/actionlint" -version
-          "$tool_dir/actionlint" -shellcheck= .github/workflows/manual-exact-ref-verify.yml .github/workflows/verify.yml
-
-  trusted-controller:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    outputs:
-      candidate_sha: ${{ steps.bind.outputs.candidate_sha }}
-      execution_mode: ${{ steps.bind.outputs.execution_mode }}
-    steps:
-      - name: Validate dispatch
-        shell: bash
-        env:
-          TARGET_REF: ${{ inputs.target_ref }}
-          EXPECTED_SHA: ${{ inputs.expected_sha }}
-          EXECUTION_MODE: ${{ inputs.execution_mode }}
-        run: |
-          set -euo pipefail
-          test "${{ github.event_name }}" = workflow_dispatch
-          test "${{ github.ref }}" = "$AUTHORIZED_CONTROLLER_REF"
-          test "$TARGET_REF" = "$AUTHORIZED_REF"
-          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
-          case "$EXECUTION_MODE" in
-            verify-candidate|malicious-boundary-probe) ;;
-            *) exit 1 ;;
-          esac
-
-      - name: Checkout trusted controller
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ github.workflow_sha }}
-          fetch-depth: 1
-          persist-credentials: false
-          path: controller
-
-      - name: Checkout candidate without executing it
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ inputs.target_ref }}
-          fetch-depth: 0
-          persist-credentials: false
-          path: candidate
-
-      - name: Bind source, workflow identity and scope
-        id: bind
-        shell: bash
-        env:
-          TARGET_REF: ${{ inputs.target_ref }}
-          EXPECTED_SHA: ${{ inputs.expected_sha }}
-          EXECUTION_MODE: ${{ inputs.execution_mode }}
-          CONTROLLER_ARTIFACT: ${{ runner.temp }}/p1-controller
-          WORKFLOW_SHA: ${{ github.workflow_sha }}
-          WORKFLOW_REF: ${{ github.workflow_ref }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$CONTROLLER_ARTIFACT/logs"
-          actual_sha="$(git -C candidate rev-parse HEAD)"
-          test "$actual_sha" = "$EXPECTED_SHA"
-          parent_sha="$(git -C candidate rev-parse HEAD^)"
-          test "$parent_sha" = "$ADR_SHA"
-          test "$(git -C controller rev-parse HEAD)" = "$WORKFLOW_SHA"
-          test -z "$(git -C controller status --porcelain --untracked-files=all)"
-          test -z "$(git -C candidate status --porcelain --untracked-files=all)"
-          ! git -C candidate log -1 --format=%B | grep -Eiq '\[(skip ci|ci skip)\]|skip-checks:[[:space:]]*true'
-
-          extract_blob() {
-            local repo=$1 sha=$2 path=$3 output=$4
-            local entry mode type blob tree_path
-            entry="$(git -C "$repo" ls-tree "$sha" -- "$path")"
-            read -r mode type blob tree_path <<<"$entry"
-            test "$mode" = 100644
-            test "$type" = blob
-            test "$tree_path" = "$path"
-            git -C "$repo" show "$sha:$path" > "$output"
-            test "$(git hash-object "$output")" = "$blob"
-          }
-          extract_blob controller "$WORKFLOW_SHA" .github/workflows/manual-exact-ref-verify.yml "$CONTROLLER_ARTIFACT/controller-workflow.yml"
-          extract_blob controller "$WORKFLOW_SHA" tools/p1_verifier/verify_candidate.py "$CONTROLLER_ARTIFACT/trusted-verifier.py"
-          extract_blob controller "$WORKFLOW_SHA" tools/p1_verifier/acceptance_manifest.json "$CONTROLLER_ARTIFACT/acceptance-manifest.json"
-          extract_blob controller "$WORKFLOW_SHA" tests/test_p1_verifier.py "$CONTROLLER_ARTIFACT/trusted-broker-verifier.py"
-          extract_blob candidate "$actual_sha" .github/workflows/verify.yml "$CONTROLLER_ARTIFACT/candidate-verify.yml"
-
-          cat > "$CONTROLLER_ARTIFACT/expected-paths.txt" <<'PATHS'
-          .github/workflows/verify.yml
-          executor/pilot_cli.py
-          executor/pilot_core.py
-          executor/source_acquisition.py
-          tests/test_pilot_case_001.py
-          tests/test_pilot_case_001_integration.py
-          tests/test_pilot_case_002.py
-          tests/test_pilot_case_002_integration.py
-          tests/test_pilot_case_003.py
-          tests/test_pilot_case_003_integration.py
-          tests/test_pilot_cli.py
-          tests/test_pilot_git_isolation.py
-          tests/test_pilot_source_acquisition.py
-          PATHS
-          git -C candidate diff --name-only --diff-filter=ACDMRTUXB "$ADR_SHA" "$actual_sha" | LC_ALL=C sort > "$CONTROLLER_ARTIFACT/actual-paths.txt"
-          diff -u "$CONTROLLER_ARTIFACT/expected-paths.txt" "$CONTROLLER_ARTIFACT/actual-paths.txt" | tee "$CONTROLLER_ARTIFACT/logs/scope-diff.log"
-          git -C candidate show -s --format=full "$actual_sha" > "$CONTROLLER_ARTIFACT/commit-message.txt"
-          git -C candidate fsck --strict > "$CONTROLLER_ARTIFACT/logs/candidate-fsck.log" 2>&1
-          git -C candidate bundle create "$CONTROLLER_ARTIFACT/candidate-source.bundle" --all
-          git bundle verify "$CONTROLLER_ARTIFACT/candidate-source.bundle" > "$CONTROLLER_ARTIFACT/logs/bundle-verify.log" 2>&1
-
-          python - "$CONTROLLER_ARTIFACT" "$actual_sha" "$parent_sha" "$TARGET_REF" "$EXPECTED_SHA" "$EXECUTION_MODE" "$WORKFLOW_SHA" "$WORKFLOW_REF" <<'PY'
-          import hashlib, json, pathlib, sys
-          root=pathlib.Path(sys.argv[1])
-          candidate_sha,parent,target,expected,mode,workflow_sha,workflow_ref=sys.argv[2:]
-          def digest(path): return hashlib.sha256(path.read_bytes()).hexdigest()
-          paths=(root/"actual-paths.txt").read_text().splitlines()
-          controller={
-              "schema_version":1,"event_name":"workflow_dispatch",
-              "target_ref":target,"expected_sha":expected,"candidate_sha":candidate_sha,
-              "parent_sha":parent,"workflow_sha":workflow_sha,"workflow_ref":workflow_ref,
-              "execution_mode":mode,"candidate_bundle_sha256":digest(root/"candidate-source.bundle"),
-              "candidate_tests_authority":"OBSERVATIONAL",
-          }
-          (root/"controller-manifest.json").write_text(json.dumps(controller,sort_keys=True,indent=2)+"\n")
-          (root/"scope-report.json").write_text(json.dumps({"schema_version":1,"status":"PASS","changed_paths":paths},sort_keys=True,indent=2)+"\n")
-          identities={}
-          for key,name in {
-              "controller_workflow":"controller-workflow.yml","candidate_workflow":"candidate-verify.yml",
-              "trusted_verifier":"trusted-verifier.py","acceptance_manifest":"acceptance-manifest.json",
-              "trusted_broker_verifier":"trusted-broker-verifier.py",
-          }.items(): identities[key]={"artifact_path":name,"sha256":digest(root/name)}
-          (root/"workflow-identities.json").write_text(json.dumps(identities,sort_keys=True,indent=2)+"\n")
-          PY
-          printf 'candidate_sha=%s\n' "$actual_sha" >> "$GITHUB_OUTPUT"
-          printf 'execution_mode=%s\n' "$EXECUTION_MODE" >> "$GITHUB_OUTPUT"
-
-      - name: Verify actionlint release and lint workflows
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CONTROLLER_ARTIFACT: ${{ runner.temp }}/p1-controller
-        run: |
-          set -euo pipefail
-          tool_dir="$RUNNER_TEMP/actionlint-$ACTIONLINT_VERSION"
-          mkdir -p "$tool_dir"
-          asset="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          archive="$tool_dir/$asset"
-          curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${asset}"
-          gh release verify-asset "v${ACTIONLINT_VERSION}" "$archive" --repo rhysd/actionlint --format json > "$CONTROLLER_ARTIFACT/actionlint-attestation.json"
-          tar -xzf "$archive" -C "$tool_dir" actionlint
-          sha256sum "$archive" "$tool_dir/actionlint" > "$CONTROLLER_ARTIFACT/actionlint-sha256.txt"
-          "$tool_dir/actionlint" -version > "$CONTROLLER_ARTIFACT/actionlint-version.txt"
-          "$tool_dir/actionlint" -shellcheck= "$CONTROLLER_ARTIFACT/controller-workflow.yml" "$CONTROLLER_ARTIFACT/candidate-verify.yml" > "$CONTROLLER_ARTIFACT/logs/actionlint.log" 2>&1
-          echo 'ACTIONLINT: PASS' >> "$CONTROLLER_ARTIFACT/logs/actionlint.log"
-
-      - name: Seal trusted controller artifact
-        shell: bash
-        env:
-          CONTROLLER_ARTIFACT: ${{ runner.temp }}/p1-controller
-        run: |
-          set -euo pipefail
-          python - "$CONTROLLER_ARTIFACT" <<'PY'
-          import hashlib,json,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); files={}
-          for path in sorted(root.rglob("*")):
-              if path.is_file() and not path.is_symlink() and path.name!="files-sha256.json":
-                  files[path.relative_to(root).as_posix()]=hashlib.sha256(path.read_bytes()).hexdigest()
-          (root/"files-sha256.json").write_text(json.dumps({"schema_version":1,"files":files},sort_keys=True,indent=2)+"\n")
-          PY
-
-      - name: Upload trusted controller artifact
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
-        with:
-          name: P1_TRUSTED_CONTROLLER_${{ github.run_id }}_${{ github.run_attempt }}
-          path: ${{ runner.temp }}/p1-controller
-          if-no-files-found: error
-          retention-days: 30
-
-  untrusted-candidate-execution:
-    needs: trusted-controller
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    env:
-      CANDIDATE_SHA: ${{ needs.trusted-controller.outputs.candidate_sha }}
-      EXECUTION_MODE: ${{ needs.trusted-controller.outputs.execution_mode }}
-      OBSERVATION: /tmp/p1-execution-observation
-      CONTROLLER_INPUT: /tmp/p1-controller-input
-      SOURCE_VOLUME: p1-candidate-source-${{ github.run_id }}-${{ github.run_attempt }}
-      RUNS_VOLUME: p1-candidate-runs-${{ github.run_id }}-${{ github.run_attempt }}
-      PROBE_VOLUME: p1-trusted-probe-${{ github.run_id }}-${{ github.run_attempt }}
-      DIND_VOLUME: p1-dind-data-${{ github.run_id }}-${{ github.run_attempt }}
-      INTERNAL_NETWORK: p1-internal-${{ github.run_id }}-${{ github.run_attempt }}
-      EGRESS_NETWORK: p1-egress-${{ github.run_id }}-${{ github.run_attempt }}
-      DIND_CONTAINER: p1-dind-${{ github.run_id }}-${{ github.run_attempt }}
-      CANDIDATE_IMAGE: p1-candidate-runner:${{ github.run_id }}-${{ github.run_attempt }}
-      BROKER_DIR: /tmp/p1-docker-broker
-      BROKER_SOCKET: /tmp/p1-docker-broker/docker-command.sock
-    steps:
-      - name: Download trusted controller artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: P1_TRUSTED_CONTROLLER_${{ github.run_id }}_${{ github.run_attempt }}
-          path: ${{ runner.temp }}/p1-controller-input
-
-      - name: Verify controller transport and prepare isolated volumes
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$OBSERVATION/logs" "$OBSERVATION/traces" "$OBSERVATION/results" "$OBSERVATION/inspect" "$BROKER_DIR"
-          chmod 0700 "$BROKER_DIR"
-          python - "$CONTROLLER_INPUT" <<'PY'
-          import hashlib,json,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); data=json.loads((root/"files-sha256.json").read_text())
-          for rel,expected in data["files"].items():
-              path=root/rel
-              if not path.is_file() or path.is_symlink(): raise SystemExit(f"bad controller artifact path: {rel}")
-              if hashlib.sha256(path.read_bytes()).hexdigest()!=expected: raise SystemExit(f"controller artifact hash mismatch: {rel}")
-          PY
-          test "$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["candidate_sha"])' "$CONTROLLER_INPUT/controller-manifest.json")" = "$CANDIDATE_SHA"
-          git clone --quiet "$CONTROLLER_INPUT/candidate-source.bundle" "$RUNNER_TEMP/candidate-source"
-          test "$(git -C "$RUNNER_TEMP/candidate-source" rev-parse HEAD)" = "$CANDIDATE_SHA"
-          git -C "$RUNNER_TEMP/candidate-source" fsck --strict
-          docker volume create "$SOURCE_VOLUME" >/dev/null
-          docker volume create "$RUNS_VOLUME" >/dev/null
-          docker volume create "$PROBE_VOLUME" >/dev/null
-          docker volume create "$DIND_VOLUME" >/dev/null
-          docker network create --internal "$INTERNAL_NETWORK" >/dev/null
-          docker network create "$EGRESS_NETWORK" >/dev/null
-          docker run --rm --mount "type=bind,src=$RUNNER_TEMP/candidate-source,dst=/input,readonly" --mount "type=volume,src=$SOURCE_VOLUME,dst=/candidate" --entrypoint /bin/sh "$SANDBOX_IMAGE" -c 'cp -a /input/. /candidate/ && chown -R 1000:1000 /candidate'
-          docker run --rm --mount "type=volume,src=$RUNS_VOLUME,dst=/runs" --entrypoint /bin/sh "$SANDBOX_IMAGE" -c 'mkdir -p /runs/tmp && chown -R 1000:1000 /runs'
-          cat > "$RUNNER_TEMP/trusted-probe.py" <<'PY'
-          import tempfile
+          python - <<'PY'
           from pathlib import Path
-          from executor.pilot_case_001 import execute_case_001
-          from executor.source_acquisition import ALLOWED_REPOSITORY, CANONICAL_REPOSITORY_URL, InputModelViolation, SourceAcquisitionRequest, validate_request
-          with tempfile.TemporaryDirectory(dir="/runs") as tmp:
-              report=execute_case_001(repository_root="/candidate",runs_root=Path(tmp),sandbox_backend=object(),sandbox_spec=None)
-              assert report["status"]=="POLICY_BLOCKED", report
-              base=dict(run_id="probe",repository=ALLOWED_REPOSITORY,commit="0"*40,contract_blob="1"*40,runs_root=Path(tmp))
-              for change in ({"repository":"attacker/repository"},{"commit":"main"},{"contract_blob":"short"}):
-                  try: validate_request(SourceAcquisitionRequest(**{**base,**change}))
-                  except InputModelViolation: pass
-                  else: raise AssertionError(change)
-          assert CANONICAL_REPOSITORY_URL=="https://github.com/litrgratis-pixel/executor-pilot-target.git"
-          print("TRUSTED_BLACK_BOX_PROBES: PASS")
+
+          path = Path('tests/test_p1_verifier.py')
+          source = path.read_text(encoding='utf-8')
+          anchor = '\n\ndef main(argv: list[str] | None = None) -> int:\n'
+          if source.count(anchor) != 1:
+              raise SystemExit('test insertion anchor mismatch')
+          tests = r'''
+
+    def test_classifier_rejects_root_writable_and_extra_runtime_authority(self):
+        attacks = {
+            "root-user": ["--user", "0:0"],
+            "writable-root": ["--read-only=false"],
+            "shadow-executor-run": ["--tmpfs", "/executor-run:rw"],
+            "unapproved-runtime": ["--runtime", "runc"],
+        }
+        for label, extra in attacks.items():
+            with self.subTest(label=label):
+                argv = self._network_git_argv()
+                image_index = argv.index("git-image")
+                argv[image_index:image_index] = extra
+                allowed, _, reason = classify_broker_argv(
+                    argv,
+                    git_image="git-image",
+                    sandbox_image_id="sandbox-image-id",
+                    canonical_url=CANONICAL_URL,
+                    created=set(),
+                )
+                self.assertFalse(
+                    allowed,
+                    f"authority downgrade was accepted: {label}: {reason}",
+                )
+
+    def test_version_only_broker_ledger_cannot_preserve_authoritative_pass(self):
+        baseline, module_path, temporary, fixture = self._fixture()
+        try:
+            _write_valid_broker(fixture, baseline)
+            report = verify(
+                acceptance_path=fixture.acceptance,
+                controller_dir=fixture.controller,
+                execution_dir=fixture.execution,
+                candidate_dir=fixture.candidate,
+                source_anchor_root=fixture.source_anchors,
+                output_dir=fixture.output,
+            )
+            self.assertEqual(report["authoritative_result"], "PASS", report)
+            gate = apply_broker_gate(
+                execution_dir=fixture.execution,
+                gate_path=fixture.output / "authoritative-final-gate.json",
+                output_path=fixture.output / "docker-command-broker-verification.json",
+            )
+            self.assertEqual(
+                gate["authoritative_result"],
+                "FAIL",
+                "a version-only broker ledger cannot prove CASE-001–003 execution",
+            )
+            self.assertTrue(
+                any("execution transcript" in error.lower() for error in gate["errors"]),
+                gate["errors"],
+            )
+        finally:
+            temporary.cleanup()
+            module_path.unlink(missing_ok=True)
+
+    def test_network_fetch_cannot_trust_candidate_writable_git_configuration(self):
+        argv = self._network_git_argv()
+        allowed, _, reason = classify_broker_argv(
+            argv,
+            git_image="git-image",
+            sandbox_image_id="sandbox-image-id",
+            canonical_url=CANONICAL_URL,
+            created=set(),
+        )
+        self.assertFalse(
+            allowed,
+            "canonical argv is not an effective origin proof when repository.git/config "
+            "is candidate-writable and may contain url.*.insteadOf",
+        )
+'''
+          path.write_text(source.replace(anchor, tests + anchor), encoding='utf-8')
           PY
-          docker run --rm --mount "type=bind,src=$RUNNER_TEMP/trusted-probe.py,dst=/input/probe.py,readonly" --mount "type=volume,src=$PROBE_VOLUME,dst=/trusted-probe" --entrypoint /bin/sh "$SANDBOX_IMAGE" -c 'cp /input/probe.py /trusted-probe/probe.py && chmod 0444 /trusted-probe/probe.py'
+          test "$(git diff --name-only)" = tests/test_p1_verifier.py
 
-      - name: Start isolated rootless nested Docker authority
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker pull --platform linux/amd64 "$DIND_ROOTLESS_IMAGE" > "$OBSERVATION/logs/pull-dind.log" 2>&1
-          docker run -d --privileged --name "$DIND_CONTAINER" --network "$INTERNAL_NETWORK" --network-alias p1-dind --env DOCKER_TLS_CERTDIR= --mount "type=volume,src=$DIND_VOLUME,dst=/home/rootless/.local/share/docker" --mount "type=volume,src=$SOURCE_VOLUME,dst=/candidate,readonly" --mount "type=volume,src=$RUNS_VOLUME,dst=/runs" "$DIND_ROOTLESS_IMAGE" --host=tcp://0.0.0.0:2375 --storage-driver=fuse-overlayfs
-          docker network connect "$EGRESS_NETWORK" "$DIND_CONTAINER"
-          dind_ip="$(docker inspect --format "{{with index .NetworkSettings.Networks \"$INTERNAL_NETWORK\"}}{{.IPAddress}}{{end}}" "$DIND_CONTAINER")"
-          test -n "$dind_ip"
-          nested_host="tcp://$dind_ip:2375"
-          for attempt in $(seq 1 60); do
-            if docker -H "$nested_host" info >/dev/null 2>&1; then break; fi
-            test "$attempt" -lt 60
-            sleep 1
-          done
-          printf 'NESTED_HOST=%s\n' "$nested_host" >> "$GITHUB_ENV"
-          docker -H "$nested_host" info --format '{{json .SecurityOptions}}' | tee "$OBSERVATION/nested-docker-security.json" | grep -F rootless
-
-      - name: Preload and bind approved nested image identities
-        shell: bash
-        run: |
-          set -euo pipefail
-          for image in "$GIT_IMAGE" "$SANDBOX_IMAGE"; do
-            docker -H "$NESTED_HOST" pull --platform linux/amd64 "$image" >> "$OBSERVATION/logs/pull-nested-images.log" 2>&1
-          done
-          docker -H "$NESTED_HOST" image inspect "$GIT_IMAGE" > "$RUNNER_TEMP/git-image-inspect.json"
-          docker -H "$NESTED_HOST" image inspect "$SANDBOX_IMAGE" > "$RUNNER_TEMP/sandbox-image-inspect.json"
-          GIT_IMAGE="$GIT_IMAGE" SANDBOX_IMAGE="$SANDBOX_IMAGE" python - "$OBSERVATION" "$RUNNER_TEMP/git-image-inspect.json" "$RUNNER_TEMP/sandbox-image-inspect.json" "$GITHUB_ENV" <<'PY'
-          import json,os,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); refs=[os.environ["GIT_IMAGE"],os.environ["SANDBOX_IMAGE"]]
-          images={}
-          for ref,path in zip(refs,sys.argv[2:4]):
-              values=json.loads(pathlib.Path(path).read_text())
-              if len(values)!=1: raise SystemExit(f"ambiguous image inspect: {ref}")
-              value=values[0]; image_id=value.get("Id"); digests=value.get("RepoDigests") or []
-              if ref not in digests: raise SystemExit(f"pinned digest absent from RepoDigests: {ref}")
-              images[ref]={"id":image_id,"repo_digests":digests}
-          (root/"approved-nested-images.json").write_text(json.dumps({"schema_version":1,"authority":"TRUSTED_HOST_HARNESS","images":images},sort_keys=True,indent=2)+"\n")
-          with pathlib.Path(sys.argv[4]).open("a",encoding="utf-8") as stream:
-              stream.write(f"NESTED_SANDBOX_IMAGE_ID={images[os.environ['SANDBOX_IMAGE']]['id']}\n")
-          PY
-
-      - name: Start trusted nested operation collector
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat > "$RUNNER_TEMP/nested-ledger-collector.py" <<'PY'
-          import argparse,json,pathlib,signal,subprocess,time
-          parser=argparse.ArgumentParser()
-          parser.add_argument("--host",required=True); parser.add_argument("--events",type=pathlib.Path,required=True)
-          parser.add_argument("--ready",type=pathlib.Path,required=True); parser.add_argument("--status",type=pathlib.Path,required=True)
-          parser.add_argument("--max-events",type=int,default=4096)
-          args=parser.parse_args(); stop=False; proc=None; sequence=0; overflow=False; error=None
-          def write(path,value): path.write_text(json.dumps(value,sort_keys=True,indent=2)+"\n")
-          def handle(_signum,_frame):
-              global stop
-              stop=True
-              if proc is not None: proc.terminate()
-          signal.signal(signal.SIGTERM,handle); signal.signal(signal.SIGINT,handle)
-          args.events.parent.mkdir(parents=True,exist_ok=True)
-          try:
-              command=["docker","-H",args.host,"events","--format","{{json .}}","--filter","type=container","--filter","type=image"]
-              proc=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,bufsize=1)
-              time.sleep(0.2)
-              if proc.poll() is not None: raise RuntimeError("docker events exited before readiness")
-              write(args.ready,{"ready_before_candidate":True,"collector_authority":"TRUSTED_HOST_HARNESS"})
-              with args.events.open("w",encoding="utf-8") as stream:
-                  assert proc.stdout is not None
-                  for line in proc.stdout:
-                      if stop: break
-                      line=line.strip()
-                      if not line: continue
-                      sequence+=1
-                      if sequence>args.max_events:
-                          overflow=True; proc.terminate(); break
-                      raw=json.loads(line); actor=raw.get("Actor") or {}; event_id=actor.get("ID") or raw.get("id")
-                      event={"sequence":sequence,"type":raw.get("Type"),"action":raw.get("Action"),"id":event_id,"time_nano":int(raw.get("timeNano") or 0)}
-                      if event["type"]=="container" and event["action"]=="create":
-                          inspected=subprocess.run(["docker","-H",args.host,"inspect",str(event_id)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
-                          if inspected.returncode:
-                              event["inspect"]=None; event["inspect_sha256"]=None; event["inspect_error"]=inspected.stderr.strip() or "inspect failed"
-                          else:
-                              values=json.loads(inspected.stdout); inspect=values[0] if len(values)==1 else None
-                              event["inspect"]=inspect; event["inspect_error"]=None
-                              canonical=(json.dumps(inspect,sort_keys=True,separators=(",",":"))+"\n").encode()
-                              import hashlib
-                              event["inspect_sha256"]=hashlib.sha256(canonical).hexdigest()
-                      stream.write(json.dumps(event,sort_keys=True,separators=(",",":"))+"\n"); stream.flush()
-              if proc.poll() is None: proc.terminate()
-              try: proc.wait(timeout=5)
-              except subprocess.TimeoutExpired: proc.kill(); proc.wait()
-              if not stop and proc.returncode not in (0,-15):
-                  stderr=proc.stderr.read().strip() if proc.stderr else ""
-                  raise RuntimeError(f"docker events failed: {stderr}")
-          except Exception as exc:
-              error=f"{type(exc).__name__}: {exc}"
-          write(args.status,{"collector_authority":"TRUSTED_HOST_HARNESS","complete":error is None and not overflow,"overflow":overflow,"collector_error":error,"event_count":sequence})
-          raise SystemExit(0 if error is None and not overflow else 1)
-          PY
-          nohup python "$RUNNER_TEMP/nested-ledger-collector.py" --host "$NESTED_HOST" --events "$OBSERVATION/nested-events.jsonl" --ready "$OBSERVATION/collector-ready.json" --status "$OBSERVATION/collector-status.json" > "$OBSERVATION/logs/nested-collector.log" 2>&1 &
-          echo $! > "$RUNNER_TEMP/nested-collector.pid"
-          for attempt in $(seq 1 50); do
-            test -s "$OBSERVATION/collector-ready.json" && break
-            test "$attempt" -lt 50
-            sleep 0.1
-          done
-          test "$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["ready_before_candidate"])' "$OBSERVATION/collector-ready.json")" = True
-
-      - name: Start trusted Docker command broker
-        shell: bash
-        run: |
-          set -euo pipefail
-          nohup python "$CONTROLLER_INPUT/trusted-broker-verifier.py" --serve-broker --host "$NESTED_HOST" --socket "$BROKER_SOCKET" --approved "$OBSERVATION/approved-nested-images.json" --events "$OBSERVATION/docker-command-events.jsonl" --ready "$OBSERVATION/broker-ready.json" --status "$OBSERVATION/broker-status.json" --git-image "$GIT_IMAGE" --sandbox-image "$SANDBOX_IMAGE" --canonical-url "https://github.com/litrgratis-pixel/executor-pilot-target.git" --max-events 8192 > "$OBSERVATION/logs/docker-command-broker.log" 2>&1 &
-          echo $! > "$RUNNER_TEMP/docker-command-broker.pid"
-          for attempt in $(seq 1 100); do
-            test -S "$BROKER_SOCKET" && test -s "$OBSERVATION/broker-ready.json" && break
-            test "$attempt" -lt 100
-            sleep 0.1
-          done
-          test "$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["ready_before_candidate"])' "$OBSERVATION/broker-ready.json")" = True
-
-      - name: Build trusted candidate runner image with broker-only Docker client
-        shell: bash
-        run: |
-          set -euo pipefail
-          build_dir="$RUNNER_TEMP/p1-candidate-image"; mkdir -p "$build_dir"
-          cat > "$build_dir/docker" <<'PY'
-          #!/usr/bin/env python3
-          import json,socket,sys
-          socket_path="/broker/docker-command.sock"; payload=json.dumps({"schema_version":1,"argv":sys.argv[1:]},sort_keys=True).encode()
-          client=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM); client.settimeout(250); client.connect(socket_path)
-          client.sendall(len(payload).to_bytes(8,"big")+payload)
-          header=b""
-          while len(header)<8:
-              chunk=client.recv(8-len(header))
-              if not chunk: raise SystemExit("broker response header truncated")
-              header+=chunk
-          size=int.from_bytes(header,"big"); body=b""
-          while len(body)<size:
-              chunk=client.recv(min(65536,size-len(body)))
-              if not chunk: raise SystemExit("broker response body truncated")
-              body+=chunk
-          response=json.loads(body); sys.stdout.write(response.get("stdout", "")); sys.stderr.write(response.get("stderr", "")); raise SystemExit(int(response.get("returncode",125)))
-          PY
-          chmod 0555 "$build_dir/docker"
-          cat > "$build_dir/Dockerfile" <<EOF
-          FROM $SANDBOX_IMAGE
-          USER root
-          COPY docker /usr/local/bin/docker
-          RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates strace && rm -rf /var/lib/apt/lists/* && useradd --uid 1000 --create-home candidate
-          USER candidate
-          WORKDIR /candidate
-          ENV HOME=/home/candidate PYTHONDONTWRITEBYTECODE=1 TMPDIR=/runs/tmp
-          EOF
-          docker build --pull=false --no-cache --tag "$CANDIDATE_IMAGE" "$build_dir" > "$OBSERVATION/logs/build-candidate-image.log" 2>&1
-          docker image inspect "$CANDIDATE_IMAGE" > "$OBSERVATION/inspect/candidate-image.json"
-
-      - name: Run candidate with no network and broker-only Docker authority
-        shell: bash
-        run: |
-          set -euo pipefail
-          run_untrusted() {
-            local name=$1 log=$2 trace=$3 command=$4
-            local container="p1-${name}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-            docker create --name "$container" --network none --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 1g --cpus 2 --user 1000:1000 --tmpfs /tmp:rw,noexec,nosuid,size=256m --tmpfs /home/candidate:rw,nosuid,size=64m --mount "type=volume,src=$SOURCE_VOLUME,dst=/candidate,readonly" --mount "type=volume,src=$RUNS_VOLUME,dst=/runs" --mount "type=volume,src=$PROBE_VOLUME,dst=/trusted-probe,readonly" --mount "type=bind,src=$BROKER_SOCKET,dst=/broker/docker-command.sock,readonly" --env TMPDIR=/runs/tmp --env PYTHONDONTWRITEBYTECODE=1 --env EXECUTOR_COMMIT="$CANDIDATE_SHA" --env EXECUTOR_SANDBOX_IMAGE="$NESTED_SANDBOX_IMAGE_ID" --env PILOT_RUNS_ROOT=/runs "$CANDIDATE_IMAGE" /usr/bin/strace -f -s 4096 -e trace=execve /bin/sh -lc "$command" >/dev/null
-            docker inspect "$container" > "$OBSERVATION/inspect/${name}-container.json"
-            set +e
-            docker start -a "$container" > "$OBSERVATION/logs/$log" 2> "$OBSERVATION/traces/$trace"
-            rc=$?
-            set -e
-            printf '%s\n' "$rc" > "$OBSERVATION/logs/${name}.exit-code"
-            docker rm -f "$container" >/dev/null
-          }
-          if test "$EXECUTION_MODE" = malicious-boundary-probe; then
-            run_untrusted malicious-probe malicious-probe.log malicious-probe.execve 'set +e; mkdir -p /runs/candidate-declared; printf "{\"status\":\"PASS\"}\n" > /runs/candidate-declared/final_gate.json; test -S /var/run/docker.sock && echo visible > /runs/host-socket-visible; python -c "import socket; socket.create_connection((\"p1-dind\",2375),1)" && echo visible > /runs/direct-daemon-visible; docker pull attacker.example/image:latest && echo bypass > /runs/broker-bypass-succeeded; exit 23'
-          else
-            run_untrusted trusted-probes trusted-probes.log trusted-probes.execve 'python /trusted-probe/probe.py'
-            run_untrusted candidate-tests candidate-tests.log candidate-tests.execve 'python -m unittest discover -s tests -v'
-            run_untrusted sandbox sandbox.log sandbox.execve 'RUN_DOCKER_TESTS=1 python -m unittest tests.test_sandbox_integration -v'
-            for n in 001 002 003; do
-              run_untrusted "case-$n" "case-$n.log" "case-$n.execve" "python -m executor.pilot_cli --case $n --runs-root /runs/case-$n --executor-root /candidate --executor-commit $CANDIDATE_SHA --image $NESTED_SANDBOX_IMAGE_ID"
-            done
-          fi
-
-      - name: Stop and seal trusted Docker command broker
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          if test -s "$RUNNER_TEMP/docker-command-broker.pid"; then
-            pid="$(cat "$RUNNER_TEMP/docker-command-broker.pid")"
-            kill -TERM "$pid" 2>/dev/null || true
-            wait "$pid" || true
-          fi
-          python - "$OBSERVATION" <<'PY'
-          import json,pathlib,sys
-          root=pathlib.Path(sys.argv[1])
-          try: status=json.loads((root/"broker-status.json").read_text())
-          except Exception as exc: status={"complete":False,"overflow":False,"broker_error":f"missing broker status: {exc}","event_count":0}
-          events=[]; parse_error=None
-          try:
-              for line in (root/"docker-command-events.jsonl").read_text().splitlines():
-                  if line.strip(): events.append(json.loads(line))
-          except Exception as exc: parse_error=f"broker ledger parse error: {exc}"
-          error=status.get("broker_error") or parse_error
-          ledger={"schema_version":1,"broker_authority":"TRUSTED_HOST_HARNESS","ready_before_candidate":(root/"broker-ready.json").is_file(),"complete":status.get("complete") is True and parse_error is None,"overflow":status.get("overflow") is True,"broker_error":error,"candidate_endpoint":"UNIX_COMMAND_BROKER_ONLY","direct_daemon_endpoint_exposed":False,"events":events}
-          (root/"docker-command-ledger.json").write_text(json.dumps(ledger,sort_keys=True,indent=2)+"\n")
-          PY
-
-      - name: Collect trusted observation outside candidate reach
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker inspect "$DIND_CONTAINER" > "$OBSERVATION/inspect/dind-container.json" 2>/dev/null || true
-          docker logs "$DIND_CONTAINER" > "$OBSERVATION/logs/dind.log" 2>&1 || true
-          docker ps -a --no-trunc > "$OBSERVATION/process-tree.txt"
-          python - "$OBSERVATION" "$INTERNAL_NETWORK" "$EGRESS_NETWORK" <<'PY'
-          import json,pathlib,subprocess,sys
-          root=pathlib.Path(sys.argv[1])
-          def inspect(name):
-              value=subprocess.run(["docker","network","inspect",name],text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-              return json.loads(value.stdout) if value.returncode==0 and value.stdout.strip() else []
-          (root/"network-observation.json").write_text(json.dumps({"schema_version":2,"candidate_network":"internal-only","candidate_network_mode":"none","candidate_docker_endpoint":"TRUSTED_UNIX_COMMAND_BROKER","candidate_direct_daemon_access":False,"broker_socket_mounted":True,"nested_daemon_egress":True,"host_docker_socket_mounted":False,"internal_network":inspect(sys.argv[2]),"egress_network":inspect(sys.argv[3])},sort_keys=True,indent=2)+"\n")
-          PY
-          if test "$EXECUTION_MODE" = verify-candidate; then
-            docker run --rm --mount "type=volume,src=$RUNS_VOLUME,dst=/runs,readonly" --mount "type=bind,src=$OBSERVATION,dst=/observation" --entrypoint /bin/sh "$GIT_IMAGE" -c '
-              set -eu
-              for n in 001 002 003; do
-                repo="$(find "/runs/case-$n" -type d -path "*/acquisition/repository.git" | head -n1)"; test -n "$repo"
-                git --git-dir="$repo" bundle create "/observation/results/case-$n.bundle" --all
-                report="$(find "/runs/case-$n" -name report.json -type f | head -n1)"; test -n "$report"
-                cp "$report" "/observation/results/case-$n-report.json"
-              done
-              acquisition="$(find /runs -path "*/evidence/source_acquisition.json" -type f | head -n1)"
-              manifest="$(find /runs -path "*/evidence/source_manifest.json" -type f | head -n1)"
-              test -n "$acquisition"; test -n "$manifest"
-              cp "$acquisition" /observation/results/source_acquisition.json
-              cp "$manifest" /observation/results/source_manifest.json
-            '
-            printf '%s\n' 'CONTROLLED_ACQUISITION_OBSERVED: PASS' > "$OBSERVATION/logs/acquisition.log"
-            cat "$OBSERVATION"/traces/case-*.execve > "$OBSERVATION/traces/acquisition.execve"
-          else
-            docker run --rm --mount "type=volume,src=$RUNS_VOLUME,dst=/runs,readonly" --mount "type=bind,src=$OBSERVATION,dst=/observation" --entrypoint /bin/sh "$SANDBOX_IMAGE" -c 'cp -a /runs/. /observation/malicious-output/'
-          fi
-
-      - name: Remove residual nested containers while collector is active
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          if test -n "${NESTED_HOST:-}"; then
-            ids="$(docker -H "$NESTED_HOST" ps -aq || true)"
-            test -z "$ids" || docker -H "$NESTED_HOST" rm -f $ids >/dev/null
-            for attempt in $(seq 1 50); do
-              test -z "$(docker -H "$NESTED_HOST" ps -aq || true)" && break
-              test "$attempt" -lt 50
-              sleep 0.1
-            done
-          fi
-
-      - name: Finalize trusted nested operation ledger
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          if test -s "$RUNNER_TEMP/nested-collector.pid"; then
-            pid="$(cat "$RUNNER_TEMP/nested-collector.pid")"
-            kill -TERM "$pid" 2>/dev/null || true
-            wait "$pid" || true
-          fi
-          python - "$OBSERVATION" <<'PY'
-          import hashlib,json,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); approved=root/"approved-nested-images.json"
-          try: status=json.loads((root/"collector-status.json").read_text())
-          except Exception as exc: status={"complete":False,"overflow":False,"collector_error":f"missing collector status: {exc}","event_count":0}
-          events=[]; parse_error=None
-          try:
-              for line in (root/"nested-events.jsonl").read_text().splitlines():
-                  if line.strip(): events.append(json.loads(line))
-          except Exception as exc: parse_error=f"ledger parse error: {exc}"
-          complete=status.get("complete") is True and parse_error is None
-          error=status.get("collector_error") or parse_error
-          ready=False
-          try: ready=json.loads((root/"collector-ready.json").read_text()).get("ready_before_candidate") is True
-          except Exception: pass
-          ledger={"schema_version":1,"collector_authority":"TRUSTED_HOST_HARNESS","ready_before_candidate":ready,"complete":complete,"overflow":status.get("overflow") is True,"collector_error":error,"approved_images_sha256":hashlib.sha256(approved.read_bytes()).hexdigest() if approved.is_file() else None,"events":events}
-          (root/"nested-operation-ledger.json").write_text(json.dumps(ledger,sort_keys=True,indent=2)+"\n")
-          PY
-
-      - name: Seal untrusted execution observation
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - "$OBSERVATION" "$CANDIDATE_SHA" "$EXECUTION_MODE" <<'PY'
-          import hashlib,json,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); candidate_sha=sys.argv[2]; mode=sys.argv[3]
-          inspections=[]
-          for path in sorted((root/"inspect").glob("*-container.json")):
-              try: inspections.extend(json.loads(path.read_text()))
-              except Exception: pass
-          mounts=[]; env_names=set()
-          for item in inspections:
-              for mount in item.get("Mounts",[]): mounts.append({"source":mount.get("Name") or mount.get("Source",""),"destination":mount.get("Destination","")})
-              for entry in item.get("Config",{}).get("Env",[]) or []: env_names.add(entry.split("=",1)[0])
-          def exit_code(name):
-              try: return int((root/"logs"/f"{name}.exit-code").read_text().strip())
-              except Exception: return None
-          cases={}
-          for n in ("001","002","003"):
-              report_path=root/"results"/f"case-{n}-report.json"; bundle=root/"results"/f"case-{n}.bundle"
-              if report_path.exists() and bundle.exists():
-                  report=json.loads(report_path.read_text()); log=f"logs/case-{n}.log"; trace=f"traces/case-{n}.execve"
-                  cases[n]={"exit_code":exit_code(f"case-{n}"),"skipped":"skipped" in (root/log).read_text().lower(),"harness_status":"OBSERVED_COMPLETED","log_path":log,"trace_path":trace,"bundle_path":f"results/case-{n}.bundle","bundle_sha256":hashlib.sha256(bundle.read_bytes()).hexdigest(),"result_commit":report.get("output_commit"),"candidate_status":report.get("status")}
-          declared="ABSENT"; markers=[]
-          declared_path=root/"malicious-output"/"candidate-declared"/"final_gate.json"
-          if declared_path.exists():
-              try: declared=json.loads(declared_path.read_text()).get("status","UNKNOWN")
-              except Exception: declared="UNKNOWN"
-          for marker in ("host-socket-visible","runner-root-visible","direct-daemon-visible","broker-bypass-succeeded"):
-              if (root/"malicious-output"/marker).exists(): markers.append(marker)
-          observation={"schema_version":2,"candidate_sha":candidate_sha,"execution_mode":mode,"observation_authority":"TRUSTED_HOST_HARNESS","candidate_process_domain":"UNTRUSTED_NESTED_CONTAINER","nested_daemon_rootless":(root/"nested-docker-security.json").is_file() and "rootless" in (root/"nested-docker-security.json").read_text(),"host_docker_socket_mounted":any("/var/run/docker.sock" in (m["source"]+"\n"+m["destination"]) for m in mounts),"controller_evidence_visible":any("controller" in (m["source"]+"\n"+m["destination"]) or "evidence" in (m["source"]+"\n"+m["destination"]) for m in mounts),"verifier_bundle_visible":any("p1_verifier" in (m["source"]+"\n"+m["destination"]) or "authoritative-verification" in (m["source"]+"\n"+m["destination"]) for m in mounts),"candidate_direct_egress":False,"candidate_direct_daemon_access":False,"docker_command_broker_authority":"TRUSTED_HOST_HARNESS","nested_daemon_egress":True,"github_token_visible":"GITHUB_TOKEN" in env_names or "GH_TOKEN" in env_names,"secrets_visible":any("SECRET" in name or "TOKEN" in name for name in env_names),"cleanup_confirmed":False,"candidate_tests_authority":"OBSERVATIONAL","trusted_probes_exit_code":exit_code("trusted-probes"),"candidate_tests_exit_code":exit_code("candidate-tests"),"sandbox_exit_code":exit_code("sandbox"),"acquisition_exit_code":0 if (root/"results/source_acquisition.json").is_file() else None,"candidate_environment_names":sorted(env_names),"candidate_mounts":mounts,"candidate_declared_result":declared,"candidate_boundary_markers":markers,"cases":cases}
-          (root/"observation-manifest.json").write_text(json.dumps(observation,sort_keys=True,indent=2)+"\n")
-          PY
-
-      - name: Destroy untrusted authority and confirm cleanup
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker rm -f "$DIND_CONTAINER" >/dev/null 2>&1 || true
-          docker network rm "$INTERNAL_NETWORK" >/dev/null 2>&1 || true
-          docker network rm "$EGRESS_NETWORK" >/dev/null 2>&1 || true
-          docker volume rm "$SOURCE_VOLUME" >/dev/null 2>&1 || true
-          docker volume rm "$RUNS_VOLUME" >/dev/null 2>&1 || true
-          docker volume rm "$PROBE_VOLUME" >/dev/null 2>&1 || true
-          docker volume rm "$DIND_VOLUME" >/dev/null 2>&1 || true
-          docker image rm "$CANDIDATE_IMAGE" >/dev/null 2>&1 || true
-          rm -rf "$BROKER_DIR"
-          remaining="$(docker ps -aq --filter "name=p1-.*-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}")"
-          test -z "$remaining"
-          python - "$OBSERVATION" "$CANDIDATE_SHA" "$EXECUTION_MODE" <<'PY'
-          import json,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); path=root/"observation-manifest.json"
-          if path.is_file(): data=json.loads(path.read_text())
-          else: data={"schema_version":2,"candidate_sha":sys.argv[2],"execution_mode":sys.argv[3],"observation_authority":"TRUSTED_HOST_HARNESS","candidate_process_domain":"UNTRUSTED_NESTED_CONTAINER","candidate_tests_authority":"OBSERVATIONAL","candidate_boundary_markers":["observation-manifest-missing-before-cleanup"],"cases":{}}
-          data["cleanup_confirmed"]=True; path.write_text(json.dumps(data,sort_keys=True,indent=2)+"\n")
-          (root/"cleanup-state.json").write_text(json.dumps({"cleanup_confirmed":True},sort_keys=True,indent=2)+"\n")
-          PY
-
-      - name: Hash trusted observation
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - "$OBSERVATION" <<'PY'
-          import hashlib,json,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); files={}
-          for path in sorted(root.rglob("*")):
-              if path.is_file() and not path.is_symlink() and path.name!="files-sha256.json": files[path.relative_to(root).as_posix()]=hashlib.sha256(path.read_bytes()).hexdigest()
-          (root/"files-sha256.json").write_text(json.dumps({"schema_version":1,"files":files},sort_keys=True,indent=2)+"\n")
-          PY
-
-      - name: Upload UNTRUSTED_EXECUTION_OBSERVATION
-        if: always()
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
-        with:
-          name: UNTRUSTED_EXECUTION_OBSERVATION_${{ github.run_id }}_${{ github.run_attempt }}
-          path: ${{ runner.temp }}/p1-execution-observation
-          if-no-files-found: error
-          retention-days: 30
-
-  trusted-authoritative-verifier:
-    if: ${{ always() && github.event_name == 'workflow_dispatch' }}
-    needs: [trusted-controller, untrusted-candidate-execution]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    env:
-      CANDIDATE_SHA: ${{ needs.trusted-controller.outputs.candidate_sha }}
-      CONTROLLER_INPUT: /tmp/p1-controller-input
-      EXECUTION_INPUT: /tmp/p1-execution-input
-      AUTHORITATIVE: /tmp/p1-authoritative
-      FINAL_ROOT: /tmp/p1-final-artifact
-      FINAL_ARCHIVE: p1-authoritative-${{ github.run_id }}-${{ github.run_attempt }}
-    steps:
-      - name: Checkout trusted verifier from workflow SHA
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ github.workflow_sha }}
-          fetch-depth: 1
-          persist-credentials: false
-          path: trusted
-
-      - name: Download trusted controller artifact
-        continue-on-error: true
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: P1_TRUSTED_CONTROLLER_${{ github.run_id }}_${{ github.run_attempt }}
-          path: ${{ runner.temp }}/p1-controller-input
-
-      - name: Download execution observation
-        continue-on-error: true
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: UNTRUSTED_EXECUTION_OBSERVATION_${{ github.run_id }}_${{ github.run_attempt }}
-          path: ${{ runner.temp }}/p1-execution-input
-
-      - name: Checkout candidate independently without executing it
-        if: ${{ needs.trusted-controller.result == 'success' }}
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ needs.trusted-controller.outputs.candidate_sha }}
-          fetch-depth: 2
-          persist-credentials: false
-          path: verifier-candidate
-
-      - name: Checkout independent CASE-001 source anchor
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          repository: litrgratis-pixel/executor-pilot-target
-          ref: 3934a94a5eebf750079200589d6dc40e024d44a0
-          fetch-depth: 1
-          persist-credentials: false
-          path: source-anchors/case-001
-
-      - name: Checkout independent CASE-002 source anchor
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          repository: litrgratis-pixel/executor-pilot-target
-          ref: c3683bf37ad6a3f1d49c0ca05ebdd41627e9a5be
-          fetch-depth: 1
-          persist-credentials: false
-          path: source-anchors/case-002
-
-      - name: Checkout independent CASE-003 source anchor
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          repository: litrgratis-pixel/executor-pilot-target
-          ref: c42bead2bbbff9c84486f17637ec80f35eeffa25
-          fetch-depth: 1
-          persist-credentials: false
-          path: source-anchors/case-003
-
-      - name: Set up trusted Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: '3.11'
-
-      - name: Run trusted verifier
-        continue-on-error: true
+      - name: Prove expected red result
         shell: bash
         run: |
           set -uo pipefail
-          mkdir -p "$AUTHORITATIVE" "$FINAL_ROOT"
-          python trusted/tools/p1_verifier/verify_candidate.py --acceptance-manifest trusted/tools/p1_verifier/acceptance_manifest.json --controller-dir "$CONTROLLER_INPUT" --execution-dir "$EXECUTION_INPUT" --candidate-dir verifier-candidate --source-anchor-root source-anchors --output-dir "$AUTHORITATIVE" > "$AUTHORITATIVE/verifier-stdout.json" 2> "$AUTHORITATIVE/verifier-stderr.txt"
-          printf '%s\n' "$?" > "$AUTHORITATIVE/verifier-exit-code.txt"
-          exit 0
+          python -m compileall -q tests/test_p1_verifier.py
+          set +e
+          python -m unittest \
+            tests.test_p1_verifier.DockerCommandBrokerTests.test_classifier_rejects_root_writable_and_extra_runtime_authority \
+            tests.test_p1_verifier.DockerCommandBrokerTests.test_version_only_broker_ledger_cannot_preserve_authoritative_pass \
+            tests.test_p1_verifier.DockerCommandBrokerTests.test_network_fetch_cannot_trust_candidate_writable_git_configuration \
+            -v |& tee /tmp/red-tests.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          test "$rc" -ne 0
+          grep -F 'authority downgrade was accepted' /tmp/red-tests.log
+          grep -F 'version-only broker ledger cannot prove' /tmp/red-tests.log
+          grep -F 'candidate-writable' /tmp/red-tests.log
 
-      - name: Enforce trusted Docker command broker gate
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -uo pipefail
-          python trusted/tests/test_p1_verifier.py --verify-broker --execution-dir "$EXECUTION_INPUT" --gate "$AUTHORITATIVE/authoritative-final-gate.json" --output "$AUTHORITATIVE/docker-command-broker-verification.json" > "$AUTHORITATIVE/broker-verifier-stdout.json" 2> "$AUTHORITATIVE/broker-verifier-stderr.txt"
-          printf '%s\n' "$?" > "$AUTHORITATIVE/broker-verifier-exit-code.txt"
-          python - "$AUTHORITATIVE" <<'PY'
-          import hashlib,json,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); gate=root/"authoritative-final-gate.json"
-          files={"authoritative-final-gate.json":hashlib.sha256(gate.read_bytes()).hexdigest()}
-          extra=root/"docker-command-broker-verification.json"
-          if extra.is_file(): files[extra.name]=hashlib.sha256(extra.read_bytes()).hexdigest()
-          (root/"authoritative-files-sha256.json").write_text(json.dumps({"schema_version":1,"files":files},sort_keys=True,indent=2)+"\n")
-          PY
-          exit 0
-
-      - name: Build authoritative evidence artifact
-        if: always()
-        shell: bash
-        env:
-          CONTROLLER_RESULT: ${{ needs.trusted-controller.result }}
-          EXECUTION_RESULT: ${{ needs.untrusted-candidate-execution.result }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$FINAL_ROOT/controller" "$FINAL_ROOT/execution-observation" "$FINAL_ROOT/authoritative-verification"
-          test ! -d "$CONTROLLER_INPUT" || cp -a "$CONTROLLER_INPUT/." "$FINAL_ROOT/controller/"
-          test ! -d "$EXECUTION_INPUT" || cp -a "$EXECUTION_INPUT/." "$FINAL_ROOT/execution-observation/"
-          test ! -d "$AUTHORITATIVE" || cp -a "$AUTHORITATIVE/." "$FINAL_ROOT/authoritative-verification/"
-          python - "$FINAL_ROOT" "$CANDIDATE_SHA" "${{ github.workflow_sha }}" "$CONTROLLER_RESULT" "$EXECUTION_RESULT" <<'PY'
-          import hashlib,json,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); candidate_sha,workflow_sha,controller_result,execution_result=sys.argv[2:]
-          def digest(path): return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
-          gate=root/"authoritative-verification"/"authoritative-final-gate.json"
-          gate_data=json.loads(gate.read_text()) if gate.is_file() else {"authoritative_result":"FAIL","candidate_declared_result":"UNKNOWN"}
-          manifest={"schema_version":3,"controller_manifest_sha256":digest(root/"controller"/"controller-manifest.json"),"execution_observation_sha256":digest(root/"execution-observation"/"observation-manifest.json"),"nested_operation_ledger_sha256":digest(root/"execution-observation"/"nested-operation-ledger.json"),"docker_command_ledger_sha256":digest(root/"execution-observation"/"docker-command-ledger.json"),"trusted_verifier_sha256":digest(pathlib.Path("trusted/tools/p1_verifier/verify_candidate.py")),"trusted_broker_verifier_sha256":digest(pathlib.Path("trusted/tests/test_p1_verifier.py")),"candidate_sha":candidate_sha or None,"workflow_sha":workflow_sha,"controller_job_result":controller_result,"execution_job_result":execution_result,"authoritative_result":gate_data.get("authoritative_result","FAIL"),"candidate_declared_result":gate_data.get("candidate_declared_result","UNKNOWN"),"candidate_declared_result_authority":"IGNORED_FOR_AUTHORITY"}
-          (root/"final-manifest.json").write_text(json.dumps(manifest,sort_keys=True,indent=2)+"\n")
-          files={}
-          for path in sorted(root.rglob("*")):
-              if path.is_file() and not path.is_symlink() and path.name!="final-files-sha256.json": files[path.relative_to(root).as_posix()]=hashlib.sha256(path.read_bytes()).hexdigest()
-          (root/"final-files-sha256.json").write_text(json.dumps({"schema_version":1,"files":files},sort_keys=True,indent=2)+"\n")
-          PY
-          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - -C "$FINAL_ROOT" . | gzip -n > "$RUNNER_TEMP/$FINAL_ARCHIVE.tar.gz"
-          gzip -t "$RUNNER_TEMP/$FINAL_ARCHIVE.tar.gz"
-          sha256sum "$RUNNER_TEMP/$FINAL_ARCHIVE.tar.gz" > "$RUNNER_TEMP/$FINAL_ARCHIVE.tar.gz.sha256"
-
-      - name: Upload authoritative final artifact
-        if: always()
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
-        with:
-          name: P1_AUTHORITATIVE_EVIDENCE_${{ github.run_id }}_${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/${{ env.FINAL_ARCHIVE }}.tar.gz
-            ${{ runner.temp }}/${{ env.FINAL_ARCHIVE }}.tar.gz.sha256
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Enforce authoritative result
-        if: always()
+      - name: Create test-only commit and publish object
         shell: bash
         run: |
           set -euo pipefail
-          python - "$AUTHORITATIVE/authoritative-final-gate.json" <<'PY'
-          import json,pathlib,sys
-          path=pathlib.Path(sys.argv[1])
-          if not path.is_file(): raise SystemExit("authoritative final gate missing")
-          data=json.loads(path.read_text())
-          if data.get("authoritative_result")!="PASS": raise SystemExit("authoritative result is not PASS")
-          if data.get("candidate_declared_result_authority")!="IGNORED_FOR_AUTHORITY": raise SystemExit("candidate declaration gained authority")
-          broker=data.get("docker_command_broker_summary") or {}
-          if broker.get("verified") is not True: raise SystemExit("trusted Docker command broker evidence is not verified")
-          PY
+          git config user.name 'Executor adversarial reviewer'
+          git config user.email 'executor-adversarial-review@users.noreply.github.com'
+          blob="$(git hash-object -w tests/test_p1_verifier.py)"
+          printf 'RED_TEST_BLOB %s\n' "$blob"
+          git add tests/test_p1_verifier.py
+          git commit -m 'Add adversarial broker false-success tests'
+          commit="$(git rev-parse HEAD)"
+          printf 'RED_TEST_COMMIT %s\n' "$commit"
+          git push origin HEAD:refs/heads/agent/pr32-adversarial-red-staging
