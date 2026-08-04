@@ -1,0 +1,90 @@
+name: PR32 ledger red-test helper
+
+on:
+  push:
+    branches:
+      - agent/pr32-ledger-red-test-helper
+
+permissions:
+  contents: write
+
+jobs:
+  apply-red-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR32 branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: agent/manual-exact-ref-verification
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Add ledger provenance red test
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = c39140ab3bdb184cab32e7cd925fbf1c485e6d07
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("tests/test_p1_verifier.py")
+          source = path.read_text(encoding="utf-8")
+          method_name = "test_missing_trusted_nested_operation_ledger_is_rejected"
+          if method_name in source:
+              raise SystemExit(f"{method_name} already exists")
+          anchor = '\n\nif __name__ == "__main__":\n'
+          if source.count(anchor) != 1:
+              raise SystemExit("unique unittest main anchor not found")
+          method = '''
+
+    def test_missing_trusted_nested_operation_ledger_is_rejected(self):
+        """Plausible text evidence cannot replace daemon-owned operation provenance."""
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = VerifierFixture(Path(temporary))
+            self.assertFalse(
+                (fixture.execution / "nested-operation-ledger.json").exists()
+            )
+            report = verify(
+                acceptance_path=fixture.acceptance,
+                controller_dir=fixture.controller,
+                execution_dir=fixture.execution,
+                candidate_dir=fixture.candidate,
+                source_anchor_root=fixture.source_anchors,
+                output_dir=fixture.output,
+            )
+        self.assertEqual(report["authoritative_result"], "FAIL", report)
+        self.assertTrue(
+            any(
+                "nested operation ledger" in error.lower()
+                for error in report["errors"]
+            ),
+            report["errors"],
+        )
+'''
+          path.write_text(source.replace(anchor, method + anchor), encoding="utf-8")
+          PY
+          test "$(git diff --name-only)" = tests/test_p1_verifier.py
+          python -m compileall -q tests/test_p1_verifier.py
+
+          set +e
+          python -m unittest \
+            tests.test_p1_verifier.AuthoritativeVerifierTests.test_missing_trusted_nested_operation_ledger_is_rejected \
+            > /tmp/pr32-ledger-red.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/pr32-ledger-red.log
+          test "$rc" -ne 0
+          grep -F "FAILED" /tmp/pr32-ledger-red.log
+
+      - name: Commit only the red test
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff --name-only)" = tests/test_p1_verifier.py
+          git config user.name "Executor PR32 red-test helper"
+          git config user.email "executor-pr32-helper@users.noreply.github.com"
+          git add -- tests/test_p1_verifier.py
+          test "$(git diff --cached --name-only)" = tests/test_p1_verifier.py
+          git commit -m "Add red nested daemon provenance test"
+          git push origin HEAD:agent/manual-exact-ref-verification
