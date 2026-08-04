@@ -1,0 +1,222 @@
+name: PR32 runtime compatibility patcher
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-pr32:
+    if: ${{ github.event.pull_request.number == 37 && github.head_ref == 'agent/pr32-ledger-fix-trigger' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact PR32 candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: litrgratis-pixel/Executor
+          ref: agent/manual-exact-ref-verification
+          fetch-depth: 2
+          persist-credentials: true
+
+      - name: Apply minimal runtime compatibility correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "64241419d8bc0bde1f9920edfb88128f49d9a71f"
+          python - <<'PY'
+          from pathlib import Path
+
+          verifier_path = Path("tools/p1_verifier/verify_candidate.py")
+          verifier = verifier_path.read_text(encoding="utf-8")
+
+          marker = '''def _verify_nested_operation_ledger(
+          '''
+          helper = '''def _extract_pinned_fetch_commit(command: Sequence[str]) -> str | None:
+              matches: list[str] = []
+              for item in command:
+                  match = re.fullmatch(r"\\+([0-9a-f]{40}):refs/executor/input", str(item))
+                  if match:
+                      matches.append(match.group(1))
+              return matches[0] if len(matches) == 1 else None
+
+
+          def _allowed_nested_mount_source(
+              source: object, *, acceptance: Mapping[str, Any]
+          ) -> bool:
+              if not isinstance(source, str):
+                  return False
+              allowed_sources = acceptance.get("allowed_nested_mount_sources")
+              if not isinstance(allowed_sources, list) or not all(
+                  isinstance(item, str) for item in allowed_sources
+              ):
+                  raise VerificationError("allowed_nested_mount_sources must be a string list")
+              if any(
+                  source == prefix or source.startswith(prefix.rstrip("/") + "/")
+                  for prefix in allowed_sources
+              ):
+                  return True
+
+              root = acceptance.get("broker_owned_volume_source_root")
+              name_prefix = acceptance.get("broker_owned_volume_name_prefix")
+              if not isinstance(root, str) or not isinstance(name_prefix, str):
+                  return False
+              try:
+                  relative = Path(source).relative_to(Path(root))
+              except ValueError:
+                  return False
+              parts = relative.parts
+              return (
+                  len(parts) == 2
+                  and parts[0].startswith(name_prefix)
+                  and parts[0] != name_prefix
+                  and parts[1] == "_data"
+              )
+
+
+          def _verify_nested_operation_ledger(
+          '''
+          if verifier.count(marker) != 1:
+              raise SystemExit("verifier insertion marker mismatch")
+          verifier = verifier.replace(marker, helper, 1)
+
+          old_mount = '''            if not isinstance(source, str) or not any(
+                          source == prefix or source.startswith(prefix.rstrip("/") + "/")
+                          for prefix in allowed_sources
+                      ):
+                          errors.append(f"nested container {container_id} mount source is outside isolated roots: {source!r}")
+          '''
+          new_mount = '''            if not _allowed_nested_mount_source(source, acceptance=acceptance):
+                          errors.append(f"nested container {container_id} mount source is outside isolated roots: {source!r}")
+          '''
+          if verifier.count(old_mount) != 1:
+              raise SystemExit("verifier mount block mismatch")
+          verifier = verifier.replace(old_mount, new_mount, 1)
+
+          old_commit = '''        commit_args = [item for item in command if SHA1_RE.fullmatch(item)]
+                  if len(commit_args) != 1:
+                      errors.append("network-enabled acquisition command does not bind exactly one full commit")
+                  else:
+                      observed_commits.append(commit_args[0])
+          '''
+          new_commit = '''        observed_commit = _extract_pinned_fetch_commit(command)
+                  if observed_commit is None:
+                      errors.append("network-enabled acquisition command does not bind exactly one pinned fetch refspec")
+                  else:
+                      observed_commits.append(observed_commit)
+          '''
+          if verifier.count(old_commit) != 1:
+              raise SystemExit("verifier commit block mismatch")
+          verifier = verifier.replace(old_commit, new_commit, 1)
+          verifier_path.write_text(verifier, encoding="utf-8")
+
+          manifest_path = Path("tools/p1_verifier/acceptance_manifest.json")
+          manifest = manifest_path.read_text(encoding="utf-8")
+          manifest_marker = '''  "approved_nested_images": [
+          '''
+          manifest_insert = '''  "broker_owned_volume_name_prefix": "p1-acq-",
+            "broker_owned_volume_source_root": "/home/rootless/.local/share/docker/volumes",
+            "approved_nested_images": [
+          '''
+          if manifest.count(manifest_marker) != 1:
+              raise SystemExit("acceptance manifest marker mismatch")
+          manifest = manifest.replace(manifest_marker, manifest_insert, 1)
+          manifest_path.write_text(manifest, encoding="utf-8")
+
+          tests_path = Path("tests/test_p1_verifier.py")
+          tests = tests_path.read_text(encoding="utf-8")
+          import_marker = "import hashlib\n"
+          if tests.count(import_marker) != 1:
+              raise SystemExit("test import marker mismatch")
+          tests = tests.replace(import_marker, "import hashlib\nimport importlib.util\n", 1)
+
+          test_marker = '''    def test_version_only_broker_ledger_cannot_preserve_authoritative_pass(self):
+          '''
+          new_test = '''    def test_authoritative_verifier_accepts_only_exact_broker_volume_and_refspec(self):
+              verifier_path = ROOT / "tools/p1_verifier/verify_candidate.py"
+              spec = importlib.util.spec_from_file_location("p1_authoritative_verifier_test", verifier_path)
+              self.assertIsNotNone(spec)
+              self.assertIsNotNone(spec.loader if spec else None)
+              module = importlib.util.module_from_spec(spec)
+              assert spec is not None and spec.loader is not None
+              sys.modules[spec.name] = module
+              spec.loader.exec_module(module)
+
+              acceptance = {
+                  "allowed_nested_mount_sources": ["/candidate", "/runs"],
+                  "broker_owned_volume_source_root": "/home/rootless/.local/share/docker/volumes",
+                  "broker_owned_volume_name_prefix": "p1-acq-",
+              }
+              self.assertTrue(
+                  module._allowed_nested_mount_source(
+                      "/home/rootless/.local/share/docker/volumes/p1-acq-0123456789abcdef/_data",
+                      acceptance=acceptance,
+                  )
+              )
+              self.assertFalse(
+                  module._allowed_nested_mount_source(
+                      "/home/rootless/.local/share/docker/volumes/attacker/_data",
+                      acceptance=acceptance,
+                  )
+              )
+              self.assertFalse(
+                  module._allowed_nested_mount_source(
+                      "/home/rootless/.local/share/docker/volumes/p1-acq-0123456789abcdef/other",
+                      acceptance=acceptance,
+                  )
+              )
+              commit = "1" * 40
+              self.assertEqual(
+                  module._extract_pinned_fetch_commit(
+                      ["fetch", f"+{commit}:refs/executor/input"]
+                  ),
+                  commit,
+              )
+              self.assertIsNone(
+                  module._extract_pinned_fetch_commit(
+                      ["fetch", f"+{commit}:refs/heads/main"]
+                  )
+              )
+
+              manifest = json.loads(
+                  (ROOT / "tools/p1_verifier/acceptance_manifest.json").read_text(encoding="utf-8")
+              )
+              self.assertEqual(
+                  manifest["broker_owned_volume_name_prefix"], "p1-acq-"
+              )
+              self.assertEqual(
+                  manifest["broker_owned_volume_source_root"],
+                  "/home/rootless/.local/share/docker/volumes",
+              )
+
+              sys.modules.pop(spec.name, None)
+
+              
+              
+              
+          ''' + test_marker
+          if tests.count(test_marker) != 1:
+              raise SystemExit("test insertion marker mismatch")
+          tests = tests.replace(test_marker, new_test, 1)
+          tests_path.write_text(tests, encoding="utf-8")
+          PY
+
+      - name: Validate exact patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff --name-only | LC_ALL=C sort)" = $'tests/test_p1_verifier.py\ntools/p1_verifier/acceptance_manifest.json\ntools/p1_verifier/verify_candidate.py'
+          git diff --check
+          python -m compileall -q tools/p1_verifier tests/test_p1_verifier.py
+          python -m unittest discover -s tests -v
+
+      - name: Commit to PR32 branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/test_p1_verifier.py tools/p1_verifier/acceptance_manifest.json tools/p1_verifier/verify_candidate.py
+          git commit -m "Bind broker acquisition to trusted volume and refspec"
+          git push origin HEAD:agent/manual-exact-ref-verification
