@@ -119,7 +119,7 @@ jobs:
           tests_path.write_text(tests, encoding='utf-8')
           PY
 
-      - name: Replay exact security contract
+      - name: Validate targeted security correction
         shell: bash
         run: |
           set -euo pipefail
@@ -127,9 +127,8 @@ jobs:
           git diff --check
           python -m compileall -q tools/p1_verifier tests/test_p1_verifier.py
           python -m unittest tests.test_p1_verifier -v
-          python -m unittest discover -s tests -v
 
-      - name: Commit exact correction to PR32
+      - name: Commit locally and replay clean repository
         shell: bash
         run: |
           set -euo pipefail
@@ -137,4 +136,13 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add tests/test_p1_verifier.py tools/p1_verifier/verify_candidate.py
           git commit -m "Verify exact pinned acquisition refspec"
+          test -z "$(git status --porcelain --untracked-files=all)"
+          test "$(git rev-parse HEAD^)" = "0414afb49395913d6d6dfaccb50376e57fee2776"
+          python -m compileall -q .
+          python -m unittest discover -s tests -v
+
+      - name: Push validated correction to PR32
+        shell: bash
+        run: |
+          set -euo pipefail
           git push origin HEAD:agent/manual-exact-ref-verification
