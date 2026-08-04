@@ -16,17 +16,17 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           repository: litrgratis-pixel/Executor
-          ref: 6108683578c47a4547f1460ef48ed4f21405bfbb
+          ref: e54ebdc44c60f76d95b844d0811c009e8916ba44
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify exact identity and scope
+      - name: Verify exact identity and latest scope
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "6108683578c47a4547f1460ef48ed4f21405bfbb"
-          test "$(git rev-parse HEAD^)" = "0414afb49395913d6d6dfaccb50376e57fee2776"
-          test "$(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)" = $'tests/test_p1_verifier.py\ntools/p1_verifier/verify_candidate.py'
+          test "$(git rev-parse HEAD)" = "e54ebdc44c60f76d95b844d0811c009e8916ba44"
+          test "$(git rev-parse HEAD^)" = "6108683578c47a4547f1460ef48ed4f21405bfbb"
+          test "$(git diff --name-only HEAD^ HEAD)" = "tools/p1_verifier/acceptance_manifest.json"
           git diff --check HEAD^ HEAD
 
       - name: Replay repository tests
@@ -93,6 +93,12 @@ jobs:
           assert planned is True and planned_class == 'broker-owned-acquisition', reason
 
           manifest = json.loads(Path('tools/p1_verifier/acceptance_manifest.json').read_text())
+          expected_rule = (
+              'Acquisition is trusted only when the state required for later verification '
+              'cannot be modified by the candidate; use of the correct source alone is insufficient.'
+          )
+          assert manifest['acquisition_trust_boundary_rule'] == expected_rule
+
           git_image = manifest['network_acquisition_image']
           pattern = manifest['trusted_broker_volume_name_pattern']
           valid_volume = {
