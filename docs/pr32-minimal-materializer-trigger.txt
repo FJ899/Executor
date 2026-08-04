@@ -1,2 +1,2 @@
 Temporary CI-only trigger for PR #37. Never merge.
-Pinned-refspec patcher attempt: 2
+Pinned-refspec patcher synchronize: 3
