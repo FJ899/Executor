@@ -17,7 +17,7 @@ jobs:
         with:
           repository: litrgratis-pixel/Executor
           ref: agent/manual-exact-ref-verification
-          fetch-depth: 2
+          fetch-depth: 0
           persist-credentials: true
 
       - name: Correct exact pinned fetch refspec verification
@@ -138,6 +138,7 @@ jobs:
           git commit -m "Verify exact pinned acquisition refspec"
           test -z "$(git status --porcelain --untracked-files=all)"
           test "$(git rev-parse HEAD^)" = "0414afb49395913d6d6dfaccb50376e57fee2776"
+          git cat-file -e 757e78a06f08fbfd050f765ea65113c3b995cd04^{commit}
           python -m compileall -q .
           python -m unittest discover -s tests -v
 
