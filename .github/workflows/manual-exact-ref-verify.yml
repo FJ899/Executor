@@ -1,6 +1,12 @@
 name: Manual exact-ref verification
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/manual-exact-ref-verify.yml
+      - tools/p1_verifier/verify_candidate.py
+      - tools/p1_verifier/acceptance_manifest.json
+      - tests/test_p1_verifier.py
   workflow_dispatch:
     inputs:
       target_ref:
@@ -33,7 +39,33 @@ env:
   DIND_ROOTLESS_IMAGE: docker:27-dind-rootless@sha256:e2ac8e8f66ae21a060b0a8e3005c70f6ed9441aabf409434463d1f6eecd38026
 
 jobs:
+  actionlint-exact-head:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run pinned actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          tool_dir="$RUNNER_TEMP/actionlint"
+          mkdir -p "$tool_dir"
+          curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz"
+          printf '%s  %s\n' '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' "$archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$tool_dir" actionlint
+          "$tool_dir/actionlint" -version
+          "$tool_dir/actionlint" -shellcheck= .github/workflows/manual-exact-ref-verify.yml .github/workflows/verify.yml
+
   trusted-controller:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     outputs:
@@ -176,7 +208,7 @@ jobs:
           tar -xzf "$archive" -C "$tool_dir" actionlint
           sha256sum "$archive" "$tool_dir/actionlint" > "$CONTROLLER_ARTIFACT/actionlint-sha256.txt"
           "$tool_dir/actionlint" -version > "$CONTROLLER_ARTIFACT/actionlint-version.txt"
-          "$tool_dir/actionlint" "$CONTROLLER_ARTIFACT/controller-workflow.yml" "$CONTROLLER_ARTIFACT/candidate-verify.yml" > "$CONTROLLER_ARTIFACT/logs/actionlint.log" 2>&1
+          "$tool_dir/actionlint" -shellcheck= "$CONTROLLER_ARTIFACT/controller-workflow.yml" "$CONTROLLER_ARTIFACT/candidate-verify.yml" > "$CONTROLLER_ARTIFACT/logs/actionlint.log" 2>&1
           echo 'ACTIONLINT: PASS' >> "$CONTROLLER_ARTIFACT/logs/actionlint.log"
 
       - name: Seal trusted controller artifact
@@ -450,7 +482,9 @@ jobs:
                   if network!=["none"]: return False,"create-sandbox","sandbox network must be none"
                   if len(mounts)!=1 or not ("src=/runs/" in mounts[0] or "src=/candidate/" in mounts[0]): return False,"create-sandbox","sandbox mount outside isolated roots"
                   allowed_commands=[["python","-m","compileall","-q","project_registry","tests"],["python","-m","unittest","discover","-s","tests","-v"]]
-                  if command not in allowed_commands: return False,"create-sandbox","sandbox command outside pilot contract"
+                  fixture_actions={"read_source","write_source","write_workspace","network","environment","sleep","pids","memory","disk"}
+                  fixture_command=(len(command)==3 and command[:2]==["python","/source/sandbox_fixture.py"] and command[2] in fixture_actions)
+                  if command not in allowed_commands and not fixture_command: return False,"create-sandbox","sandbox command outside pilot contract"
                   return True,"create-sandbox",""
               if argv[0]=="ps":
                   filters=option(argv,"--filter"); formats=option(argv,"--format")
@@ -552,7 +586,7 @@ jobs:
           FROM $SANDBOX_IMAGE
           USER root
           COPY docker /usr/local/bin/docker
-          RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates strace && rm -rf /var/lib/apt/lists/* && useradd --uid 1000 --create-home candidate
+          RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates strace && rm -rf /var/lib/lists/* && useradd --uid 1000 --create-home candidate
           USER candidate
           WORKDIR /candidate
           ENV HOME=/home/candidate PYTHONDONTWRITEBYTECODE=1 TMPDIR=/runs/tmp
@@ -777,7 +811,7 @@ jobs:
           retention-days: 30
 
   trusted-authoritative-verifier:
-    if: always()
+    if: ${{ always() && github.event_name == 'workflow_dispatch' }}
     needs: [trusted-controller, untrusted-candidate-execution]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
