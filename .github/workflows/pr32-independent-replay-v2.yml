@@ -1,0 +1,186 @@
+name: PR32 independent replay v2
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    if: ${{ github.event.pull_request.number == 37 && github.head_ref == 'agent/pr32-ledger-fix-trigger' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact PR32 rework tree
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: litrgratis-pixel/Executor
+          ref: 0414afb49395913d6d6dfaccb50376e57fee2776
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Replay all broker regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q tools/p1_verifier tests/test_p1_verifier.py
+          python -m unittest tests.test_p1_verifier -v
+
+      - name: Independently reject supplementary root group
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from tests import test_p1_verifier as broker
+
+          image = 'sha256:' + '2' * 64
+          argv = [
+              'create', '--name', 'cos-executor-adversarial',
+              '--network', 'none', '--read-only',
+              '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+              '--pids-limit', '16', '--memory', '64m', '--cpus', '1.0',
+              '--user', '65534:65534', '--group-add', '0',
+              '--env', 'HOME=/nonexistent', '--workdir', '/source',
+              '--mount',
+              'type=bind,src=/candidate/case-001/tests/fixtures/sandbox,dst=/source,readonly',
+              '--tmpfs', '/workspace:rw,nosuid,nodev,size=8m,mode=1777',
+              '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777',
+              image, 'python', '/source/sandbox_fixture.py', 'read_source',
+          ]
+          allowed, command_class, reason = broker.classify_broker_argv(
+              argv,
+              git_image='git-image',
+              sandbox_image_id=image,
+              canonical_url=broker.CANONICAL_URL,
+              created=set(),
+          )
+          assert allowed is False, (allowed, command_class, reason)
+          print('P1-001 REPLAY: PASS')
+          PY
+
+      - name: Independently require successful CASE responses
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import tempfile
+          from pathlib import Path
+          from tests import test_p1_verifier as broker
+
+          sandbox_id = 'sha256:' + '2' * 64
+          events = []
+          sequence = 0
+
+          def pair(request_id, argv, command_class, case_id):
+              global sequence
+              argv_hash = broker._sha256_bytes(broker._canonical_bytes(argv))
+              sequence += 1
+              events.append({
+                  'sequence': sequence, 'phase': 'request',
+                  'request_id': request_id, 'argv': argv,
+                  'argv_sha256': argv_hash, 'decision': 'ALLOW',
+                  'command_class': command_class, 'reason': '',
+                  'case_id': case_id,
+              })
+              sequence += 1
+              events.append({
+                  'sequence': sequence, 'phase': 'response',
+                  'request_id': request_id,
+                  'request_argv_sha256': argv_hash,
+                  'returncode': 125,
+                  'stdout_sha256': broker._sha256_text(''),
+                  'stderr_sha256': broker._sha256_text('failed'),
+                  'duration_seconds': 0.01,
+                  'inspection': None, 'inspection_sha256': None,
+              })
+
+          suite = broker.AdversarialReplayRegressionTests()
+          for case_id in ('001', '002', '003'):
+              pair(
+                  f'acquisition-{case_id}',
+                  suite._network_argv(case_id),
+                  'broker-owned-acquisition', case_id,
+              )
+              pair(
+                  f'sandbox-{case_id}',
+                  suite._sandbox_argv(case_id),
+                  'create-sandbox', case_id,
+              )
+
+          with tempfile.TemporaryDirectory() as temporary:
+              root = Path(temporary)
+              broker._write_json(root / 'docker-command-ledger.json', {
+                  'schema_version': 1,
+                  'broker_authority': broker.BROKER_AUTHORITY,
+                  'ready_before_candidate': True,
+                  'complete': True,
+                  'overflow': False,
+                  'broker_error': None,
+                  'candidate_endpoint': broker.BROKER_ENDPOINT,
+                  'direct_daemon_endpoint_exposed': False,
+                  'events': events,
+              })
+              broker._write_json(root / 'approved-nested-images.json', {
+                  'images': {broker.SANDBOX_IMAGE_REF: {'id': sandbox_id}},
+              })
+              gate_path = root / 'authoritative-final-gate.json'
+              broker._write_json(gate_path, {
+                  'schema_version': 2,
+                  'authoritative_result': 'PASS',
+                  'errors': [], 'warnings': [],
+              })
+              gate = broker.apply_broker_gate(
+                  execution_dir=root,
+                  gate_path=gate_path,
+                  output_path=root / 'broker-verification.json',
+              )
+              assert gate['authoritative_result'] == 'FAIL', gate
+              assert any('returncode' in item.lower() for item in gate['errors'])
+              print('P1-006 REPLAY: PASS')
+          PY
+
+      - name: Independently verify exact broker volume contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import importlib.util
+          import json
+          import sys
+          from pathlib import Path
+
+          spec = importlib.util.spec_from_file_location(
+              'verifier', Path('tools/p1_verifier/verify_candidate.py')
+          )
+          module = importlib.util.module_from_spec(spec)
+          sys.modules[spec.name] = module
+          spec.loader.exec_module(module)
+          manifest = json.loads(
+              Path('tools/p1_verifier/acceptance_manifest.json').read_text()
+          )
+          git_image = manifest['network_acquisition_image']
+          pattern = manifest['trusted_broker_volume_name_pattern']
+          valid = {
+              'Type': 'volume',
+              'Name': 'p1-acq-' + 'a' * 24,
+              'Source': '/rootless/docker/volumes/internal/_data',
+              'Destination': '/trusted',
+              'RW': True,
+          }
+          assert module._trusted_nested_mount_allowed(
+              valid,
+              allowed_bind_sources=manifest['allowed_nested_mount_sources'],
+              trusted_volume_pattern=pattern,
+              image_ref=git_image,
+              acquisition_image=git_image,
+          )
+          assert not module._trusted_nested_mount_allowed(
+              dict(valid, Name='candidate-volume'),
+              allowed_bind_sources=manifest['allowed_nested_mount_sources'],
+              trusted_volume_pattern=pattern,
+              image_ref=git_image,
+              acquisition_image=git_image,
+          )
+          print('P1-005 STORAGE CONTRACT REPLAY: PASS')
+          PY
