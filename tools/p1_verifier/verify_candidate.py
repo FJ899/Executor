@@ -324,6 +324,36 @@ def _normalized_command(inspect: Mapping[str, Any]) -> list[str]:
     return result
 
 
+
+def _trusted_nested_mount_allowed(
+    mount: Mapping[str, Any],
+    *,
+    allowed_bind_sources: Sequence[str],
+    trusted_volume_pattern: str,
+    image_ref: object,
+    acquisition_image: object,
+) -> bool:
+    mount_type = mount.get("Type")
+    destination = mount.get("Destination")
+    if not isinstance(destination, str) or not destination.startswith("/"):
+        return False
+    if mount_type == "bind":
+        source = mount.get("Source")
+        return isinstance(source, str) and any(
+            source == prefix or source.startswith(prefix.rstrip("/") + "/")
+            for prefix in allowed_bind_sources
+        )
+    if mount_type == "volume":
+        name = mount.get("Name")
+        return (
+            isinstance(name, str)
+            and re.fullmatch(trusted_volume_pattern, name) is not None
+            and destination == "/trusted"
+            and image_ref == acquisition_image
+        )
+    return False
+
+
 def _verify_nested_operation_ledger(
     *,
     execution_dir: Path,
@@ -443,6 +473,13 @@ def _verify_nested_operation_ledger(
     allowed_sources = acceptance.get("allowed_nested_mount_sources")
     if not isinstance(allowed_sources, list) or not all(isinstance(item, str) for item in allowed_sources):
         raise VerificationError("allowed_nested_mount_sources must be a string list")
+    trusted_volume_pattern = acceptance.get("trusted_broker_volume_name_pattern")
+    if not isinstance(trusted_volume_pattern, str):
+        raise VerificationError("trusted_broker_volume_name_pattern must be a string")
+    try:
+        re.compile(trusted_volume_pattern)
+    except re.error as exc:
+        raise VerificationError(f"trusted broker volume pattern is invalid: {exc}") from None
 
     for container_id, container_events in sorted(by_container.items()):
         actions = [str(item.get("action")) for item in container_events]
@@ -512,15 +549,16 @@ def _verify_nested_operation_ledger(
             if not isinstance(mount, dict):
                 errors.append(f"nested container {container_id} mount is not an object")
                 continue
-            source = mount.get("Source")
-            destination = mount.get("Destination")
-            if not isinstance(source, str) or not any(
-                source == prefix or source.startswith(prefix.rstrip("/") + "/")
-                for prefix in allowed_sources
+            if not _trusted_nested_mount_allowed(
+                mount,
+                allowed_bind_sources=allowed_sources,
+                trusted_volume_pattern=trusted_volume_pattern,
+                image_ref=image_ref,
+                acquisition_image=acceptance.get("network_acquisition_image"),
             ):
-                errors.append(f"nested container {container_id} mount source is outside isolated roots: {source!r}")
-            if not isinstance(destination, str) or not destination.startswith("/"):
-                errors.append(f"nested container {container_id} mount destination is invalid")
+                errors.append(
+                    f"nested container {container_id} mount violates trusted storage contract: {mount!r}"
+                )
 
         network_mode = host.get("NetworkMode")
         command = _normalized_command(inspect)

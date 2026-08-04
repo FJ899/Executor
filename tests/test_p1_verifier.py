@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -125,6 +126,30 @@ def _option_count(argv: list[str], name: str) -> int:
 
 def _has_exact_flag(argv: list[str], name: str) -> bool:
     return argv.count(name) == 1 and not any(item.startswith(name + "=") for item in argv)
+
+
+def _exact_option_grammar(
+    argv: list[str], *, flags: set[str], value_options: set[str]
+) -> tuple[bool, str]:
+    if not argv:
+        return False, "empty Docker command"
+    index = 1
+    while index < len(argv):
+        token = argv[index]
+        if token in flags:
+            index += 1
+            continue
+        if token in value_options:
+            if index + 1 >= len(argv):
+                return False, f"missing value for {token}"
+            index += 2
+            continue
+        if any(token.startswith(name + "=") for name in value_options):
+            index += 1
+            continue
+        return False, f"unapproved Docker option or positional token before image: {token}"
+    return True, ""
+
 
 def _case_id_from_argv(argv: list[str]) -> str | None:
     for item in argv:
@@ -383,6 +408,28 @@ def _baseline_classify_broker_argv(
 def _strict_runtime_controls(argv: list[str], *, command: str) -> tuple[bool, str]:
     if command not in {"run-git", "create-sandbox"}:
         return True, ""
+    if command == "run-git":
+        grammar_ok, grammar_reason = _exact_option_grammar(
+            argv,
+            flags={"--rm", "--read-only"},
+            value_options={
+                "--platform", "--network", "--cap-drop", "--security-opt",
+                "--pids-limit", "--memory", "--cpus", "--user", "--tmpfs",
+                "--workdir", "--mount", "--entrypoint",
+            },
+        )
+    else:
+        grammar_ok, grammar_reason = _exact_option_grammar(
+            argv,
+            flags={"--read-only"},
+            value_options={
+                "--name", "--network", "--cap-drop", "--security-opt",
+                "--pids-limit", "--memory", "--cpus", "--user", "--env",
+                "--workdir", "--mount", "--tmpfs",
+            },
+        )
+    if not grammar_ok:
+        return False, grammar_reason
     if not _has_exact_flag(argv, "--read-only"):
         return False, "read-only rootfs flag is missing, duplicated or contradicted"
     if _option_count(argv, "--runtime"):
@@ -526,6 +573,7 @@ def _container_security_summary(inspect: dict[str, Any]) -> dict[str, Any]:
         "readonly_rootfs": host.get("ReadonlyRootfs"),
         "tmpfs": host.get("Tmpfs") or {},
         "runtime": host.get("Runtime") or "",
+        "group_add": host.get("GroupAdd") or [],
         "network_mode": host.get("NetworkMode"),
         "mounts": [
             {
@@ -878,6 +926,8 @@ def _verify_inspection(
         errors.append(f"{label} user identity mismatch")
     if inspection.get("readonly_rootfs") is not True:
         errors.append(f"{label} root filesystem is writable")
+    if inspection.get("group_add") not in (None, []):
+        errors.append(f"{label} has unapproved supplementary groups")
     tmpfs = inspection.get("tmpfs")
     if not isinstance(tmpfs, dict) or "/tmp" not in tmpfs:
         errors.append(f"{label} tmpfs evidence is incomplete")
@@ -946,9 +996,6 @@ def verify_broker_evidence(execution_dir: Path) -> dict[str, Any]:
                 )
                 if not valid:
                     errors.append(f"broker-owned acquisition request is invalid: {reason}")
-                case_id = event.get("case_id") or _case_id_from_argv(argv)
-                if case_id in CASE_IDS:
-                    acquisition_cases.add(case_id)
             else:
                 allowed, expected_class, reason = classify_broker_argv(
                     argv,
@@ -961,10 +1008,6 @@ def verify_broker_evidence(execution_dir: Path) -> dict[str, Any]:
                     errors.append(f"broker ledger contains command outside exact grammar: {reason}")
                 if command_class != expected_class:
                     errors.append("broker command class mismatch")
-                if command_class == "create-sandbox":
-                    case_id = event.get("case_id") or _case_id_from_argv(argv)
-                    if case_id in CASE_IDS:
-                        sandbox_cases.add(case_id)
         elif event.get("phase") == "response":
             if request_id in responses:
                 errors.append("broker response identity is duplicated")
@@ -973,8 +1016,16 @@ def verify_broker_evidence(execution_dir: Path) -> dict[str, Any]:
             if request is not None:
                 if event.get("request_argv_sha256") != request.get("argv_sha256"):
                     errors.append("broker response is not bound to its request")
-                if event.get("returncode") == 0:
-                    command_class = request.get("command_class")
+                command_class = request.get("command_class")
+                returncode = event.get("returncode")
+                if not isinstance(returncode, int):
+                    errors.append("broker response returncode is missing or invalid")
+                elif command_class in {"create-sandbox", "broker-owned-acquisition"} and returncode != 0:
+                    errors.append(
+                        f"required CASE operation {command_class} returned nonzero returncode {returncode}"
+                    )
+                if returncode == 0:
+                    case_id = request.get("case_id") or _case_id_from_argv(request.get("argv") or [])
                     if command_class == "create-sandbox":
                         _verify_inspection(
                             event.get("inspection"),
@@ -982,6 +1033,8 @@ def verify_broker_evidence(execution_dir: Path) -> dict[str, Any]:
                             errors=errors,
                             label="sandbox",
                         )
+                        if case_id in CASE_IDS:
+                            sandbox_cases.add(case_id)
                         names = _option(request.get("argv") or [], "--name")
                         if len(names) == 1:
                             created.add(names[0])
@@ -992,6 +1045,8 @@ def verify_broker_evidence(execution_dir: Path) -> dict[str, Any]:
                             errors=errors,
                             label="network acquisition",
                         )
+                        if case_id in CASE_IDS:
+                            acquisition_cases.add(case_id)
                     elif command_class == "remove-container":
                         argv = request.get("argv") or []
                         if argv:
@@ -1212,6 +1267,171 @@ class AdversarialBrokerRegressionTests(unittest.TestCase):
                 any("execution transcript" in error.lower() for error in gate["errors"]),
                 gate["errors"],
             )
+
+
+class AdversarialReplayRegressionTests(unittest.TestCase):
+    def _sandbox_argv(self, case_id: str = "001") -> list[str]:
+        image = "sha256:" + "2" * 64
+        return [
+            "create", "--name", f"cos-executor-{case_id}",
+            "--network", "none", "--read-only",
+            "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+            "--pids-limit", "16", "--memory", "64m", "--cpus", "1.0",
+            "--user", "65534:65534", "--env", "HOME=/nonexistent",
+            "--workdir", "/source", "--mount",
+            f"type=bind,src=/candidate/case-{case_id}/tests/fixtures/sandbox,dst=/source,readonly",
+            "--tmpfs", "/workspace:rw,nosuid,nodev,size=8m,mode=1777",
+            "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777",
+            image, "python", "/source/sandbox_fixture.py", "read_source",
+        ]
+
+    def _network_argv(self, case_id: str) -> list[str]:
+        commit = {"001": "1", "002": "2", "003": "3"}[case_id] * 40
+        argv = AdversarialBrokerRegressionTests()._network_git_argv()
+        argv = [
+            item.replace("/runs/case-001/", f"/runs/case-{case_id}/")
+            for item in argv
+        ]
+        argv[argv.index("git-image")] = GIT_IMAGE_REF
+        argv[-1] = f"+{commit}:refs/executor/input"
+        return argv
+
+    def test_rejects_unapproved_supplementary_root_group(self):
+        argv = self._sandbox_argv()
+        image_index = argv.index("sha256:" + "2" * 64)
+        argv[image_index:image_index] = ["--group-add", "0"]
+        allowed, _, reason = classify_broker_argv(
+            argv,
+            git_image="git-image",
+            sandbox_image_id="sha256:" + "2" * 64,
+            canonical_url=CANONICAL_URL,
+            created=set(),
+        )
+        self.assertFalse(allowed, f"supplementary root group accepted: {reason}")
+
+    def test_failed_required_case_operations_force_authoritative_fail(self):
+        events: list[dict[str, Any]] = []
+        sequence = 0
+
+        def pair(request_id: str, argv: list[str], command_class: str, case_id: str) -> None:
+            nonlocal sequence
+            argv_hash = _sha256_bytes(_canonical_bytes(argv))
+            sequence += 1
+            events.append({
+                "sequence": sequence,
+                "phase": "request",
+                "request_id": request_id,
+                "argv": argv,
+                "argv_sha256": argv_hash,
+                "decision": "ALLOW",
+                "command_class": command_class,
+                "reason": "",
+                "case_id": case_id,
+            })
+            sequence += 1
+            events.append({
+                "sequence": sequence,
+                "phase": "response",
+                "request_id": request_id,
+                "request_argv_sha256": argv_hash,
+                "returncode": 125,
+                "stdout_sha256": _sha256_text(""),
+                "stderr_sha256": _sha256_text("failed"),
+                "duration_seconds": 0.01,
+                "inspection": None,
+                "inspection_sha256": None,
+            })
+
+        for case_id in ("001", "002", "003"):
+            pair(
+                f"acquisition-{case_id}",
+                self._network_argv(case_id),
+                "broker-owned-acquisition",
+                case_id,
+            )
+            pair(
+                f"sandbox-{case_id}",
+                self._sandbox_argv(case_id),
+                "create-sandbox",
+                case_id,
+            )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _write_json(root / "docker-command-ledger.json", {
+                "schema_version": 1,
+                "broker_authority": BROKER_AUTHORITY,
+                "ready_before_candidate": True,
+                "complete": True,
+                "overflow": False,
+                "broker_error": None,
+                "candidate_endpoint": BROKER_ENDPOINT,
+                "direct_daemon_endpoint_exposed": False,
+                "events": events,
+            })
+            _write_json(root / "approved-nested-images.json", {
+                "images": {SANDBOX_IMAGE_REF: {"id": "sha256:" + "2" * 64}},
+            })
+            gate_path = root / "authoritative-final-gate.json"
+            _write_json(gate_path, {
+                "schema_version": 2,
+                "authoritative_result": "PASS",
+                "errors": [],
+                "warnings": [],
+            })
+            gate = apply_broker_gate(
+                execution_dir=root,
+                gate_path=gate_path,
+                output_path=root / "broker-verification.json",
+            )
+            self.assertEqual(gate["authoritative_result"], "FAIL", gate)
+            self.assertTrue(
+                any("returncode" in error.lower() for error in gate["errors"]),
+                gate["errors"],
+            )
+
+    def test_verifier_accepts_only_exact_broker_owned_volume_contract(self):
+        spec = importlib.util.spec_from_file_location(
+            "p1_authoritative_verifier",
+            ROOT / "tools/p1_verifier/verify_candidate.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        pattern = r"^p1-acq-[0-9a-f]{24}$"
+        valid = {
+            "Type": "volume",
+            "Name": "p1-acq-" + "a" * 24,
+            "Source": "/rootless/docker/volumes/internal/_data",
+            "Destination": "/trusted",
+            "RW": True,
+        }
+        self.assertTrue(module._trusted_nested_mount_allowed(
+            valid,
+            allowed_bind_sources=["/candidate", "/runs"],
+            trusted_volume_pattern=pattern,
+            image_ref=GIT_IMAGE_REF,
+            acquisition_image=GIT_IMAGE_REF,
+        ))
+        wrong_name = dict(valid, Name="candidate-volume")
+        self.assertFalse(module._trusted_nested_mount_allowed(
+            wrong_name,
+            allowed_bind_sources=["/candidate", "/runs"],
+            trusted_volume_pattern=pattern,
+            image_ref=GIT_IMAGE_REF,
+            acquisition_image=GIT_IMAGE_REF,
+        ))
+        wrong_image = dict(valid)
+        self.assertFalse(module._trusted_nested_mount_allowed(
+            wrong_image,
+            allowed_bind_sources=["/candidate", "/runs"],
+            trusted_volume_pattern=pattern,
+            image_ref=SANDBOX_IMAGE_REF,
+            acquisition_image=GIT_IMAGE_REF,
+        ))
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()

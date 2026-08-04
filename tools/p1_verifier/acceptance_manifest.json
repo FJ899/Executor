@@ -117,5 +117,6 @@
   "required_parent_sha": "bf18638caeb1a01cd2e14e625d72a20893a04bb3",
   "schema_version": 2,
   "source_repository": "litrgratis-pixel/executor-pilot-target",
-  "status": "TRUSTED / MAIN-OWNED"
+  "status": "TRUSTED / MAIN-OWNED",
+  "trusted_broker_volume_name_pattern": "^p1-acq-[0-9a-f]{24}$"
 }
