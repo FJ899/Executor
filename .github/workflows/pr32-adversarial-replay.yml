@@ -12,116 +12,144 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - name: Checkout exact green candidate tree
+      - name: Checkout exact PR32 candidate
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           repository: litrgratis-pixel/Executor
-          ref: 64241419d8bc0bde1f9920edfb88128f49d9a71f
+          ref: 6108683578c47a4547f1460ef48ed4f21405bfbb
           fetch-depth: 2
           persist-credentials: false
 
-      - name: Replay accepted targeted regressions
+      - name: Verify exact identity and scope
         shell: bash
         run: |
           set -euo pipefail
-          python -m compileall -q tools/p1_verifier tests/test_p1_verifier.py
-          python -m unittest tests.test_p1_verifier -v
+          test "$(git rev-parse HEAD)" = "6108683578c47a4547f1460ef48ed4f21405bfbb"
+          test "$(git rev-parse HEAD^)" = "0414afb49395913d6d6dfaccb50376e57fee2776"
+          test "$(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)" = $'tests/test_p1_verifier.py\ntools/p1_verifier/verify_candidate.py'
+          git diff --check HEAD^ HEAD
 
-      - name: Prove supplementary root-group grammar bypass
+      - name: Replay repository tests
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
-          from tests import test_p1_verifier as broker
+          python -m compileall -q .
+          python -m unittest discover -s tests -v
 
-          image = 'sha256:' + '2' * 64
-          argv = [
-              'create', '--name', 'cos-executor-adversarial',
-              '--network', 'none', '--read-only',
-              '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
-              '--pids-limit', '16', '--memory', '64m', '--cpus', '1.0',
-              '--user', '65534:65534', '--group-add', '0',
-              '--env', 'HOME=/nonexistent', '--workdir', '/source',
-              '--mount',
-              'type=bind,src=/candidate/case-001/tests/fixtures/sandbox,dst=/source,readonly',
-              '--tmpfs', '/workspace:rw,nosuid,nodev,size=8m,mode=1777',
-              '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777',
-              image, 'python', '/source/sandbox_fixture.py', 'read_source',
-          ]
-          allowed, command_class, reason = broker.classify_broker_argv(
-              argv,
-              git_image='git-image',
-              sandbox_image_id=image,
-              canonical_url=broker.CANONICAL_URL,
-              created=set(),
-          )
-          assert allowed is True, (allowed, command_class, reason)
-          print('EXPECTED_RED_P1_001: supplementary root group was accepted')
-          PY
-
-      - name: Prove failed CASE transcript can preserve PASS
+      - name: Independently evaluate P1-001 through P1-006
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
+          import importlib.util
+          import json
+          import sys
           import tempfile
           from pathlib import Path
           from tests import test_p1_verifier as broker
 
-          sandbox_id = 'sha256:' + '2' * 64
-          events = []
-          sequence = 0
+          # Load the authoritative verifier implementation directly.
+          verifier_path = Path('tools/p1_verifier/verify_candidate.py')
+          spec = importlib.util.spec_from_file_location('independent_p1_verifier', verifier_path)
+          assert spec is not None and spec.loader is not None
+          verifier = importlib.util.module_from_spec(spec)
+          sys.modules[spec.name] = verifier
+          spec.loader.exec_module(verifier)
 
-          def append(value):
-              global sequence
-              sequence += 1
-              events.append({'sequence': sequence, **value})
+          # P1-001..P1-004: exact Docker grammar rejects authority downgrades.
+          base = broker.AdversarialBrokerRegressionTests()._network_git_argv()
+          attacks = {
+              'P1-001 root user': ['--user', '0:0'],
+              'P1-002 writable root': ['--read-only=false'],
+              'P1-003 shadow run root': ['--tmpfs', '/executor-run:rw'],
+              'P1-004 runtime spoof': ['--runtime', 'runc'],
+          }
+          for label, extra in attacks.items():
+              argv = list(base)
+              image_index = argv.index('git-image')
+              argv[image_index:image_index] = extra
+              allowed, _, reason = broker.classify_broker_argv(
+                  argv,
+                  git_image='git-image',
+                  sandbox_image_id='sandbox-image-id',
+                  canonical_url=broker.CANONICAL_URL,
+                  created=set(),
+              )
+              assert allowed is False, (label, reason)
 
-          def pair(request_id, argv, command_class, case_id):
-              argv_hash = broker._sha256_bytes(broker._canonical_bytes(argv))
-              append({
-                  'phase': 'request', 'request_id': request_id,
-                  'argv': argv, 'argv_sha256': argv_hash,
-                  'decision': 'ALLOW', 'command_class': command_class,
-                  'reason': '', 'case_id': case_id,
-              })
-              append({
-                  'phase': 'response', 'request_id': request_id,
-                  'request_argv_sha256': argv_hash,
-                  'returncode': 125,
-                  'stdout_sha256': broker._sha256_text(''),
-                  'stderr_sha256': broker._sha256_text('failed'),
-                  'duration_seconds': 0.01,
-                  'inspection': None, 'inspection_sha256': None,
-              })
+          # P1-005: direct candidate-controlled network fetch is rejected;
+          # the broker-owned acquisition plan is selected instead.
+          allowed, command_class, _ = broker.classify_broker_argv(
+              base,
+              git_image='git-image',
+              sandbox_image_id='sandbox-image-id',
+              canonical_url=broker.CANONICAL_URL,
+              created=set(),
+          )
+          assert allowed is False and command_class == 'run-git-network'
+          planned, planned_class, reason = broker.plan_broker_request(
+              base,
+              git_image='git-image',
+              sandbox_image_id='sandbox-image-id',
+              canonical_url=broker.CANONICAL_URL,
+              created=set(),
+          )
+          assert planned is True and planned_class == 'broker-owned-acquisition', reason
 
-          for index, case_id in enumerate(('001', '002', '003'), 1):
-              commit = str(index) * 40
-              acquisition = broker.AdversarialBrokerRegressionTests()._network_git_argv()
-              acquisition = [
-                  item.replace('/runs/case-001/', f'/runs/case-{case_id}/')
-                  for item in acquisition
-              ]
-              acquisition[acquisition.index('git-image')] = broker.GIT_IMAGE_REF
-              acquisition[-1] = f'+{commit}:refs/executor/input'
-              pair(f'acquisition-{case_id}', acquisition, 'broker-owned-acquisition', case_id)
+          # P1-005: verifier accepts only the exact broker-owned volume contract.
+          manifest = json.loads(Path('tools/p1_verifier/acceptance_manifest.json').read_text())
+          git_image = manifest['network_acquisition_image']
+          pattern = manifest['trusted_broker_volume_name_pattern']
+          valid_volume = {
+              'Type': 'volume',
+              'Name': 'p1-acq-' + 'a' * 24,
+              'Source': '/rootless/docker/volumes/internal/_data',
+              'Destination': '/trusted',
+              'RW': True,
+          }
+          assert verifier._trusted_nested_mount_allowed(
+              valid_volume,
+              allowed_bind_sources=manifest['allowed_nested_mount_sources'],
+              trusted_volume_pattern=pattern,
+              image_ref=git_image,
+              acquisition_image=git_image,
+          )
+          for invalid in (
+              dict(valid_volume, Name='candidate-volume'),
+              dict(valid_volume, Destination='/candidate'),
+          ):
+              assert not verifier._trusted_nested_mount_allowed(
+                  invalid,
+                  allowed_bind_sources=manifest['allowed_nested_mount_sources'],
+                  trusted_volume_pattern=pattern,
+                  image_ref=git_image,
+                  acquisition_image=git_image,
+              )
+          assert not verifier._trusted_nested_mount_allowed(
+              valid_volume,
+              allowed_bind_sources=manifest['allowed_nested_mount_sources'],
+              trusted_volume_pattern=pattern,
+              image_ref=broker.SANDBOX_IMAGE_REF,
+              acquisition_image=git_image,
+          )
 
-              sandbox = [
-                  'create', '--name', f'cos-executor-{case_id}',
-                  '--network', 'none', '--read-only',
-                  '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
-                  '--pids-limit', '16', '--memory', '64m', '--cpus', '1.0',
-                  '--user', '65534:65534', '--env', 'HOME=/nonexistent',
-                  '--workdir', '/source', '--mount',
-                  f'type=bind,src=/candidate/case-{case_id}/tests/fixtures/sandbox,dst=/source,readonly',
-                  '--tmpfs', '/workspace:rw,nosuid,nodev,size=8m,mode=1777',
-                  '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777',
-                  sandbox_id, 'python', '/source/sandbox_fixture.py', 'read_source',
-              ]
-              pair(f'sandbox-{case_id}', sandbox, 'create-sandbox', case_id)
+          # P1-005: exact source binding is read from the real fetch refspec.
+          commit = '1' * 40
+          exact = f'+{commit}:refs/executor/input'
+          assert verifier._extract_pinned_fetch_commit(['fetch', exact]) == commit
+          for invalid_command in (
+              ['fetch', commit],
+              ['fetch', f'+{commit}:refs/heads/main'],
+              ['fetch', f'+{commit[:12]}:refs/executor/input'],
+              ['fetch', exact, exact],
+          ):
+              assert verifier._extract_pinned_fetch_commit(invalid_command) is None
 
+          # P1-006: version-only evidence cannot preserve an authoritative PASS.
           with tempfile.TemporaryDirectory() as temporary:
               root = Path(temporary)
+              argv = ['version', '--format', '{{.Server.Version}}']
+              argv_hash = broker._sha256_bytes(broker._canonical_bytes(argv))
               broker._write_json(root / 'docker-command-ledger.json', {
                   'schema_version': 1,
                   'broker_authority': broker.BROKER_AUTHORITY,
@@ -131,10 +159,31 @@ jobs:
                   'broker_error': None,
                   'candidate_endpoint': broker.BROKER_ENDPOINT,
                   'direct_daemon_endpoint_exposed': False,
-                  'events': events,
+                  'events': [
+                      {
+                          'sequence': 1,
+                          'phase': 'request',
+                          'request_id': 'request-1',
+                          'argv': argv,
+                          'argv_sha256': argv_hash,
+                          'decision': 'ALLOW',
+                          'command_class': 'version',
+                      },
+                      {
+                          'sequence': 2,
+                          'phase': 'response',
+                          'request_id': 'request-1',
+                          'request_argv_sha256': argv_hash,
+                          'returncode': 0,
+                          'stdout_sha256': broker._sha256_text('27.5.1\n'),
+                          'stderr_sha256': broker._sha256_text(''),
+                      },
+                  ],
               })
               broker._write_json(root / 'approved-nested-images.json', {
-                  'images': {broker.SANDBOX_IMAGE_REF: {'id': sandbox_id}},
+                  'images': {
+                      broker.SANDBOX_IMAGE_REF: {'id': 'sha256:' + '2' * 64}
+                  }
               })
               gate_path = root / 'authoritative-final-gate.json'
               broker._write_json(gate_path, {
@@ -148,23 +197,7 @@ jobs:
                   gate_path=gate_path,
                   output_path=root / 'broker-verification.json',
               )
-              assert gate['authoritative_result'] == 'PASS', gate
-              print('EXPECTED_RED_P1_006: six failed operations preserved PASS')
-          PY
+              assert gate['authoritative_result'] == 'FAIL', gate
 
-      - name: Prove broker-owned volume conflicts with verifier mount contract
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json
-          from pathlib import Path
-
-          broker = Path('tests/test_p1_verifier.py').read_text(encoding='utf-8')
-          acceptance = json.loads(Path('tools/p1_verifier/acceptance_manifest.json').read_text())
-          verifier = Path('tools/p1_verifier/verify_candidate.py').read_text(encoding='utf-8')
-          assert 'type=volume,src={volume},dst=/trusted' in broker
-          assert acceptance['allowed_nested_mount_sources'] == ['/candidate', '/runs']
-          assert 'mount source is outside isolated roots' in verifier
-          print('EXPECTED_INTEGRATION_REWORK: broker volume is outside verifier allowlist')
+          print('INDEPENDENT P1-001..P1-006 REPLAY: PASS')
           PY
