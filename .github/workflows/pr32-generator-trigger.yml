@@ -46,7 +46,7 @@ jobs:
           encoded = ''.join(character for character in matches[0] if character in alphabet)
           payload = base64.b64decode(encoded, validate=True)
           actual = hashlib.sha256(payload).hexdigest()
-          expected = '072633b3525a04953770c6b082e1039e2751d0409a60ce5090f21a2d4a3c2bc9'
+          expected = '5abc8ff306f94c4ccbe439fa4610007e97c0bb76dfd4291eb8debc5a49bfe223'
           if actual != expected:
               raise SystemExit(f'PATCH_B64 SHA-256 mismatch: {actual}')
           Path('/tmp/patch_pr32.py').write_bytes(payload)
