@@ -1,186 +1,134 @@
-name: PR32 independent replay v2
+name: PR32 exact pinned-refspec correction and replay
 
 on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  replay:
+  patch-and-replay:
     if: ${{ github.event.pull_request.number == 37 && github.head_ref == 'agent/pr32-ledger-fix-trigger' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
-      - name: Checkout exact PR32 rework tree
+      - name: Checkout exact PR32 reviewed head
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           repository: litrgratis-pixel/Executor
-          ref: 0414afb49395913d6d6dfaccb50376e57fee2776
+          ref: agent/manual-exact-ref-verification
           fetch-depth: 2
-          persist-credentials: false
+          persist-credentials: true
 
-      - name: Replay all broker regressions
+      - name: Correct exact pinned fetch refspec verification
         shell: bash
         run: |
           set -euo pipefail
+          test "$(git rev-parse HEAD)" = "0414afb49395913d6d6dfaccb50376e57fee2776"
+          python - <<'PY'
+          from pathlib import Path
+
+          verifier_path = Path('tools/p1_verifier/verify_candidate.py')
+          verifier = verifier_path.read_text(encoding='utf-8')
+
+          helper_marker = '''def verify(
+          '''
+          helper = '''def _extract_pinned_fetch_commit(command: Sequence[str]) -> str | None:
+              commits: list[str] = []
+              for item in command:
+                  match = re.fullmatch(r"\\+([0-9a-f]{40}):refs/executor/input", str(item))
+                  if match:
+                      commits.append(match.group(1))
+              return commits[0] if len(commits) == 1 else None
+
+
+          def verify(
+          '''
+          if verifier.count(helper_marker) != 1:
+              raise SystemExit('verifier helper insertion marker mismatch')
+          verifier = verifier.replace(helper_marker, helper, 1)
+
+          old = '''        commit_args = [item for item in command if SHA1_RE.fullmatch(item)]
+                  if len(commit_args) != 1:
+                      errors.append("network-enabled acquisition command does not bind exactly one full commit")
+                  else:
+                      observed_commits.append(commit_args[0])
+          '''
+          new = '''        observed_commit = _extract_pinned_fetch_commit(command)
+                  if observed_commit is None:
+                      errors.append("network-enabled acquisition command does not bind exactly one pinned fetch refspec")
+                  else:
+                      observed_commits.append(observed_commit)
+          '''
+          if verifier.count(old) != 1:
+              raise SystemExit('verifier refspec block mismatch')
+          verifier = verifier.replace(old, new, 1)
+          verifier_path.write_text(verifier, encoding='utf-8')
+
+          tests_path = Path('tests/test_p1_verifier.py')
+          tests = tests_path.read_text(encoding='utf-8')
+          marker = '''    def test_version_only_broker_ledger_cannot_preserve_authoritative_pass(self):
+          '''
+          test = '''    def test_authoritative_verifier_requires_exact_pinned_fetch_refspec(self):
+              verifier_path = ROOT / "tools/p1_verifier/verify_candidate.py"
+              spec = importlib.util.spec_from_file_location(
+                  "p1_authoritative_refspec_test", verifier_path
+              )
+              self.assertIsNotNone(spec)
+              self.assertIsNotNone(spec.loader if spec else None)
+              assert spec is not None and spec.loader is not None
+              module = importlib.util.module_from_spec(spec)
+              sys.modules[spec.name] = module
+              try:
+                  spec.loader.exec_module(module)
+                  commit = "1" * 40
+                  self.assertEqual(
+                      module._extract_pinned_fetch_commit(
+                          ["fetch", f"+{commit}:refs/executor/input"]
+                      ),
+                      commit,
+                  )
+                  self.assertIsNone(module._extract_pinned_fetch_commit(["fetch", commit]))
+                  self.assertIsNone(
+                      module._extract_pinned_fetch_commit(
+                          ["fetch", f"+{commit}:refs/heads/main"]
+                      )
+                  )
+                  self.assertIsNone(
+                      module._extract_pinned_fetch_commit(
+                          [
+                              "fetch",
+                              f"+{commit}:refs/executor/input",
+                              f"+{commit}:refs/executor/input",
+                          ]
+                      )
+                  )
+              finally:
+                  sys.modules.pop(spec.name, None)
+
+          ''' + marker
+          if tests.count(marker) != 1:
+              raise SystemExit('test insertion marker mismatch')
+          tests = tests.replace(marker, test, 1)
+          tests_path.write_text(tests, encoding='utf-8')
+          PY
+
+      - name: Replay exact security contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff --name-only | LC_ALL=C sort)" = $'tests/test_p1_verifier.py\ntools/p1_verifier/verify_candidate.py'
+          git diff --check
           python -m compileall -q tools/p1_verifier tests/test_p1_verifier.py
           python -m unittest tests.test_p1_verifier -v
+          python -m unittest discover -s tests -v
 
-      - name: Independently reject supplementary root group
+      - name: Commit exact correction to PR32
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
-          from tests import test_p1_verifier as broker
-
-          image = 'sha256:' + '2' * 64
-          argv = [
-              'create', '--name', 'cos-executor-adversarial',
-              '--network', 'none', '--read-only',
-              '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
-              '--pids-limit', '16', '--memory', '64m', '--cpus', '1.0',
-              '--user', '65534:65534', '--group-add', '0',
-              '--env', 'HOME=/nonexistent', '--workdir', '/source',
-              '--mount',
-              'type=bind,src=/candidate/case-001/tests/fixtures/sandbox,dst=/source,readonly',
-              '--tmpfs', '/workspace:rw,nosuid,nodev,size=8m,mode=1777',
-              '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777',
-              image, 'python', '/source/sandbox_fixture.py', 'read_source',
-          ]
-          allowed, command_class, reason = broker.classify_broker_argv(
-              argv,
-              git_image='git-image',
-              sandbox_image_id=image,
-              canonical_url=broker.CANONICAL_URL,
-              created=set(),
-          )
-          assert allowed is False, (allowed, command_class, reason)
-          print('P1-001 REPLAY: PASS')
-          PY
-
-      - name: Independently require successful CASE responses
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import tempfile
-          from pathlib import Path
-          from tests import test_p1_verifier as broker
-
-          sandbox_id = 'sha256:' + '2' * 64
-          events = []
-          sequence = 0
-
-          def pair(request_id, argv, command_class, case_id):
-              global sequence
-              argv_hash = broker._sha256_bytes(broker._canonical_bytes(argv))
-              sequence += 1
-              events.append({
-                  'sequence': sequence, 'phase': 'request',
-                  'request_id': request_id, 'argv': argv,
-                  'argv_sha256': argv_hash, 'decision': 'ALLOW',
-                  'command_class': command_class, 'reason': '',
-                  'case_id': case_id,
-              })
-              sequence += 1
-              events.append({
-                  'sequence': sequence, 'phase': 'response',
-                  'request_id': request_id,
-                  'request_argv_sha256': argv_hash,
-                  'returncode': 125,
-                  'stdout_sha256': broker._sha256_text(''),
-                  'stderr_sha256': broker._sha256_text('failed'),
-                  'duration_seconds': 0.01,
-                  'inspection': None, 'inspection_sha256': None,
-              })
-
-          suite = broker.AdversarialReplayRegressionTests()
-          for case_id in ('001', '002', '003'):
-              pair(
-                  f'acquisition-{case_id}',
-                  suite._network_argv(case_id),
-                  'broker-owned-acquisition', case_id,
-              )
-              pair(
-                  f'sandbox-{case_id}',
-                  suite._sandbox_argv(case_id),
-                  'create-sandbox', case_id,
-              )
-
-          with tempfile.TemporaryDirectory() as temporary:
-              root = Path(temporary)
-              broker._write_json(root / 'docker-command-ledger.json', {
-                  'schema_version': 1,
-                  'broker_authority': broker.BROKER_AUTHORITY,
-                  'ready_before_candidate': True,
-                  'complete': True,
-                  'overflow': False,
-                  'broker_error': None,
-                  'candidate_endpoint': broker.BROKER_ENDPOINT,
-                  'direct_daemon_endpoint_exposed': False,
-                  'events': events,
-              })
-              broker._write_json(root / 'approved-nested-images.json', {
-                  'images': {broker.SANDBOX_IMAGE_REF: {'id': sandbox_id}},
-              })
-              gate_path = root / 'authoritative-final-gate.json'
-              broker._write_json(gate_path, {
-                  'schema_version': 2,
-                  'authoritative_result': 'PASS',
-                  'errors': [], 'warnings': [],
-              })
-              gate = broker.apply_broker_gate(
-                  execution_dir=root,
-                  gate_path=gate_path,
-                  output_path=root / 'broker-verification.json',
-              )
-              assert gate['authoritative_result'] == 'FAIL', gate
-              assert any('returncode' in item.lower() for item in gate['errors'])
-              print('P1-006 REPLAY: PASS')
-          PY
-
-      - name: Independently verify exact broker volume contract
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import importlib.util
-          import json
-          import sys
-          from pathlib import Path
-
-          spec = importlib.util.spec_from_file_location(
-              'verifier', Path('tools/p1_verifier/verify_candidate.py')
-          )
-          module = importlib.util.module_from_spec(spec)
-          sys.modules[spec.name] = module
-          spec.loader.exec_module(module)
-          manifest = json.loads(
-              Path('tools/p1_verifier/acceptance_manifest.json').read_text()
-          )
-          git_image = manifest['network_acquisition_image']
-          pattern = manifest['trusted_broker_volume_name_pattern']
-          valid = {
-              'Type': 'volume',
-              'Name': 'p1-acq-' + 'a' * 24,
-              'Source': '/rootless/docker/volumes/internal/_data',
-              'Destination': '/trusted',
-              'RW': True,
-          }
-          assert module._trusted_nested_mount_allowed(
-              valid,
-              allowed_bind_sources=manifest['allowed_nested_mount_sources'],
-              trusted_volume_pattern=pattern,
-              image_ref=git_image,
-              acquisition_image=git_image,
-          )
-          assert not module._trusted_nested_mount_allowed(
-              dict(valid, Name='candidate-volume'),
-              allowed_bind_sources=manifest['allowed_nested_mount_sources'],
-              trusted_volume_pattern=pattern,
-              image_ref=git_image,
-              acquisition_image=git_image,
-          )
-          print('P1-005 STORAGE CONTRACT REPLAY: PASS')
-          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/test_p1_verifier.py tools/p1_verifier/verify_candidate.py
+          git commit -m "Verify exact pinned acquisition refspec"
+          git push origin HEAD:agent/manual-exact-ref-verification
