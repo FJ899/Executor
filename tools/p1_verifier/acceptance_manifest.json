@@ -1,4 +1,5 @@
 {
+  "acquisition_trust_boundary_rule": "Acquisition is trusted only when the state required for later verification cannot be modified by the candidate; use of the correct source alone is insufficient.",
   "allowed_changed_paths": [
     ".github/workflows/verify.yml",
     "executor/pilot_cli.py",
