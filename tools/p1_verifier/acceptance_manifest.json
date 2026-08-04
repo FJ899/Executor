@@ -14,6 +14,14 @@
     "tests/test_pilot_git_isolation.py",
     "tests/test_pilot_source_acquisition.py"
   ],
+  "allowed_nested_mount_sources": [
+    "/candidate",
+    "/runs"
+  ],
+  "approved_nested_images": [
+    "alpine/git@sha256:0448d24b454392f9d115c6784343899e9d35a32de0ddc39a745263db34df94dd",
+    "python@sha256:b18992999dbe963a45a8a4da40ac2b1975be1a776d939d098c647482bcad5cba"
+  ],
   "authorized_target_ref": "agent/pilot-runtime-replacement",
   "candidate_declared_result_authority": "IGNORED_FOR_AUTHORITY",
   "candidate_tests_authority": "OBSERVATIONAL",
@@ -37,6 +45,7 @@
   },
   "contract_path": "PILOT_CONTRACT.md",
   "document": "Executor P1 Authoritative Acceptance Manifest",
+  "forbid_nested_exec": true,
   "forbidden_candidate_environment": [
     "ACTIONS_RUNTIME_TOKEN",
     "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
@@ -57,6 +66,9 @@
     "authoritative-verification",
     "p1_verifier"
   ],
+  "max_nested_containers": 256,
+  "max_nested_events": 4096,
+  "network_acquisition_image": "alpine/git@sha256:0448d24b454392f9d115c6784343899e9d35a32de0ddc39a745263db34df94dd",
   "required_contract_blob": "0ae70e9f9a79e5e815f3d566ca5784059f461a9e",
   "required_controller_files": [
     "controller-manifest.json",
@@ -73,11 +85,19 @@
     "process-tree.txt",
     "network-observation.json",
     "cleanup-state.json",
+    "nested-docker-security.json",
+    "approved-nested-images.json",
+    "nested-operation-ledger.json",
+    "logs/trusted-probes.log",
     "logs/candidate-tests.log",
+    "logs/sandbox.log",
     "logs/acquisition.log",
     "logs/case-001.log",
     "logs/case-002.log",
     "logs/case-003.log",
+    "traces/trusted-probes.execve",
+    "traces/candidate-tests.execve",
+    "traces/sandbox.execve",
     "traces/acquisition.execve",
     "traces/case-001.execve",
     "traces/case-002.execve",
@@ -85,17 +105,12 @@
     "results/case-001.bundle",
     "results/case-002.bundle",
     "results/case-003.bundle",
-    "nested-docker-security.json",
-    "logs/sandbox.log",
-    "traces/candidate-tests.execve",
-    "traces/sandbox.execve",
     "results/source_acquisition.json",
-    "results/source_manifest.json",
-    "logs/trusted-probes.log",
-    "traces/trusted-probes.execve"
+    "results/source_manifest.json"
   ],
+  "required_network_enabled_containers": 3,
   "required_parent_sha": "bf18638caeb1a01cd2e14e625d72a20893a04bb3",
-  "schema_version": 1,
+  "schema_version": 2,
   "source_repository": "litrgratis-pixel/executor-pilot-target",
   "status": "TRUSTED / MAIN-OWNED"
 }

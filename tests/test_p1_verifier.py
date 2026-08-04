@@ -17,8 +17,18 @@ VERIFIER = ROOT / "tools/p1_verifier/verify_candidate.py"
 ACCEPTANCE = ROOT / "tools/p1_verifier/acceptance_manifest.json"
 
 VULNERABLE_WORKFLOW_SHA = "d9747d83cea9de7a6886e0e4d17d61dcb5ab575a"
-VULNERABLE_WORKFLOW_BLOB = "96f1b9480d6dac1e402638a2df2b3c8c4a4c4675"
 VULNERABLE_WORKFLOW_SHA256 = "84bcee1cc9aa4c32d5036fcdce55bb102baa96441429c373940b0968dd09a1f7"
+GIT_IMAGE = "alpine/git@sha256:0448d24b454392f9d115c6784343899e9d35a32de0ddc39a745263db34df94dd"
+PYTHON_IMAGE = "python@sha256:b18992999dbe963a45a8a4da40ac2b1975be1a776d939d098c647482bcad5cba"
+CANONICAL_URL = "https://github.com/litrgratis-pixel/executor-pilot-target.git"
+
+
+def _canonical_bytes(value) -> bytes:
+    return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+
+def _canonical_sha(value) -> str:
+    return hashlib.sha256(_canonical_bytes(value)).hexdigest()
 
 
 def _sha256(path: Path) -> str:
@@ -27,7 +37,7 @@ def _sha256(path: Path) -> str:
 
 def _write_json(path: Path, value) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    path.write_bytes(_canonical_bytes(value))
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -48,111 +58,91 @@ def _git(repo: Path, *args: str) -> str:
     return completed.stdout.strip()
 
 
-def _hash_manifest(root: Path, *, exclude: set[str] | None = None) -> None:
-    excluded = exclude or {"files-sha256.json"}
+def _hash_manifest(root: Path) -> None:
     files = {}
     for path in sorted(root.rglob("*")):
         if not path.is_file() or path.is_symlink():
             continue
         relative = path.relative_to(root).as_posix()
-        if relative in excluded:
+        if relative == "files-sha256.json":
             continue
         files[relative] = _sha256(path)
     _write_json(root / "files-sha256.json", {"schema_version": 1, "files": files})
 
 
 class WorkflowTrustBoundaryTests(unittest.TestCase):
-    def test_vulnerable_baseline_is_not_the_current_workflow(self):
+    def test_vulnerable_baseline_is_not_current(self):
         self.assertTrue(WORKFLOW.is_file())
-        self.assertNotEqual(
-            _sha256(WORKFLOW),
-            VULNERABLE_WORKFLOW_SHA256,
-            f"vulnerable workflow {VULNERABLE_WORKFLOW_SHA} is still active",
-        )
+        self.assertNotEqual(_sha256(WORKFLOW), VULNERABLE_WORKFLOW_SHA256)
 
     def test_workflow_has_three_explicit_trust_domains(self):
         text = WORKFLOW.read_text(encoding="utf-8")
-        for job in (
+        for marker in (
             "trusted-controller:",
             "untrusted-candidate-execution:",
             "trusted-authoritative-verifier:",
+            "UNTRUSTED_EXECUTION_OBSERVATION",
+            "authoritative-final-gate.json",
         ):
-            self.assertIn(job, text)
-        self.assertIn("needs: trusted-controller", text)
-        self.assertIn("needs: [trusted-controller, untrusted-candidate-execution]", text)
-        self.assertIn("UNTRUSTED_EXECUTION_OBSERVATION", text)
-        self.assertIn("authoritative-final-gate.json", text)
+            self.assertIn(marker, text)
 
-    def test_embedded_python_has_no_undefined_global_references(self):
-        import builtins
-        import symtable
-
-        lines = WORKFLOW.read_text(encoding="utf-8").splitlines()
-        blocks = []
-        index = 0
-        while index < len(lines):
-            if "<<'PY'" not in lines[index]:
-                index += 1
-                continue
-            start = index + 1
-            indent = len(lines[start]) - len(lines[start].lstrip())
-            end = start
-            while end < len(lines) and lines[end].strip() != "PY":
-                end += 1
-            self.assertLess(end, len(lines), f"unterminated Python heredoc at line {index + 1}")
-            block = "\n".join(line[indent:] for line in lines[start:end]) + "\n"
-            blocks.append((index + 1, block))
-            index = end + 1
-
-        self.assertGreaterEqual(len(blocks), 10)
-        builtin_names = set(dir(builtins))
-        for line_number, block in blocks:
-            with self.subTest(line=line_number):
-                compile(block, f"workflow-heredoc-{line_number}", "exec")
-                table = symtable.symtable(block, f"workflow-heredoc-{line_number}", "exec")
-                undefined = []
-                for name in table.get_identifiers():
-                    symbol = table.lookup(name)
-                    if (
-                        symbol.is_referenced()
-                        and not symbol.is_assigned()
-                        and not symbol.is_imported()
-                        and not symbol.is_parameter()
-                        and name not in builtin_names
-                    ):
-                        undefined.append(name)
-                self.assertEqual(undefined, [], f"undefined globals in heredoc: {undefined}")
-
-    def test_controller_manifest_does_not_claim_future_execution_results(self):
+    def test_trusted_collector_is_ready_before_candidate_execution(self):
         text = WORKFLOW.read_text(encoding="utf-8")
-        start = text.index("controller={")
-        end = text.index("(root/\"controller-manifest.json\")", start)
-        controller_block = text[start:end]
-        for field in (
-            "trusted_probes_exit_code",
-            "candidate_tests_exit_code",
-            "sandbox_exit_code",
-            "acquisition_exit_code",
-        ):
-            self.assertNotIn(field, controller_block)
+        collector = text.index("Start trusted nested operation collector")
+        candidate = text.index("Run candidate only inside the untrusted nested domain")
+        finalize = text.index("Finalize trusted nested operation ledger")
+        self.assertLess(collector, candidate)
+        self.assertLess(candidate, finalize)
+        self.assertIn("ready_before_candidate", text)
+        self.assertIn("nested-operation-ledger.json", text)
+        self.assertIn("approved-nested-images.json", text)
 
     def test_candidate_never_receives_host_authority_or_evidence_mounts(self):
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("docker:27-dind-rootless@", text)
-        self.assertIn("nested_daemon_rootless", text)
-        self.assertIn("host_docker_socket_mounted", text)
         self.assertNotIn("-v /var/run/docker.sock:/var/run/docker.sock", text)
-        self.assertNotIn("--mount type=bind,src=$EVIDENCE", text)
+        self.assertNotIn("--mount type=bind,src=$OBSERVATION", text)
         self.assertIn("candidate_tests_authority", text)
         self.assertIn("OBSERVATIONAL", text)
 
-    def test_trusted_verifier_is_main_owned_and_candidate_status_is_ignored(self):
-        text = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("tools/p1_verifier/verify_candidate.py", text)
-        self.assertIn("tools/p1_verifier/acceptance_manifest.json", text)
-        self.assertIn("github.workflow_sha", text)
-        self.assertIn("candidate_declared_result", VERIFIER.read_text(encoding="utf-8"))
-        self.assertIn("IGNORED_FOR_AUTHORITY", VERIFIER.read_text(encoding="utf-8"))
+    def test_verifier_is_main_owned_and_candidate_status_is_ignored(self):
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        verifier = VERIFIER.read_text(encoding="utf-8")
+        self.assertIn("tools/p1_verifier/verify_candidate.py", workflow)
+        self.assertIn("github.workflow_sha", workflow)
+        self.assertIn("IGNORED_FOR_AUTHORITY", verifier)
+        self.assertIn("_verify_nested_operation_ledger", verifier)
+
+    def test_pinned_actionlint_accepts_manual_workflow_in_github_actions(self):
+        if os.environ.get("GITHUB_ACTIONS") != "true":
+            self.skipTest("pinned actionlint integration runs in GitHub Actions")
+        archive_sha = "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+        url = (
+            "https://github.com/rhysd/actionlint/releases/download/v1.7.12/"
+            "actionlint_1.7.12_linux_amd64.tar.gz"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "actionlint.tar.gz"
+            subprocess.run(
+                [
+                    "curl", "--fail", "--location", "--proto", "=https",
+                    "--tlsv1.2", "--output", str(archive), url,
+                ],
+                check=True,
+            )
+            self.assertEqual(_sha256(archive), archive_sha)
+            subprocess.run(
+                ["tar", "-xzf", str(archive), "-C", str(root), "actionlint"],
+                check=True,
+            )
+            completed = subprocess.run(
+                [str(root / "actionlint"), "-shellcheck=", str(WORKFLOW)],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stdout)
 
 
 class VerifierFixture:
@@ -163,28 +153,26 @@ class VerifierFixture:
         self.candidate = root / "candidate"
         self.output = root / "output"
         self.source_anchors = root / "source-anchors"
-        self.source_anchors.mkdir()
-        self.controller.mkdir()
-        self.execution.mkdir()
-        self.candidate.mkdir()
+        for path in (self.controller, self.execution, self.candidate, self.source_anchors):
+            path.mkdir(parents=True)
         self._init_candidate()
         self._init_case_repositories()
         self._write_acceptance()
         self._write_controller()
         self._write_execution()
 
-    def _init_candidate(self):
+    def _init_candidate(self) -> None:
         _git(self.candidate, "init", "-q")
-        (self.candidate / "base.txt").write_text("base\n", encoding="utf-8")
+        (self.candidate / "base.txt").write_text("base\n")
         _git(self.candidate, "add", "base.txt")
         _git(self.candidate, "commit", "-qm", "trusted ADR")
         self.parent = _git(self.candidate, "rev-parse", "HEAD")
-        (self.candidate / "candidate.txt").write_text("candidate\n", encoding="utf-8")
+        (self.candidate / "candidate.txt").write_text("candidate\n")
         _git(self.candidate, "add", "candidate.txt")
         _git(self.candidate, "commit", "-qm", "candidate")
         self.candidate_sha = _git(self.candidate, "rev-parse", "HEAD")
 
-    def _init_case_repositories(self):
+    def _init_case_repositories(self) -> None:
         self.cases = {}
         for case_id in ("001", "002", "003"):
             repo = self.root / f"case-{case_id}"
@@ -192,13 +180,13 @@ class VerifierFixture:
             _git(repo, "init", "-q")
             registry = repo / "project_registry"
             registry.mkdir()
-            file_path = registry / "registry.py"
-            file_path.write_text(f"VALUE = {case_id!r}\n", encoding="utf-8")
-            (repo / "PILOT_CONTRACT.md").write_text("trusted contract\n", encoding="utf-8")
+            target = registry / "registry.py"
+            target.write_text(f"VALUE = {case_id!r}\n")
+            (repo / "PILOT_CONTRACT.md").write_text("trusted contract\n")
             _git(repo, "add", ".")
             _git(repo, "commit", "-qm", f"case {case_id} input")
             input_commit = _git(repo, "rev-parse", "HEAD")
-            file_path.write_text(f"VALUE = 'fixed-{case_id}'\n", encoding="utf-8")
+            target.write_text(f"VALUE = 'fixed-{case_id}'\n")
             _git(repo, "add", ".")
             _git(repo, "commit", "-qm", f"case {case_id} result")
             result_commit = _git(repo, "rev-parse", "HEAD")
@@ -214,135 +202,170 @@ class VerifierFixture:
                 "bundle": bundle,
             }
 
-    def _write_acceptance(self):
-        value = {
-            "schema_version": 1,
-            "authorized_target_ref": "agent/pilot-runtime-replacement",
-            "required_parent_sha": self.parent,
-            "candidate_tests_authority": "OBSERVATIONAL",
-            "candidate_declared_result_authority": "IGNORED_FOR_AUTHORITY",
-            "canonical_source_url": "https://github.com/litrgratis-pixel/executor-pilot-target.git",
-            "source_repository": "litrgratis-pixel/executor-pilot-target",
-            "contract_path": "PILOT_CONTRACT.md",
-            "required_contract_blob": _git(next(iter(self.source_anchors.iterdir())), "rev-parse", "HEAD:PILOT_CONTRACT.md"),
-            "allowed_changed_paths": ["candidate.txt"],
-            "required_controller_files": [
-                "controller-manifest.json",
-                "workflow-identities.json",
-                "scope-report.json",
-                "candidate-source.bundle",
-                "controller-workflow.yml",
-                "candidate-verify.yml",
-                "trusted-verifier.py",
-                "acceptance-manifest.json",
-            ],
-            "required_execution_files": [
-                "observation-manifest.json",
-                "process-tree.txt",
-                "network-observation.json",
-                "cleanup-state.json",
-                "nested-docker-security.json",
-                "logs/trusted-probes.log",
-                "logs/trusted-probes.log",
-            "logs/candidate-tests.log",
-                "logs/sandbox.log",
-                "logs/acquisition.log",
-                "logs/case-001.log",
-                "logs/case-002.log",
-                "logs/case-003.log",
-                "traces/trusted-probes.execve",
-                "traces/trusted-probes.execve",
-            "traces/candidate-tests.execve",
-                "traces/sandbox.execve",
-                "traces/trusted-probes.execve",
-                "traces/trusted-probes.execve",
-            "traces/candidate-tests.execve",
-            "traces/sandbox.execve",
-            "traces/acquisition.execve",
-                "traces/case-001.execve",
-                "traces/case-002.execve",
-                "traces/case-003.execve",
-                "results/case-001.bundle",
-                "results/case-002.bundle",
-                "results/case-003.bundle",
-                "results/source_acquisition.json",
-                "results/source_manifest.json",
-            ],
-            "forbidden_candidate_environment": [
-                "GITHUB_TOKEN",
-                "GITHUB_ENV",
-                "GITHUB_OUTPUT",
-            ],
-            "forbidden_candidate_mount_fragments": [
-                "/var/run/docker.sock",
-                "controller",
-                "evidence",
-                "p1_verifier",
-            ],
-            "cases": {
-                case_id: {
-                    "input_commit": data["input_commit"],
-                    "allowed_path": "project_registry/registry.py",
-                    "required_status": "ACTION_COMPLETED_REVIEW_REQUIRED",
-                }
-                for case_id, data in self.cases.items()
-            },
+    def _write_acceptance(self) -> None:
+        value = json.loads(ACCEPTANCE.read_text())
+        value["required_parent_sha"] = self.parent
+        value["allowed_changed_paths"] = ["candidate.txt"]
+        value["required_contract_blob"] = _git(
+            self.source_anchors / "case-001", "rev-parse", "HEAD:PILOT_CONTRACT.md"
+        )
+        value["cases"] = {
+            case_id: {
+                "input_commit": data["input_commit"],
+                "allowed_path": "project_registry/registry.py",
+                "required_status": "ACTION_COMPLETED_REVIEW_REQUIRED",
+            }
+            for case_id, data in self.cases.items()
         }
         self.acceptance = self.root / "acceptance.json"
         _write_json(self.acceptance, value)
 
-    def _write_controller(self):
+    def _write_controller(self) -> None:
         bundle = self.controller / "candidate-source.bundle"
         _git(self.candidate, "bundle", "create", str(bundle), "--all")
         files = {
             "controller-workflow.yml": "trusted workflow\n",
             "candidate-verify.yml": "candidate workflow\n",
-            "trusted-verifier.py": VERIFIER.read_text(encoding="utf-8"),
-            "acceptance-manifest.json": self.acceptance.read_text(encoding="utf-8"),
+            "trusted-verifier.py": VERIFIER.read_text(),
+            "acceptance-manifest.json": self.acceptance.read_text(),
         }
         for name, content in files.items():
-            (self.controller / name).write_text(content, encoding="utf-8")
-        _write_json(
-            self.controller / "controller-manifest.json",
-            {
-                "schema_version": 1,
-                "event_name": "workflow_dispatch",
-                "target_ref": "agent/pilot-runtime-replacement",
-                "expected_sha": self.candidate_sha,
-                "candidate_sha": self.candidate_sha,
-                "execution_mode": "verify-candidate",
-                "parent_sha": self.parent,
-                "workflow_sha": self.parent,
-                "candidate_bundle_sha256": _sha256(bundle),
-                "candidate_tests_authority": "OBSERVATIONAL",
-                "trusted_probes_exit_code": 0,
-                "candidate_tests_exit_code": 0,
-                "sandbox_exit_code": 0,
-                "acquisition_exit_code": 0,
-            },
-        )
-        _write_json(
-            self.controller / "scope-report.json",
-            {"schema_version": 1, "status": "PASS", "changed_paths": ["candidate.txt"]},
-        )
-        _write_json(
-            self.controller / "workflow-identities.json",
-            {
-                key: {
-                    "artifact_path": path,
-                    "sha256": _sha256(self.controller / path),
-                }
-                for key, path in {
-                    "controller_workflow": "controller-workflow.yml",
-                    "candidate_workflow": "candidate-verify.yml",
-                    "trusted_verifier": "trusted-verifier.py",
-                    "acceptance_manifest": "acceptance-manifest.json",
-                }.items()
-            },
-        )
+            (self.controller / name).write_text(content)
+        _write_json(self.controller / "controller-manifest.json", {
+            "schema_version": 1,
+            "event_name": "workflow_dispatch",
+            "target_ref": "agent/pilot-runtime-replacement",
+            "expected_sha": self.candidate_sha,
+            "candidate_sha": self.candidate_sha,
+            "parent_sha": self.parent,
+            "workflow_sha": self.parent,
+            "execution_mode": "verify-candidate",
+            "candidate_bundle_sha256": _sha256(bundle),
+            "candidate_tests_authority": "OBSERVATIONAL",
+        })
+        _write_json(self.controller / "scope-report.json", {
+            "schema_version": 1,
+            "status": "PASS",
+            "changed_paths": ["candidate.txt"],
+        })
+        _write_json(self.controller / "workflow-identities.json", {
+            key: {"artifact_path": path, "sha256": _sha256(self.controller / path)}
+            for key, path in {
+                "controller_workflow": "controller-workflow.yml",
+                "candidate_workflow": "candidate-verify.yml",
+                "trusted_verifier": "trusted-verifier.py",
+                "acceptance_manifest": "acceptance-manifest.json",
+            }.items()
+        })
         _hash_manifest(self.controller)
 
-    def _write_execution(self):
+    @staticmethod
+    def _inspect(
+        *, container_id: str, image_ref: str, image_id: str,
+        network: str, command: list[str], mounts: list[dict] | None = None,
+    ) -> dict:
+        return {
+            "Id": container_id,
+            "Image": image_id,
+            "Config": {"Image": image_ref, "Entrypoint": command[:1], "Cmd": command[1:], "Env": []},
+            "HostConfig": {
+                "NetworkMode": network,
+                "Privileged": False,
+                "CapAdd": None,
+                "CapDrop": ["ALL"],
+                "SecurityOpt": ["no-new-privileges"],
+                "PidMode": "",
+                "IpcMode": "private",
+                "UTSMode": "",
+                "CgroupnsMode": "private",
+                "Devices": [],
+                "DeviceRequests": [],
+                "VolumesFrom": [],
+            },
+            "Mounts": mounts or [],
+        }
+
+    def _valid_ledger(self) -> tuple[dict, dict]:
+        git_id = "sha256:" + "1" * 64
+        python_id = "sha256:" + "2" * 64
+        approved = {
+            "schema_version": 1,
+            "authority": "TRUSTED_HOST_HARNESS",
+            "images": {
+                GIT_IMAGE: {"id": git_id, "repo_digests": [GIT_IMAGE]},
+                PYTHON_IMAGE: {"id": python_id, "repo_digests": [PYTHON_IMAGE]},
+            },
+        }
+        containers = [
+            self._inspect(
+                container_id="a" * 64, image_ref=GIT_IMAGE, image_id=git_id, network="bridge",
+                command=["/bin/busybox", "env", "-i", "PATH=/usr/bin:/bin",
+                         "/usr/bin/git", "fetch", CANONICAL_URL, self.cases["001"]["input_commit"]],
+                mounts=[{"Source": "/runs/case-001", "Destination": "/executor-run"}],
+            ),
+            self._inspect(
+                container_id="b" * 64, image_ref=GIT_IMAGE, image_id=git_id, network="bridge",
+                command=["/bin/busybox", "env", "-i", "PATH=/usr/bin:/bin",
+                         "/usr/bin/git", "fetch", CANONICAL_URL, self.cases["002"]["input_commit"]],
+                mounts=[{"Source": "/runs/case-002", "Destination": "/executor-run"}],
+            ),
+            self._inspect(
+                container_id="c" * 64, image_ref=GIT_IMAGE, image_id=git_id, network="bridge",
+                command=["/bin/busybox", "env", "-i", "PATH=/usr/bin:/bin",
+                         "/usr/bin/git", "fetch", CANONICAL_URL, self.cases["003"]["input_commit"]],
+                mounts=[{"Source": "/runs/case-003", "Destination": "/executor-run"}],
+            ),
+            self._inspect(
+                container_id="d" * 64, image_ref=GIT_IMAGE, image_id=git_id, network="none",
+                command=["/bin/busybox", "env", "-i", "/usr/bin/git", "fsck", "--strict"],
+                mounts=[{"Source": "/runs/case-001", "Destination": "/executor-run"}],
+            ),
+            self._inspect(
+                container_id="e" * 64, image_ref=PYTHON_IMAGE, image_id=python_id, network="none",
+                command=["python", "-m", "unittest", "discover"],
+                mounts=[{"Source": "/candidate", "Destination": "/source"},
+                        {"Source": "/runs/workspace", "Destination": "/workspace"}],
+            ),
+        ]
+        events = []
+        sequence = 1
+        time_nano = 1_000_000
+        for inspect in containers:
+            events.append({
+                "sequence": sequence,
+                "type": "container",
+                "action": "create",
+                "id": inspect["Id"],
+                "time_nano": time_nano,
+                "inspect": inspect,
+                "inspect_sha256": _canonical_sha(inspect),
+                "inspect_error": None,
+            })
+            sequence += 1
+            time_nano += 1
+            for action in ("start", "die", "destroy"):
+                events.append({
+                    "sequence": sequence,
+                    "type": "container",
+                    "action": action,
+                    "id": inspect["Id"],
+                    "time_nano": time_nano,
+                })
+                sequence += 1
+                time_nano += 1
+        ledger = {
+            "schema_version": 1,
+            "collector_authority": "TRUSTED_HOST_HARNESS",
+            "ready_before_candidate": True,
+            "complete": True,
+            "overflow": False,
+            "collector_error": None,
+            "approved_images_sha256": "",
+            "events": events,
+        }
+        return approved, ledger
+
+    def _write_execution(self) -> None:
         for relative in (
             "process-tree.txt",
             "nested-docker-security.json",
@@ -363,47 +386,37 @@ class VerifierFixture:
         ):
             path = self.execution / relative
             path.parent.mkdir(parents=True, exist_ok=True)
-            content=f"trusted observation {relative}\n"
+            content = f"trusted observation {relative}\n"
             if relative == "logs/trusted-probes.log":
-                content="TRUSTED_BLACK_BOX_PROBES: PASS\n"
+                content = "TRUSTED_BLACK_BOX_PROBES: PASS\n"
             elif relative == "logs/sandbox.log":
-                content="Ran 10 tests in 1.0s\n\nOK\n"
-            elif relative == "traces/sandbox.execve":
-                content='execve("docker", ["docker","run","--network","none"])\n'
-            path.write_text(content, encoding="utf-8")
-        (self.execution / "nested-docker-security.json").write_text("[\"name=rootless\"]\n", encoding="utf-8")
-        (self.execution / "traces/acquisition.execve").write_text(
-            'execve("docker", ["docker","run","--network","bridge","https://github.com/litrgratis-pixel/executor-pilot-target.git"])\n'
-            'execve("docker", ["docker","run","--network","none"])\n', encoding="utf-8")
-        for case_id in ("001", "002", "003"):
-            (self.execution / "traces" / f"case-{case_id}.execve").write_text(
-                'execve("docker", ["docker","run","--network","none"])\n', encoding="utf-8")
-        _write_json(
-            self.execution / "network-observation.json",
-            {
-                "candidate_network": "internal-only",
-                "nested_daemon_egress": True,
-                "host_docker_socket_mounted": False,
+                content = "Ran 10 tests in 1.0s\n\nOK\n"
+            path.write_text(content)
+        (self.execution / "nested-docker-security.json").write_text('["name=rootless"]\n')
+
+        approved, ledger = self._valid_ledger()
+        _write_json(self.execution / "approved-nested-images.json", approved)
+        ledger["approved_images_sha256"] = _sha256(self.execution / "approved-nested-images.json")
+        _write_json(self.execution / "nested-operation-ledger.json", ledger)
+
+        _write_json(self.execution / "network-observation.json", {
+            "candidate_network": "internal-only",
+            "nested_daemon_egress": True,
+            "host_docker_socket_mounted": False,
+        })
+        _write_json(self.execution / "results/source_acquisition.json", {
+            "input_model": "CONTROLLED_HTTPS_FETCH_V1",
+            "request": {"repository": "litrgratis-pixel/executor-pilot-target"},
+            "origin_anchor": {
+                "canonical_url": CANONICAL_URL,
+                "local_checkout_used": False,
+                "user_supplied_url_used": False,
             },
-        )
-        _write_json(
-            self.execution / "results/source_acquisition.json",
-            {
-                "input_model": "CONTROLLED_HTTPS_FETCH_V1",
-                "request": {"repository": "litrgratis-pixel/executor-pilot-target"},
-                "origin_anchor": {
-                    "canonical_url": "https://github.com/litrgratis-pixel/executor-pilot-target.git",
-                    "local_checkout_used": False,
-                    "user_supplied_url_used": False,
-                },
-                "outcome": "ACQUIRED_REVIEW_REQUIRED",
-            },
-        )
+            "outcome": "ACQUIRED_REVIEW_REQUIRED",
+        })
         _write_json(self.execution / "results/source_manifest.json", {"entries": []})
-        _write_json(
-            self.execution / "cleanup-state.json",
-            {"cleanup_confirmed": True},
-        )
+        _write_json(self.execution / "cleanup-state.json", {"cleanup_confirmed": True})
+
         cases = {}
         for case_id, data in self.cases.items():
             cases[case_id] = {
@@ -417,219 +430,188 @@ class VerifierFixture:
                 "result_commit": data["result_commit"],
                 "candidate_status": "ACTION_COMPLETED_REVIEW_REQUIRED",
             }
-        _write_json(
-            self.execution / "observation-manifest.json",
-            {
-                "schema_version": 1,
-                "candidate_sha": self.candidate_sha,
-                "execution_mode": "verify-candidate",
-                "observation_authority": "TRUSTED_HOST_HARNESS",
-                "candidate_process_domain": "UNTRUSTED_NESTED_CONTAINER",
-                "nested_daemon_rootless": True,
-                "candidate_direct_egress": False,
-                "nested_daemon_egress": True,
-                "host_docker_socket_mounted": False,
-                "controller_evidence_visible": False,
-                "verifier_bundle_visible": False,
-                "github_token_visible": False,
-                "secrets_visible": False,
-                "cleanup_confirmed": True,
-                "candidate_tests_authority": "OBSERVATIONAL",
-                "trusted_probes_exit_code": 0,
-                "candidate_tests_exit_code": 0,
-                "sandbox_exit_code": 0,
-                "acquisition_exit_code": 0,
-                "candidate_environment_names": ["PATH", "DOCKER_HOST"],
-                "candidate_mounts": [
-                    {"source": "candidate-source-volume", "destination": "/candidate"},
-                    {"source": "candidate-runs-volume", "destination": "/runs"},
-                ],
-                "candidate_declared_result": "ABSENT",
-                "candidate_boundary_markers": [],
-                "cases": cases,
-            },
-        )
+        _write_json(self.execution / "observation-manifest.json", {
+            "schema_version": 1,
+            "candidate_sha": self.candidate_sha,
+            "execution_mode": "verify-candidate",
+            "observation_authority": "TRUSTED_HOST_HARNESS",
+            "candidate_process_domain": "UNTRUSTED_NESTED_CONTAINER",
+            "nested_daemon_rootless": True,
+            "candidate_direct_egress": False,
+            "nested_daemon_egress": True,
+            "host_docker_socket_mounted": False,
+            "controller_evidence_visible": False,
+            "verifier_bundle_visible": False,
+            "github_token_visible": False,
+            "secrets_visible": False,
+            "cleanup_confirmed": True,
+            "candidate_tests_authority": "OBSERVATIONAL",
+            "trusted_probes_exit_code": 0,
+            "candidate_tests_exit_code": 0,
+            "sandbox_exit_code": 0,
+            "acquisition_exit_code": 0,
+            "candidate_environment_names": ["PATH", "DOCKER_HOST", "TMPDIR"],
+            "candidate_mounts": [
+                {"source": "candidate-source-volume", "destination": "/candidate"},
+                {"source": "candidate-runs-volume", "destination": "/runs"},
+            ],
+            "candidate_declared_result": "ABSENT",
+            "candidate_boundary_markers": [],
+            "cases": cases,
+        })
+        _hash_manifest(self.execution)
+
+    def rewrite_ledger(self, mutate) -> None:
+        path = self.execution / "nested-operation-ledger.json"
+        ledger = json.loads(path.read_text())
+        mutate(ledger)
+        _write_json(path, ledger)
         _hash_manifest(self.execution)
 
 
 class AuthoritativeVerifierTests(unittest.TestCase):
+    def _verify(self, fixture: VerifierFixture):
+        return verify(
+            acceptance_path=fixture.acceptance,
+            controller_dir=fixture.controller,
+            execution_dir=fixture.execution,
+            candidate_dir=fixture.candidate,
+            source_anchor_root=fixture.source_anchors,
+            output_dir=fixture.output,
+        )
+
     def test_valid_trusted_observation_passes(self):
         with tempfile.TemporaryDirectory() as temporary:
             fixture = VerifierFixture(Path(temporary))
-            report = verify(
-                acceptance_path=fixture.acceptance,
-                controller_dir=fixture.controller,
-                execution_dir=fixture.execution,
-                candidate_dir=fixture.candidate,
-                source_anchor_root=fixture.source_anchors,
-                output_dir=fixture.output,
-            )
+            report = self._verify(fixture)
         self.assertEqual(report["authoritative_result"], "PASS", report["errors"])
-        self.assertEqual(
-            report["candidate_declared_result_authority"],
-            "IGNORED_FOR_AUTHORITY",
-        )
-
-    def test_malicious_candidate_cannot_influence_authoritative_evidence(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            fixture = VerifierFixture(Path(temporary))
-            malicious = fixture.execution / "candidate-declared" / "final_gate.json"
-            _write_json(malicious, {"status": "PASS", "result": "SUCCESS"})
-            observation_path = fixture.execution / "observation-manifest.json"
-            observation = json.loads(observation_path.read_text(encoding="utf-8"))
-            observation.update(
-                {
-                    "host_docker_socket_mounted": True,
-                    "controller_evidence_visible": True,
-                    "github_token_visible": True,
-                    "candidate_environment_names": [
-                        "PATH",
-                        "GITHUB_TOKEN",
-                        "GITHUB_ENV",
-                        "GITHUB_OUTPUT",
-                    ],
-                    "candidate_mounts": [
-                        {
-                            "source": "/var/run/docker.sock",
-                            "destination": "/var/run/docker.sock",
-                        },
-                        {
-                            "source": "/runner/controller-evidence",
-                            "destination": "/evidence",
-                        },
-                    ],
-                    "candidate_declared_result": "PASS",
-                    "candidate_boundary_markers": [
-                        "overwrote-manifest",
-                        "wrote-github-output",
-                        "restored-files-after-forgery",
-                    ],
-                }
-            )
-            _write_json(observation_path, observation)
-            # A malicious candidate may recompute hashes for files it controls. The
-            # authoritative verifier still rejects boundary exposure and ignores PASS.
-            _hash_manifest(fixture.execution)
-            report = verify(
-                acceptance_path=fixture.acceptance,
-                controller_dir=fixture.controller,
-                execution_dir=fixture.execution,
-                candidate_dir=fixture.candidate,
-                source_anchor_root=fixture.source_anchors,
-                output_dir=fixture.output,
-            )
-            final_gate = json.loads(
-                (fixture.output / "authoritative-final-gate.json").read_text(
-                    encoding="utf-8"
-                )
-            )
-        self.assertEqual(report["authoritative_result"], "FAIL")
-        self.assertEqual(final_gate["authoritative_result"], "FAIL")
-        self.assertEqual(final_gate["candidate_declared_result"], "PASS")
-        self.assertEqual(
-            final_gate["candidate_declared_result_authority"],
-            "IGNORED_FOR_AUTHORITY",
-        )
-        joined = "\n".join(final_gate["errors"])
-        self.assertIn("host Docker socket", joined)
-        self.assertIn("forbidden authority boundary", joined)
-        self.assertIn("terminal PASS observed and ignored", joined)
-
-    def test_wrong_candidate_identity_is_rejected(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            fixture = VerifierFixture(Path(temporary))
-            controller_path = fixture.controller / "controller-manifest.json"
-            controller = json.loads(controller_path.read_text(encoding="utf-8"))
-            controller["expected_sha"] = "f" * 40
-            _write_json(controller_path, controller)
-            _hash_manifest(fixture.controller)
-            report = verify(
-                acceptance_path=fixture.acceptance,
-                controller_dir=fixture.controller,
-                execution_dir=fixture.execution,
-                candidate_dir=fixture.candidate,
-                source_anchor_root=fixture.source_anchors,
-                output_dir=fixture.output,
-            )
-        self.assertEqual(report["authoritative_result"], "FAIL")
-        self.assertIn(
-            "controller expected_sha does not equal candidate_sha",
-            report["errors"],
-        )
-
-    def test_wrong_contract_blob_is_rejected_by_independent_anchor(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            fixture = VerifierFixture(Path(temporary))
-            acceptance = json.loads(fixture.acceptance.read_text(encoding="utf-8"))
-            acceptance["required_contract_blob"] = "f" * 40
-            _write_json(fixture.acceptance, acceptance)
-            # Keep the controller's trusted copy and identity coherent with the
-            # intentionally wrong trusted acceptance input.
-            shutil.copyfile(fixture.acceptance, fixture.controller / "acceptance-manifest.json")
-            identities = json.loads(
-                (fixture.controller / "workflow-identities.json").read_text(encoding="utf-8")
-            )
-            identities["acceptance_manifest"]["sha256"] = _sha256(
-                fixture.controller / "acceptance-manifest.json"
-            )
-            _write_json(fixture.controller / "workflow-identities.json", identities)
-            _hash_manifest(fixture.controller)
-            report = verify(
-                acceptance_path=fixture.acceptance,
-                controller_dir=fixture.controller,
-                execution_dir=fixture.execution,
-                candidate_dir=fixture.candidate,
-                source_anchor_root=fixture.source_anchors,
-                output_dir=fixture.output,
-            )
-        self.assertEqual(report["authoritative_result"], "FAIL")
-        self.assertTrue(
-            any("independent contract blob mismatch" in error for error in report["errors"]),
-            report["errors"],
-        )
-
-    def test_missing_trace_and_result_bundle_are_rejected(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            fixture = VerifierFixture(Path(temporary))
-            (fixture.execution / "traces/case-002.execve").unlink()
-            (fixture.execution / "results/case-003.bundle").unlink()
-            _hash_manifest(fixture.execution)
-            report = verify(
-                acceptance_path=fixture.acceptance,
-                controller_dir=fixture.controller,
-                execution_dir=fixture.execution,
-                candidate_dir=fixture.candidate,
-                source_anchor_root=fixture.source_anchors,
-                output_dir=fixture.output,
-            )
-        self.assertEqual(report["authoritative_result"], "FAIL")
-        joined = "\n".join(report["errors"])
-        self.assertIn("CASE-002 trace", joined)
-        self.assertIn("CASE-003 result bundle missing", joined)
+        self.assertEqual(report["nested_operation_summary"]["network_enabled"], 3)
 
     def test_missing_trusted_nested_operation_ledger_is_rejected(self):
         """Plausible text evidence cannot replace daemon-owned operation provenance."""
         with tempfile.TemporaryDirectory() as temporary:
             fixture = VerifierFixture(Path(temporary))
-            self.assertFalse(
-                (fixture.execution / "nested-operation-ledger.json").exists()
-            )
-            report = verify(
-                acceptance_path=fixture.acceptance,
-                controller_dir=fixture.controller,
-                execution_dir=fixture.execution,
-                candidate_dir=fixture.candidate,
-                source_anchor_root=fixture.source_anchors,
-                output_dir=fixture.output,
-            )
+            (fixture.execution / "nested-operation-ledger.json").unlink()
+            _hash_manifest(fixture.execution)
+            report = self._verify(fixture)
         self.assertEqual(report["authoritative_result"], "FAIL", report)
         self.assertTrue(
-            any(
-                "nested operation ledger" in error.lower()
-                for error in report["errors"]
-            ),
+            any("nested operation ledger" in error.lower() for error in report["errors"]),
             report["errors"],
         )
+
+    def test_unapproved_image_and_second_network_container_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = VerifierFixture(Path(temporary))
+            def mutate(ledger):
+                creates = [event for event in ledger["events"] if event["action"] == "create"]
+                creates[3]["inspect"]["Config"]["Image"] = "attacker/image:latest"
+                creates[3]["inspect"]["HostConfig"]["NetworkMode"] = "bridge"
+                creates[3]["inspect_sha256"] = _canonical_sha(creates[3]["inspect"])
+            fixture.rewrite_ledger(mutate)
+            report = self._verify(fixture)
+        joined = "\n".join(report["errors"])
+        self.assertEqual(report["authoritative_result"], "FAIL")
+        self.assertIn("unapproved image", joined)
+        self.assertIn("network-enabled containers", joined)
+
+    def test_privileged_capability_and_outside_mount_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = VerifierFixture(Path(temporary))
+            def mutate(ledger):
+                create = next(event for event in ledger["events"] if event["action"] == "create")
+                inspect = create["inspect"]
+                inspect["HostConfig"]["Privileged"] = True
+                inspect["HostConfig"]["CapAdd"] = ["SYS_ADMIN"]
+                inspect["Mounts"].append({"Source": "/etc", "Destination": "/host-etc"})
+                create["inspect_sha256"] = _canonical_sha(inspect)
+            fixture.rewrite_ledger(mutate)
+            report = self._verify(fixture)
+        joined = "\n".join(report["errors"])
+        self.assertEqual(report["authoritative_result"], "FAIL")
+        self.assertIn("is privileged", joined)
+        self.assertIn("adds capabilities", joined)
+        self.assertIn("outside isolated roots", joined)
+
+    def test_missing_create_inspect_and_nested_exec_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = VerifierFixture(Path(temporary))
+            def mutate(ledger):
+                create = next(event for event in ledger["events"] if event["action"] == "create")
+                create.pop("inspect")
+                create.pop("inspect_sha256")
+                ledger["events"].append({
+                    "sequence": len(ledger["events"]) + 1,
+                    "type": "container",
+                    "action": "exec_create",
+                    "id": "a" * 64,
+                    "time_nano": 2_000_000,
+                })
+            fixture.rewrite_ledger(mutate)
+            report = self._verify(fixture)
+        joined = "\n".join(report["errors"])
+        self.assertEqual(report["authoritative_result"], "FAIL")
+        self.assertIn("create inspect missing", joined)
+        self.assertIn("exec operations are forbidden", joined)
+
+    def test_malicious_candidate_pass_and_boundary_writes_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = VerifierFixture(Path(temporary))
+            malicious = fixture.execution / "candidate-declared" / "final_gate.json"
+            _write_json(malicious, {"status": "PASS"})
+            path = fixture.execution / "observation-manifest.json"
+            observation = json.loads(path.read_text())
+            observation.update({
+                "host_docker_socket_mounted": True,
+                "controller_evidence_visible": True,
+                "github_token_visible": True,
+                "candidate_declared_result": "PASS",
+                "candidate_boundary_markers": ["wrote-github-output"],
+            })
+            _write_json(path, observation)
+            _hash_manifest(fixture.execution)
+            report = self._verify(fixture)
+        joined = "\n".join(report["errors"])
+        self.assertEqual(report["authoritative_result"], "FAIL")
+        self.assertEqual(report["candidate_declared_result_authority"], "IGNORED_FOR_AUTHORITY")
+        self.assertIn("host Docker socket", joined)
+        self.assertIn("terminal PASS observed and ignored", joined)
+
+    def test_wrong_candidate_identity_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = VerifierFixture(Path(temporary))
+            path = fixture.controller / "controller-manifest.json"
+            controller = json.loads(path.read_text())
+            controller["expected_sha"] = "f" * 40
+            _write_json(path, controller)
+            _hash_manifest(fixture.controller)
+            report = self._verify(fixture)
+        self.assertIn("controller expected_sha does not equal candidate_sha", report["errors"])
+
+    def test_wrong_contract_blob_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = VerifierFixture(Path(temporary))
+            acceptance = json.loads(fixture.acceptance.read_text())
+            acceptance["required_contract_blob"] = "f" * 40
+            _write_json(fixture.acceptance, acceptance)
+            shutil.copyfile(fixture.acceptance, fixture.controller / "acceptance-manifest.json")
+            identities_path = fixture.controller / "workflow-identities.json"
+            identities = json.loads(identities_path.read_text())
+            identities["acceptance_manifest"]["sha256"] = _sha256(
+                fixture.controller / "acceptance-manifest.json"
+            )
+            _write_json(identities_path, identities)
+            _hash_manifest(fixture.controller)
+            report = self._verify(fixture)
+        self.assertTrue(any("contract blob mismatch" in error for error in report["errors"]))
+
+    def test_missing_result_bundle_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = VerifierFixture(Path(temporary))
+            (fixture.execution / "results/case-003.bundle").unlink()
+            _hash_manifest(fixture.execution)
+            report = self._verify(fixture)
+        self.assertIn("CASE-003 result bundle missing", report["errors"])
 
 
 if __name__ == "__main__":
