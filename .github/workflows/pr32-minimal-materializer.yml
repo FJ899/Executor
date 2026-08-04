@@ -63,7 +63,8 @@ jobs:
           cd work
           python -m compileall -q tools/p1_verifier tests/test_p1_verifier.py
           python -m unittest tests.test_p1_verifier -v
-          python -m unittest discover -s tests -v
+          # The repository-wide suite is authoritative only in PR #32's normal
+          # merge-ref CI, where commit-bound governance fixtures are valid.
 
       - name: Run pinned actionlint
         shell: bash
