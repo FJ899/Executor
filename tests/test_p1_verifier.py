@@ -607,6 +607,30 @@ class AuthoritativeVerifierTests(unittest.TestCase):
         self.assertIn("CASE-002 trace", joined)
         self.assertIn("CASE-003 result bundle missing", joined)
 
+    def test_missing_trusted_nested_operation_ledger_is_rejected(self):
+        """Plausible text evidence cannot replace daemon-owned operation provenance."""
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = VerifierFixture(Path(temporary))
+            self.assertFalse(
+                (fixture.execution / "nested-operation-ledger.json").exists()
+            )
+            report = verify(
+                acceptance_path=fixture.acceptance,
+                controller_dir=fixture.controller,
+                execution_dir=fixture.execution,
+                candidate_dir=fixture.candidate,
+                source_anchor_root=fixture.source_anchors,
+                output_dir=fixture.output,
+            )
+        self.assertEqual(report["authoritative_result"], "FAIL", report)
+        self.assertTrue(
+            any(
+                "nested operation ledger" in error.lower()
+                for error in report["errors"]
+            ),
+            report["errors"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
