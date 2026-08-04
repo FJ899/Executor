@@ -17,7 +17,7 @@ jobs:
         with:
           repository: litrgratis-pixel/Executor
           ref: 6108683578c47a4547f1460ef48ed4f21405bfbb
-          fetch-depth: 2
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Verify exact identity and scope
@@ -48,7 +48,6 @@ jobs:
           from pathlib import Path
           from tests import test_p1_verifier as broker
 
-          # Load the authoritative verifier implementation directly.
           verifier_path = Path('tools/p1_verifier/verify_candidate.py')
           spec = importlib.util.spec_from_file_location('independent_p1_verifier', verifier_path)
           assert spec is not None and spec.loader is not None
@@ -56,7 +55,6 @@ jobs:
           sys.modules[spec.name] = verifier
           spec.loader.exec_module(verifier)
 
-          # P1-001..P1-004: exact Docker grammar rejects authority downgrades.
           base = broker.AdversarialBrokerRegressionTests()._network_git_argv()
           attacks = {
               'P1-001 root user': ['--user', '0:0'],
@@ -77,8 +75,6 @@ jobs:
               )
               assert allowed is False, (label, reason)
 
-          # P1-005: direct candidate-controlled network fetch is rejected;
-          # the broker-owned acquisition plan is selected instead.
           allowed, command_class, _ = broker.classify_broker_argv(
               base,
               git_image='git-image',
@@ -96,7 +92,6 @@ jobs:
           )
           assert planned is True and planned_class == 'broker-owned-acquisition', reason
 
-          # P1-005: verifier accepts only the exact broker-owned volume contract.
           manifest = json.loads(Path('tools/p1_verifier/acceptance_manifest.json').read_text())
           git_image = manifest['network_acquisition_image']
           pattern = manifest['trusted_broker_volume_name_pattern']
@@ -133,7 +128,6 @@ jobs:
               acquisition_image=git_image,
           )
 
-          # P1-005: exact source binding is read from the real fetch refspec.
           commit = '1' * 40
           exact = f'+{commit}:refs/executor/input'
           assert verifier._extract_pinned_fetch_commit(['fetch', exact]) == commit
@@ -145,7 +139,6 @@ jobs:
           ):
               assert verifier._extract_pinned_fetch_commit(invalid_command) is None
 
-          # P1-006: version-only evidence cannot preserve an authoritative PASS.
           with tempfile.TemporaryDirectory() as temporary:
               root = Path(temporary)
               argv = ['version', '--format', '{{.Server.Version}}']
