@@ -1,2 +1,2 @@
 Temporary CI-only trigger for PR #37. Never merge.
-Exact pinned-refspec full-history replay: 7
+Independent exact-head replay: 8
