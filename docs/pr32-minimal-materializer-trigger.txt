@@ -1,2 +1,2 @@
 Temporary CI-only trigger for PR #37. Never merge.
-Runtime compatibility patcher attempt: 1
+Pinned-refspec patcher attempt: 2
