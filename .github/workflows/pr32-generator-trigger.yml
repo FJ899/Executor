@@ -1,0 +1,86 @@
+name: PR32 ledger fix trigger
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout trusted generator base
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: agent/pr32-ledger-red-test-helper
+          fetch-depth: 1
+          persist-credentials: false
+          path: generator-source
+
+      - name: Checkout exact red baseline
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: bf6a4d963183422a7ab3051cc2dbc1ed2ad5d959
+          fetch-depth: 1
+          persist-credentials: false
+          path: work
+
+      - name: Generate and test four-file fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64
+          from pathlib import Path
+          source = Path('generator-source/.github/workflows/pr32-ledger-red-test-helper.yml').read_text()
+          prefix = '          PATCH_B64: '
+          matches = [line[len(prefix):] for line in source.splitlines() if line.startswith(prefix)]
+          if len(matches) != 1:
+              raise SystemExit('PATCH_B64 not found exactly once')
+          Path('/tmp/patch_pr32.py').write_bytes(base64.b64decode(matches[0], validate=True))
+          PY
+          cd work
+          python /tmp/patch_pr32.py
+          test "$(git diff --name-only | LC_ALL=C sort)" = "$(LC_ALL=C sort /tmp/changed.txt)"
+          python -m compileall -q tools/p1_verifier tests/test_p1_verifier.py
+          python -m unittest tests.test_p1_verifier -v
+
+      - name: Run pinned actionlint
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=1.7.12
+          asset="actionlint_${version}_linux_amd64.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            -o "$RUNNER_TEMP/$asset" \
+            "https://github.com/rhysd/actionlint/releases/download/v${version}/${asset}"
+          gh release verify-asset "v${version}" "$RUNNER_TEMP/$asset" \
+            --repo rhysd/actionlint --format json > /tmp/actionlint-attestation.json
+          tar -xzf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" work/.github/workflows/manual-exact-ref-verify.yml
+
+      - name: Package generated files
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/pr32-ledger-fix"
+          mkdir -p "$root/.github/workflows" "$root/tools/p1_verifier" "$root/tests"
+          cp work/.github/workflows/manual-exact-ref-verify.yml "$root/.github/workflows/"
+          cp work/tools/p1_verifier/verify_candidate.py "$root/tools/p1_verifier/"
+          cp work/tools/p1_verifier/acceptance_manifest.json "$root/tools/p1_verifier/"
+          cp work/tests/test_p1_verifier.py "$root/tests/"
+          (cd "$root" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) \
+            > "$root/SHA256SUMS"
+
+      - name: Upload generated four-file fix
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: PR32_TRUSTED_LEDGER_FIX_${{ github.run_id }}_${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pr32-ledger-fix
+          if-no-files-found: error
+          retention-days: 7
