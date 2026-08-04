@@ -34,13 +34,24 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           import base64
+          import hashlib
+          import re
           from pathlib import Path
+
           source = Path('generator-source/.github/workflows/pr32-ledger-red-test-helper.yml').read_text()
           prefix = '          PATCH_B64: '
           matches = [line[len(prefix):] for line in source.splitlines() if line.startswith(prefix)]
           if len(matches) != 1:
               raise SystemExit('PATCH_B64 not found exactly once')
-          Path('/tmp/patch_pr32.py').write_bytes(base64.b64decode(matches[0], validate=True))
+          encoded = ''.join(matches[0].strip().strip('"\'').split())
+          if not re.fullmatch(r'[A-Za-z0-9+/]*={0,2}', encoded):
+              raise SystemExit('PATCH_B64 contains non-base64 characters')
+          payload = base64.b64decode(encoded, validate=True)
+          actual = hashlib.sha256(payload).hexdigest()
+          expected = '072633b3525a04953770c6b082e1039e2751d0409a60ce5090f21a2d4a3c2bc9'
+          if actual != expected:
+              raise SystemExit(f'PATCH_B64 SHA-256 mismatch: {actual}')
+          Path('/tmp/patch_pr32.py').write_bytes(payload)
           PY
           cd work
           python /tmp/patch_pr32.py
