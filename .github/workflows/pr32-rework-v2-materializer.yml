@@ -1,0 +1,100 @@
+name: PR32 replay-driven rework materializer
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  rework:
+    if: ${{ github.event.pull_request.number == 37 && github.head_ref == 'agent/pr32-ledger-fix-trigger' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout trusted patcher
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: agent/pr32-ledger-red-test-helper
+          fetch-depth: 1
+          persist-credentials: false
+          path: patcher
+
+      - name: Checkout exact independently falsified PR32 head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: litrgratis-pixel/Executor
+          ref: 64241419d8bc0bde1f9920edfb88128f49d9a71f
+          fetch-depth: 2
+          persist-credentials: true
+          path: work
+
+      - name: Add replay regressions and prove RED independently
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          python ../patcher/tools/pr32_rework_v2_patch.py tests
+          for test in \
+            test_rejects_unapproved_supplementary_root_group \
+            test_failed_required_case_operations_force_authoritative_fail \
+            test_verifier_accepts_only_exact_broker_owned_volume_contract
+          do
+            set +e
+            python -m unittest \
+              "tests.test_p1_verifier.AdversarialReplayRegressionTests.${test}" -v \
+              > "$RUNNER_TEMP/${test}.log" 2>&1
+            rc=$?
+            set -e
+            cat "$RUNNER_TEMP/${test}.log"
+            test "$rc" -ne 0
+          done
+          test "$(git diff --name-only)" = "tests/test_p1_verifier.py"
+
+      - name: Apply minimal three-file fix and prove GREEN
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          python ../patcher/tools/pr32_rework_v2_patch.py fix
+          expected=$(printf '%s\n' \
+            tests/test_p1_verifier.py \
+            tools/p1_verifier/acceptance_manifest.json \
+            tools/p1_verifier/verify_candidate.py | LC_ALL=C sort)
+          test "$(git diff --name-only | LC_ALL=C sort)" = "$expected"
+          python -m compileall -q tools/p1_verifier tests/test_p1_verifier.py
+          python -m unittest tests.test_p1_verifier -v
+
+      - name: Run pinned actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=1.7.12
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${version}/actionlint_${version}_linux_amd64.tar.gz"
+          printf '%s  %s\n' '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' "$archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -shellcheck= \
+            work/.github/workflows/manual-exact-ref-verify.yml \
+            work/.github/workflows/verify.yml
+
+      - name: Commit exact tested rework to PR32
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          expected=64241419d8bc0bde1f9920edfb88128f49d9a71f
+          branch=agent/manual-exact-ref-verification
+          remote="$(git ls-remote origin "refs/heads/$branch" | cut -f1)"
+          test "$remote" = "$expected"
+          git config user.name 'OpenAI Executor Worker'
+          git config user.email 'executor-worker@users.noreply.github.com'
+          git add \
+            tests/test_p1_verifier.py \
+            tools/p1_verifier/verify_candidate.py \
+            tools/p1_verifier/acceptance_manifest.json
+          test "$(git diff --cached --name-only | LC_ALL=C sort)" = "$(printf '%s\n' tests/test_p1_verifier.py tools/p1_verifier/acceptance_manifest.json tools/p1_verifier/verify_candidate.py | LC_ALL=C sort)"
+          git commit -m 'Close replayed PR32 false-success paths'
+          git push origin "HEAD:refs/heads/$branch" \
+            "--force-with-lease=refs/heads/$branch:$expected"
