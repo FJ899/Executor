@@ -603,11 +603,11 @@ def _verify_nested_operation_ledger(
         urls = [item for item in command if URL_RE.match(item)]
         if urls != [canonical_url]:
             errors.append(f"network-enabled acquisition command contains unexpected URLs: {urls}")
-        commit_args = [item for item in command if SHA1_RE.fullmatch(item)]
-        if len(commit_args) != 1:
-            errors.append("network-enabled acquisition command does not bind exactly one full commit")
+        observed_commit = _extract_pinned_fetch_commit(command)
+        if observed_commit is None:
+            errors.append("network-enabled acquisition command does not bind exactly one pinned fetch refspec")
         else:
-            observed_commits.append(commit_args[0])
+            observed_commits.append(observed_commit)
     if sorted(observed_commits) != expected_commits:
         errors.append(
             f"network-enabled acquisitions do not map one-to-one to trusted CASE commits: {observed_commits}"
@@ -620,6 +620,15 @@ def _verify_nested_operation_ledger(
         "network_enabled": len(network_enabled),
         "verified_containers": verified_containers,
     }
+
+
+def _extract_pinned_fetch_commit(command: Sequence[str]) -> str | None:
+    commits: list[str] = []
+    for item in command:
+        match = re.fullmatch(r"\+([0-9a-f]{40}):refs/executor/input", str(item))
+        if match:
+            commits.append(match.group(1))
+    return commits[0] if len(commits) == 1 else None
 
 
 def verify(

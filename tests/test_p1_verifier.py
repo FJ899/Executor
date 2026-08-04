@@ -1433,6 +1433,45 @@ class AdversarialReplayRegressionTests(unittest.TestCase):
         ))
 
 
+class AuthoritativePinnedRefspecRegressionTests(unittest.TestCase):
+    def test_authoritative_verifier_requires_exact_pinned_fetch_refspec(self):
+        verifier_path = ROOT / "tools/p1_verifier/verify_candidate.py"
+        spec = importlib.util.spec_from_file_location(
+            "p1_authoritative_refspec_test", verifier_path
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader if spec else None)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        try:
+            spec.loader.exec_module(module)
+            commit = "1" * 40
+            self.assertEqual(
+                module._extract_pinned_fetch_commit(
+                    ["fetch", f"+{commit}:refs/executor/input"]
+                ),
+                commit,
+            )
+            self.assertIsNone(
+                module._extract_pinned_fetch_commit(["fetch", commit])
+            )
+            self.assertIsNone(
+                module._extract_pinned_fetch_commit(
+                    ["fetch", f"+{commit}:refs/heads/main"]
+                )
+            )
+            self.assertIsNone(
+                module._extract_pinned_fetch_commit([
+                    "fetch",
+                    f"+{commit}:refs/executor/input",
+                    f"+{commit}:refs/executor/input",
+                ])
+            )
+        finally:
+            sys.modules.pop(spec.name, None)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group(required=True)
