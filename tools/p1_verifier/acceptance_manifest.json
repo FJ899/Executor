@@ -44,6 +44,8 @@
     }
   },
   "contract_path": "PILOT_CONTRACT.md",
+  "docker_command_broker_authority": "TRUSTED_HOST_HARNESS",
+  "docker_command_broker_endpoint": "UNIX_COMMAND_BROKER_ONLY",
   "document": "Executor P1 Authoritative Acceptance Manifest",
   "forbid_nested_exec": true,
   "forbidden_candidate_environment": [
@@ -57,7 +59,8 @@
     "GITHUB_ENV",
     "GITHUB_OUTPUT",
     "GITHUB_PATH",
-    "GITHUB_STEP_SUMMARY"
+    "GITHUB_STEP_SUMMARY",
+    "DOCKER_HOST"
   ],
   "forbidden_candidate_mount_fragments": [
     "/var/run/docker.sock",
@@ -66,6 +69,7 @@
     "authoritative-verification",
     "p1_verifier"
   ],
+  "max_broker_events": 8192,
   "max_nested_containers": 256,
   "max_nested_events": 4096,
   "network_acquisition_image": "alpine/git@sha256:0448d24b454392f9d115c6784343899e9d35a32de0ddc39a745263db34df94dd",
@@ -88,6 +92,7 @@
     "nested-docker-security.json",
     "approved-nested-images.json",
     "nested-operation-ledger.json",
+    "docker-command-ledger.json",
     "logs/trusted-probes.log",
     "logs/candidate-tests.log",
     "logs/sandbox.log",
