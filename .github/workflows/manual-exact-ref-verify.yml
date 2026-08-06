@@ -192,6 +192,14 @@ jobs:
           printf 'candidate_sha=%s\n' "$actual_sha" >> "$GITHUB_OUTPUT"
           printf 'execution_mode=%s\n' "$EXECUTION_MODE" >> "$GITHUB_OUTPUT"
 
+          echo "BIND_DEBUG_END"
+          echo "GITHUB_OUTPUT=$GITHUB_OUTPUT"
+          echo "OUTPUT_CONTENT:"
+          cat "$GITHUB_OUTPUT"
+
+          echo "CONTROLLER_ARTIFACT:"
+          find "$CONTROLLER_ARTIFACT" -maxdepth 2 -type f | sort
+
       - name: Verify actionlint release and lint workflows
         shell: bash
         env:
