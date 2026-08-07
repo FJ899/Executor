@@ -1,0 +1,32 @@
+name: Trusted controller bind minimal test
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  trusted-controller:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout controller
+        uses: actions/checkout@v4
+        with:
+          path: controller
+
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+        with:
+          path: candidate
+
+      - name: Bind minimal
+        run: |
+          echo "bindings-start"
+          echo "controller sha: $(git -C controller rev-parse --verify HEAD || echo 'none')"
+          echo "candidate sha: $(git -C candidate rev-parse --verify HEAD || echo 'none')"
+          echo "controller tree:"
+          ls -la controller | sed -n '1,20p'
+          echo "candidate tree:"
+          ls -la candidate | sed -n '1,20p'
+          echo "BIND_DEBUG_END"
+          sleep 10
