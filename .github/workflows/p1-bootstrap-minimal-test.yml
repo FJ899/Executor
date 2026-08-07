@@ -1,0 +1,31 @@
+name: P1 bootstrap minimal test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  trusted-controller:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      AUTHORIZED_REF: agent/pilot-runtime-replacement
+      AUTHORIZED_CONTROLLER_REF: refs/heads/main
+      ADR_SHA: bf18638caeb1a01cd2e14e625d72a20893a04bb3
+      ACTIONLINT_VERSION: 1.7.12
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Start bootstrap diagnostics
+        run: |
+          echo "trusted-controller-started"
+          echo "checkout-ok"
+          echo "env-ok"
+          git rev-parse --is-inside-work-tree
+          sleep 30
