@@ -1,6 +1,7 @@
 name: Trusted controller env allocation test
 
 on:
+  push:
   workflow_dispatch:
 
 jobs:
