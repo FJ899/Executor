@@ -1,0 +1,12 @@
+name: Simple diagnostic workflow
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Report runner status
+        run: echo runner-ok
