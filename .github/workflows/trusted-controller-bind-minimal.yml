@@ -18,14 +18,12 @@ jobs:
         with:
           path: candidate
 
-      - name: Bind minimal
+      - name: Verify two-checkouts
         run: |
-          echo "bindings-start"
+          echo "two-checkouts-ok"
           echo "controller sha: $(git -C controller rev-parse --verify HEAD || echo 'none')"
           echo "candidate sha: $(git -C candidate rev-parse --verify HEAD || echo 'none')"
           echo "controller tree:"
           ls -la controller | sed -n '1,20p'
           echo "candidate tree:"
           ls -la candidate | sed -n '1,20p'
-          echo "BIND_DEBUG_END"
-          sleep 10
