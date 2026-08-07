@@ -1,0 +1,27 @@
+name: runner-allocation-competition-test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  job-a:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start job A
+        run: |
+          echo "job-a started"
+          git --version
+          sleep 60
+
+  job-b:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start job B
+        run: |
+          echo "job-b started"
+          git --version
+          sleep 60
