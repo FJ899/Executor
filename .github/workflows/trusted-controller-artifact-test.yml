@@ -1,0 +1,25 @@
+name: Trusted controller artifact upload test
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  trusted-controller:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create small artifact
+        run: |
+          mkdir -p out
+          echo "artifact test" > out/test.txt
+          ls -la out
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bind-test-artifact
+          path: out/test.txt
