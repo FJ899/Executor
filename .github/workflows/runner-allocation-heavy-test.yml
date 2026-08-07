@@ -1,0 +1,16 @@
+name: runner-allocation-heavy-test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  trusted-controller:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start heavy runner allocation check
+        run: |
+          echo "started"
+          git --version
+          sleep 60
