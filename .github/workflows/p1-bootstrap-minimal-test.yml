@@ -1,6 +1,7 @@
 name: P1 bootstrap minimal test
 
 on:
+  push:
   workflow_dispatch:
 
 jobs:
