@@ -1,0 +1,14 @@
+name: Trusted controller allocation test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  trusted-controller:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Start
+        run: |
+          echo "trusted-controller-started"
+          sleep 30
