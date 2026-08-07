@@ -1,7 +1,6 @@
 name: Trusted controller bind minimal test
 
 on:
-  push:
   workflow_dispatch:
 
 jobs:
