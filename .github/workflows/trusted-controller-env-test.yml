@@ -1,0 +1,20 @@
+name: Trusted controller env allocation test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  trusted-controller:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      TEST_MODE: "allocation"
+      TEST_MESSAGE: "env-ok"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start
+        run: |
+          echo "trusted-controller-started"
+          echo "checkout-ok"
+          echo "$TEST_MESSAGE"
+          sleep 30
