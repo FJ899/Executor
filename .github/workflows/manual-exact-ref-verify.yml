@@ -92,7 +92,7 @@ jobs:
       - name: Checkout trusted controller
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: ${{ github.workflow_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
           path: controller
@@ -113,8 +113,8 @@ jobs:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
           EXECUTION_MODE: ${{ inputs.execution_mode }}
           CONTROLLER_ARTIFACT: ${{ runner.temp }}/p1-controller
-          WORKFLOW_SHA: ${{ github.workflow_sha }}
-          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          WORKFLOW_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
           mkdir -p "$CONTROLLER_ARTIFACT/logs"
@@ -701,7 +701,7 @@ jobs:
       - name: Checkout trusted verifier from workflow SHA
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: ${{ github.workflow_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
           path: trusted
@@ -800,7 +800,7 @@ jobs:
           test ! -d "$CONTROLLER_INPUT" || cp -a "$CONTROLLER_INPUT/." "$FINAL_ROOT/controller/"
           test ! -d "$EXECUTION_INPUT" || cp -a "$EXECUTION_INPUT/." "$FINAL_ROOT/execution-observation/"
           test ! -d "$AUTHORITATIVE" || cp -a "$AUTHORITATIVE/." "$FINAL_ROOT/authoritative-verification/"
-          python - "$FINAL_ROOT" "$CANDIDATE_SHA" "${{ github.workflow_sha }}" "$CONTROLLER_RESULT" "$EXECUTION_RESULT" <<'PY'
+          python - "$FINAL_ROOT" "$CANDIDATE_SHA" "${{ github.sha }}" "$CONTROLLER_RESULT" "$EXECUTION_RESULT" <<'PY'
           import hashlib,json,pathlib,sys
           root=pathlib.Path(sys.argv[1]); candidate_sha,workflow_sha,controller_result,execution_result=sys.argv[2:]
           def digest(path): return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
