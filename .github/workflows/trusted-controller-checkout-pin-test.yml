@@ -1,0 +1,25 @@
+name: Trusted controller checkout pin allocation test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  trusted-controller:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout pinned repository state
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Start
+        run: |
+          echo "trusted-controller-started"
+          echo "checkout-ok"
+          git rev-parse --is-inside-work-tree
+          sleep 30
