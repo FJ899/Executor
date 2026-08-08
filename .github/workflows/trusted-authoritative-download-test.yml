@@ -1,0 +1,31 @@
+name: Trusted authoritative download test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-download:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Download test artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: P1_TEST_ARTIFACT
+          path: /tmp/p1-downloaded
+
+      - name: Verify downloaded files
+        shell: bash
+        run: |
+          set -euo pipefail
+          find /tmp/p1-downloaded -maxdepth 2 -type f | sort
+          test -f /tmp/p1-downloaded/controller-workflow.yml
+          test -f /tmp/p1-downloaded/candidate-verify.yml
+          test -f /tmp/p1-downloaded/trusted-verifier.py
+          test -f /tmp/p1-downloaded/acceptance-manifest.json
+          test -f /tmp/p1-downloaded/trusted-broker-verifier.py
+          test -f /tmp/p1-downloaded/scope-report.json
+          test -f /tmp/p1-downloaded/controller-manifest.json
+          test -f /tmp/p1-downloaded/workflow-identities.json
+          echo "DOWNLOAD_PASS"
