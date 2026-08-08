@@ -1,0 +1,39 @@
+name: Trusted authoritative verifier minimal
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verifier-minimal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout trusted verifier repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: litrgratis-pixel/Executor
+          ref: main
+          path: verifier
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: P1_TEST_ARTIFACT
+          path: /tmp/p1-downloaded
+
+      - name: Validate downloaded artifact presence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f /tmp/p1-downloaded/controller-workflow.yml
+          test -f /tmp/p1-downloaded/candidate-verify.yml
+          test -f /tmp/p1-downloaded/trusted-verifier.py
+          test -f /tmp/p1-downloaded/acceptance-manifest.json
+          test -f /tmp/p1-downloaded/trusted-broker-verifier.py
+          test -f /tmp/p1-downloaded/scope-report.json
+          test -f /tmp/p1-downloaded/controller-manifest.json
+          test -f /tmp/p1-downloaded/workflow-identities.json
+          echo "VERIFIER_DOWNLOAD_PASS"
