@@ -23,18 +23,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify
+      - name: Bind minimal
         env:
           EXPECTED_SHA: 3f6e4196af4b9144ceaaba08f2b6637acdc1698d
           ADR_SHA: bf18638caeb1a01cd2e14e625d72a20893a04bb3
         run: |
           set -euo pipefail
-          echo "two-checkouts-ok"
-          git -C controller rev-parse HEAD
-          git -C candidate rev-parse HEAD
 
           actual_sha="$(git -C candidate rev-parse HEAD)"
+          echo "candidate=$actual_sha"
           test "$actual_sha" = "$EXPECTED_SHA"
 
           parent_sha="$(git -C candidate rev-parse HEAD^)"
+          echo "parent=$parent_sha"
           test "$parent_sha" = "$ADR_SHA"
