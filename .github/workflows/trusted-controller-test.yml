@@ -19,6 +19,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: candidate
+          ref: 3f6e4196af4b9144ceaaba08f2b6637acdc1698d
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Verify
