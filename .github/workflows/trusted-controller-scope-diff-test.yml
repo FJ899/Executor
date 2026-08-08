@@ -39,20 +39,20 @@ jobs:
           test "$parent_sha" = "$ADR_SHA"
 
           cat > /tmp/expected-paths.txt <<'PATHS'
-.github/workflows/verify.yml
-executor/pilot_cli.py
-executor/pilot_core.py
-executor/source_acquisition.py
-tests/test_pilot_case_001.py
-tests/test_pilot_case_001_integration.py
-tests/test_pilot_case_002.py
-tests/test_pilot_case_002_integration.py
-tests/test_pilot_case_003.py
-tests/test_pilot_case_003_integration.py
-tests/test_pilot_cli.py
-tests/test_pilot_git_isolation.py
-tests/test_pilot_source_acquisition.py
-PATHS
+          .github/workflows/verify.yml
+          executor/pilot_cli.py
+          executor/pilot_core.py
+          executor/source_acquisition.py
+          tests/test_pilot_case_001.py
+          tests/test_pilot_case_001_integration.py
+          tests/test_pilot_case_002.py
+          tests/test_pilot_case_002_integration.py
+          tests/test_pilot_case_003.py
+          tests/test_pilot_case_003_integration.py
+          tests/test_pilot_cli.py
+          tests/test_pilot_git_isolation.py
+          tests/test_pilot_source_acquisition.py
+          PATHS
 
           git -C candidate diff --name-only --diff-filter=ACDMRTUXB "$ADR_SHA" "$actual_sha" | LC_ALL=C sort > /tmp/actual-paths.txt
 
