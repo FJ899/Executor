@@ -1,0 +1,55 @@
+name: Trusted controller extract-blob test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  trusted-controller:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout controller
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          path: controller
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          path: candidate
+          ref: agent/pilot-runtime-replacement
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Extract blob integrity
+        shell: bash
+        env:
+          CONTROLLER_OUTPUT: /tmp/controller.yml
+          CANDIDATE_OUTPUT: /tmp/candidate.yml
+        run: |
+          set -euo pipefail
+
+          extract_blob() {
+            local repo=$1 sha=$2 path=$3 output=$4
+            local entry mode type blob tree_path
+
+            entry="$(git -C "$repo" ls-tree "$sha" -- "$path")"
+            read -r mode type blob tree_path <<<"$entry"
+
+            test "$mode" = 100644
+            test "$type" = blob
+            test "$tree_path" = "$path"
+
+            git -C "$repo" show "$sha:$path" > "$output"
+
+            test "$(git hash-object "$output")" = "$blob"
+          }
+
+          extract_blob controller HEAD .github/workflows/manual-exact-ref-verify.yml "$CONTROLLER_OUTPUT"
+          extract_blob candidate HEAD .github/workflows/verify.yml "$CANDIDATE_OUTPUT"
+
+          echo "CONTROLLER_BLOB_OK"
+          echo "CANDIDATE_BLOB_OK"
