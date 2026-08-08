@@ -27,6 +27,7 @@ jobs:
         env:
           EXPECTED_SHA: 3f6e4196af4b9144ceaaba08f2b6637acdc1698d
           ADR_SHA: bf18638caeb1a01cd2e14e625d72a20893a04bb3
+          WORKFLOW_SHA: 010dec85852f727d0f453c5d5bedd31e1e79a2e8
         run: |
           set -euo pipefail
 
@@ -37,3 +38,10 @@ jobs:
           parent_sha="$(git -C candidate rev-parse HEAD^)"
           echo "parent=$parent_sha"
           test "$parent_sha" = "$ADR_SHA"
+
+          workflow_sha="$(git -C controller rev-parse HEAD)"
+          echo "workflow=$workflow_sha"
+          test "$workflow_sha" = "$WORKFLOW_SHA"
+
+          test -z "$(git -C controller status --porcelain --untracked-files=all)"
+          test -z "$(git -C candidate status --porcelain --untracked-files=all)"
