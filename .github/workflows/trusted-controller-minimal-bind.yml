@@ -1,0 +1,43 @@
+name: trusted-controller-minimal-bind
+
+on:
+  workflow_dispatch:
+
+jobs:
+  trusted-controller:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout controller
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          path: controller
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          path: candidate
+          ref: agent/pilot-runtime-replacement
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Minimal bind
+        env:
+          EXPECTED_SHA: 3f6e4196af4b9144ceaaba08f2b6637acdc1698d
+          ADR_SHA: bf18638caeb1a01cd2e14e625d72a20893a04bb3
+        run: |
+          set -euo pipefail
+
+          actual_sha="$(git -C candidate rev-parse HEAD)"
+          echo "candidate=$actual_sha"
+
+          test "$actual_sha" = "$EXPECTED_SHA"
+
+          parent_sha="$(git -C candidate rev-parse HEAD^)"
+          echo "parent=$parent_sha"
+
+          test "$parent_sha" = "$ADR_SHA"
+
+          echo "MINIMAL_BIND_PASS"
