@@ -1,0 +1,61 @@
+name: Trusted controller scope-diff test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  trusted-controller:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout controller
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          path: controller
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          path: candidate
+          ref: agent/pilot-runtime-replacement
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Scope diff
+        shell: bash
+        env:
+          ADR_SHA: bf18638caeb1a01cd2e14e625d72a20893a04bb3
+          EXPECTED_SHA: 3f6e4196af4b9144ceaaba08f2b6637acdc1698d
+        run: |
+          set -euo pipefail
+
+          actual_sha="$(git -C candidate rev-parse HEAD)"
+          test "$actual_sha" = "$EXPECTED_SHA"
+
+          parent_sha="$(git -C candidate rev-parse HEAD^)"
+          test "$parent_sha" = "$ADR_SHA"
+
+          cat > /tmp/expected-paths.txt <<'PATHS'
+.github/workflows/verify.yml
+executor/pilot_cli.py
+executor/pilot_core.py
+executor/source_acquisition.py
+tests/test_pilot_case_001.py
+tests/test_pilot_case_001_integration.py
+tests/test_pilot_case_002.py
+tests/test_pilot_case_002_integration.py
+tests/test_pilot_case_003.py
+tests/test_pilot_case_003_integration.py
+tests/test_pilot_cli.py
+tests/test_pilot_git_isolation.py
+tests/test_pilot_source_acquisition.py
+PATHS
+
+          git -C candidate diff --name-only --diff-filter=ACDMRTUXB "$ADR_SHA" "$actual_sha" | LC_ALL=C sort > /tmp/actual-paths.txt
+
+          diff -u /tmp/expected-paths.txt /tmp/actual-paths.txt
+
+          echo "SCOPE_DIFF_PASS"
