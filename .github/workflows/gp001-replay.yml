@@ -1,0 +1,208 @@
+name: GP001 replay repeatability
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - executor/**
+      - EXECUTOR_POLICY.yaml
+      - tasks/GP001_FIX_FAILING_TEST_CASE_001.yaml
+      - test_contracts/GP001_FIX_FAILING_TEST_CASE_001.yaml
+      - project_contracts/executor-self.yaml
+      - tools/run_gp001_real_e2e.py
+      - tools/compare_gp001_replay.py
+      - .github/workflows/gp001-replay.yml
+
+permissions:
+  contents: read
+
+env:
+  GP001_FIXTURE_COMMIT: 3934a94a5eebf750079200589d6dc40e024d44a0
+  GP001_IMAGE_REF: python@sha256:90744cff8f32887f075c47d747a173ff333e9e98801667af93c357fa9f5e28ff
+
+jobs:
+  replay-a:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      observation_b64: ${{ steps.execute.outputs.observation_b64 }}
+    steps:
+      - name: Checkout exact Executor candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+
+      - name: Acquire fresh exact fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$RUNNER_TEMP/gp001-target-a"
+          rm -rf "$target"
+          git init -q "$target"
+          git -C "$target" remote add origin https://github.com/litrgratis-pixel/executor-pilot-target.git
+          git -C "$target" \
+            -c protocol.version=2 \
+            -c core.hooksPath=/dev/null \
+            -c credential.helper= \
+            fetch --no-tags --depth=1 origin "$GP001_FIXTURE_COMMIT"
+          git -C "$target" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$target" rev-parse HEAD)" = "$GP001_FIXTURE_COMMIT"
+          test -z "$(git -C "$target" status --porcelain)"
+
+      - name: Pull exact sandbox image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "$GP001_IMAGE_REF"
+          image="$(docker image inspect --format='{{.Id}}' "$GP001_IMAGE_REF")"
+          case "$image" in
+            sha256:????????????????????????????????????????????????????????????????) ;;
+            *) echo "unexpected immutable image id: $image" >&2; exit 1 ;;
+          esac
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Execute replay A
+        id: execute
+        shell: bash
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          EXECUTOR_ROOT: ${{ github.workspace }}
+          GP001_WORKSPACE: ${{ runner.temp }}/gp001-target-a
+          GP001_RUNS_ROOT: ${{ runner.temp }}/gp001-runs-a
+          GP001_IMAGE: ${{ steps.image.outputs.image }}
+          GP001_RUN_ID: gp001-replay-a-${{ github.run_id }}-${{ github.run_attempt }}
+          GP001_OBSERVATION_PATH: ${{ runner.temp }}/gp001-replay-a.json
+        run: |
+          set -euo pipefail
+          export EXECUTOR_COMMIT="$(git rev-parse HEAD)"
+          python tools/run_gp001_real_e2e.py
+          test -s "$GP001_OBSERVATION_PATH"
+          observation_b64="$(base64 -w0 "$GP001_OBSERVATION_PATH")"
+          echo "observation_b64=$observation_b64" >> "$GITHUB_OUTPUT"
+
+      - name: Verify replay A cleanup
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          remaining="$(docker ps -a --filter label=creative-os-executor-gp001=first-vertical-runtime-slice --format '{{.ID}}')"
+          if [ -n "$remaining" ]; then
+            echo "GP001 replay A cleanup failure: $remaining" >&2
+            docker ps -a --no-trunc
+            exit 1
+          fi
+
+  replay-b:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      observation_b64: ${{ steps.execute.outputs.observation_b64 }}
+    steps:
+      - name: Checkout exact Executor candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+
+      - name: Acquire fresh exact fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$RUNNER_TEMP/gp001-target-b"
+          rm -rf "$target"
+          git init -q "$target"
+          git -C "$target" remote add origin https://github.com/litrgratis-pixel/executor-pilot-target.git
+          git -C "$target" \
+            -c protocol.version=2 \
+            -c core.hooksPath=/dev/null \
+            -c credential.helper= \
+            fetch --no-tags --depth=1 origin "$GP001_FIXTURE_COMMIT"
+          git -C "$target" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$target" rev-parse HEAD)" = "$GP001_FIXTURE_COMMIT"
+          test -z "$(git -C "$target" status --porcelain)"
+
+      - name: Pull exact sandbox image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "$GP001_IMAGE_REF"
+          image="$(docker image inspect --format='{{.Id}}' "$GP001_IMAGE_REF")"
+          case "$image" in
+            sha256:????????????????????????????????????????????????????????????????) ;;
+            *) echo "unexpected immutable image id: $image" >&2; exit 1 ;;
+          esac
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Execute replay B
+        id: execute
+        shell: bash
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          EXECUTOR_ROOT: ${{ github.workspace }}
+          GP001_WORKSPACE: ${{ runner.temp }}/gp001-target-b
+          GP001_RUNS_ROOT: ${{ runner.temp }}/gp001-runs-b
+          GP001_IMAGE: ${{ steps.image.outputs.image }}
+          GP001_RUN_ID: gp001-replay-b-${{ github.run_id }}-${{ github.run_attempt }}
+          GP001_OBSERVATION_PATH: ${{ runner.temp }}/gp001-replay-b.json
+        run: |
+          set -euo pipefail
+          export EXECUTOR_COMMIT="$(git rev-parse HEAD)"
+          python tools/run_gp001_real_e2e.py
+          test -s "$GP001_OBSERVATION_PATH"
+          observation_b64="$(base64 -w0 "$GP001_OBSERVATION_PATH")"
+          echo "observation_b64=$observation_b64" >> "$GITHUB_OUTPUT"
+
+      - name: Verify replay B cleanup
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          remaining="$(docker ps -a --filter label=creative-os-executor-gp001=first-vertical-runtime-slice --format '{{.ID}}')"
+          if [ -n "$remaining" ]; then
+            echo "GP001 replay B cleanup failure: $remaining" >&2
+            docker ps -a --no-trunc
+            exit 1
+          fi
+
+  compare-replays:
+    needs:
+      - replay-a
+      - replay-b
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact Executor candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+
+      - name: Verify contractual replay equivalence
+        shell: bash
+        env:
+          GP001_REPLAY_LEFT_B64: ${{ needs.replay-a.outputs.observation_b64 }}
+          GP001_REPLAY_RIGHT_B64: ${{ needs.replay-b.outputs.observation_b64 }}
+        run: |
+          set -euo pipefail
+          python tools/compare_gp001_replay.py

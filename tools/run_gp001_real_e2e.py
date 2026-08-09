@@ -39,6 +39,78 @@ def require(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
+def build_replay_observation(
+    *,
+    plan: dict[str, object],
+    report: dict[str, object],
+    executor_commit: str,
+    image: str,
+) -> dict[str, object]:
+    authorization = report["authorization"]
+    commands = report["commands"]
+    action_argv = authorization["action_argv"]
+    require(isinstance(action_argv, list) and len(action_argv) >= 2, "authorization action binding missing")
+
+    stable_commands = []
+    execution_ids = []
+    for command in commands:
+        stable_commands.append(
+            {
+                "argv": command["argv"],
+                "exit_code": command["exit_code"],
+                "timed_out": command["timed_out"],
+                "cleanup_verified": command["cleanup_verified"],
+                "policy_sha256": command["policy_sha256"],
+            }
+        )
+        execution_ids.append(command["execution_id"])
+
+    return {
+        "schema_version": "executor-gp001-replay-observation/1.0",
+        "stable": {
+            "executor_commit": executor_commit,
+            "sandbox_image": image,
+            "task_id": report["task_id"],
+            "repository": report["repository"],
+            "input_commit": report["input_commit"],
+            "status": report["status"],
+            "human_decision_required": report["human_decision_required"],
+            "changed_paths": report["changed_paths"],
+            "authorization": {
+                "model": report["authorization_model"],
+                "consumption": report["authorization_consumption"],
+                "authority_class": authorization["authority_class"],
+                "fixture_binding": authorization["fixture_binding"],
+                "issuer_id": authorization["issuer_id"],
+                "issuer_role": authorization["issuer_role"],
+                "issuer_evidence_ref": authorization["issuer_evidence_ref"],
+                "action_kind": action_argv[0],
+                "action_path": action_argv[1],
+            },
+            "plan": {
+                "task_id": plan["task_id"],
+                "repository": plan["repository"],
+                "commit": plan["commit"],
+                "path": plan["path"],
+                "scope_expansion": plan["scope_expansion"],
+                "strategy": plan["strategy"],
+            },
+            "evidence": report["evidence"],
+            "commands": stable_commands,
+        },
+        "ephemeral": {
+            "run_id": report["run_id"],
+            "packet_id": authorization["packet_id"],
+            "execution_ids": execution_ids,
+        },
+        "observed_hashes": {
+            "before_sha256": plan["before_sha256"],
+            "after_sha256": plan["after_sha256"],
+            "authorization_payload_sha256": authorization["payload_sha256"],
+        },
+    }
+
+
 def main() -> int:
     executor_root = Path(os.environ["EXECUTOR_ROOT"]).resolve()
     workspace = Path(os.environ["GP001_WORKSPACE"]).resolve()
@@ -126,10 +198,28 @@ def main() -> int:
     require(report["evidence"] == expected_evidence, f"evidence mismatch: {report['evidence']}")
     require(git(workspace, "diff", "--name-only", FIXTURE_COMMIT) == MUTATION_PATH, "real diff escaped scope")
 
+    observation = build_replay_observation(
+        plan=plan,
+        report=report,
+        executor_commit=executor_commit,
+        image=image,
+    )
+    observation_path = os.environ.get("GP001_OBSERVATION_PATH")
+    if observation_path:
+        resolved = Path(observation_path).resolve()
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        resolved.write_text(
+            json.dumps(observation, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
     print("=== BOUNDED PLAN ===")
     print(json.dumps(plan, indent=2, sort_keys=True))
     print("=== GP001 REPORT ===")
     print(json.dumps(report, indent=2, sort_keys=True))
+    if observation_path:
+        print("=== REPLAY OBSERVATION ===")
+        print(json.dumps(observation, indent=2, sort_keys=True))
     print("=== REAL DIFF ===")
     print(git(workspace, "diff", "--", MUTATION_PATH))
     return 0
