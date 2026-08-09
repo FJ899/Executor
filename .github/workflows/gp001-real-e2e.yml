@@ -1,0 +1,83 @@
+name: GP001 real E2E
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - tools/run_gp001_real_e2e.py
+      - .github/workflows/gp001-real-e2e.yml
+
+permissions:
+  contents: read
+
+jobs:
+  real-gp001-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Executor candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+
+      - name: Acquire exact public fixture commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$RUNNER_TEMP/gp001-target"
+          rm -rf "$target"
+          git init -q "$target"
+          git -C "$target" remote add origin https://github.com/litrgratis-pixel/executor-pilot-target.git
+          git -C "$target" \
+            -c protocol.version=2 \
+            -c core.hooksPath=/dev/null \
+            -c credential.helper= \
+            fetch --no-tags --depth=1 origin 3934a94a5eebf750079200589d6dc40e024d44a0
+          git -C "$target" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$target" rev-parse HEAD)" = "3934a94a5eebf750079200589d6dc40e024d44a0"
+          test -z "$(git -C "$target" status --porcelain)"
+
+      - name: Resolve immutable sandbox image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull python:3.11-slim
+          image="$(docker image inspect --format='{{.Id}}' python:3.11-slim)"
+          case "$image" in
+            sha256:????????????????????????????????????????????????????????????????) ;;
+            *) echo "unexpected immutable image id: $image" >&2; exit 1 ;;
+          esac
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Execute real GP001 vertical slice
+        shell: bash
+        env:
+          EXECUTOR_ROOT: ${{ github.workspace }}
+          GP001_WORKSPACE: ${{ runner.temp }}/gp001-target
+          GP001_RUNS_ROOT: ${{ runner.temp }}/gp001-runs
+          GP001_IMAGE: ${{ steps.image.outputs.image }}
+          GP001_RUN_ID: gp001-real-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          export EXECUTOR_COMMIT="$(git rev-parse HEAD)"
+          python tools/run_gp001_real_e2e.py
+
+      - name: Verify sandbox cleanup
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          remaining="$(docker ps -a --filter label=creative-os-executor-gp001=first-vertical-runtime-slice --format '{{.ID}}')"
+          if [ -n "$remaining" ]; then
+            echo "GP001 container cleanup failure: $remaining" >&2
+            docker ps -a --no-trunc
+            exit 1
+          fi
