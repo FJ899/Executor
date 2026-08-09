@@ -1,14 +1,28 @@
 ---
 document: "Creative OS Executor — cel produktu i granice odpowiedzialności"
 version: "1.0"
-status: "USER APPROVED / AUTHORITATIVE PRODUCT DECISION"
+status: "USER APPROVED / AUTHORITATIVE PRODUCT PURPOSE"
 date: "2026-08-02"
-scope: "product purpose, component roles, user-facing outcome and implementation order"
-implementation_status: "DOCUMENTED / NOT IMPLEMENTED"
+status_reconciled: "2026-08-09"
+scope: "product purpose, component roles and user-facing responsibility boundaries"
+implementation_status: "DOCUMENTED / IMPLEMENTATION CLAIMS OWNED BY INVENTORY AND MAIN"
 repository: "litrgratis-pixel/Executor"
 ---
 
 # Creative OS Executor — cel produktu i granice odpowiedzialności v1.0
+
+## 0. Aktualna granica autorytetu dokumentu
+
+Ten dokument pozostaje autorytatywny dla celu produktu i odpowiedzialności komponentów.
+
+Nie jest już źródłem prawdy dla:
+
+- bieżącej kolejności implementacji — tę określa `docs/EXECUTOR_BUILD_ORDER.md`;
+- aktualnego stanu implementacji — ten wynika z `main` i jest podsumowany w `docs/architecture/IMPLEMENTATION_INVENTORY.md`;
+- poziomów maturity/proof — te definiuje `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md`;
+- szczegółowej semantyki Action Authorization Packet — tę definiuje późniejszy dedykowany `ACTION_AUTHORIZATION_PACKET_v1.0.md`.
+
+Pełną regułę rozstrzygania źródeł prawdy opisuje `docs/governance/DOCUMENT_AUTHORITY.md`.
 
 ## 1. Decyzja nadrzędna
 
@@ -19,20 +33,18 @@ najlepszy z nich. Dopiero zatwierdzony kierunek może zostać przekazany do wyko
 
 Executor jest podporządkowanym runtime wykonawczym tego systemu. Nie jest całym
 produktem, właścicielem intencji użytkownika ani substytutem Ginsenga, Creative OS
-lub Company Loop.
+lub warstwy deliberacyjnej.
 
-Obowiązujący przepływ produktu:
+Obowiązujący przepływ odpowiedzialności:
 
 ```text
 INTENCJA UŻYTKOWNIKA
-→ ODKRYCIE RZECZYWISTEGO CELU
-→ POSZERZENIE POLA MOŻLIWOŚCI
-→ WERYFIKACJA Z WIELU PERSPEKTYW
-→ REKOMENDACJA I ALTERNATYWY
-→ DECYZJA UŻYTKOWNIKA, JEŻELI ZMIENIA SIĘ SENS
-→ ODWRACALNE WYKONANIE
-→ SPRAWDZENIE RZECZYWISTEGO EFEKTU
-→ JASNE DALSZE DZIAŁANIE
+→ ODKRYCIE / ROZWAŻENIE MOŻLIWOŚCI
+→ KANON / ZATWIERDZONY KIERUNEK
+→ KONTRAKT
+→ WYKONANIE
+→ DOWÓD / WERYFIKACJA
+→ DECYZJA CZŁOWIEKA
 ```
 
 ## 2. Problem, który rozwiązuje system
@@ -67,9 +79,9 @@ Ginseng jest warstwą prowadzenia intencji i możliwości. Ma:
 - ujawniać potencjał wykraczający poza początkową ramę;
 - przekazywać użytkownikowi zrozumiały wybór.
 
-### Company Loop
+### Deliberation / Company Loop
 
-Company Loop jest mechanizmem poszerzania i kwestionowania wariantów. Ma:
+Warstwa deliberacyjna poszerza i kwestionuje warianty. Może:
 
 - generować rozwiązania z odmiennych perspektyw;
 - szukać kontrargumentów, zależności i skutków ubocznych;
@@ -77,9 +89,18 @@ Company Loop jest mechanizmem poszerzania i kwestionowania wariantów. Ma:
 - proponować mikroeksperyment, gdy dowód może rozstrzygnąć wybór;
 - tworzyć rekomendację i alternatywy.
 
-Company Loop nie jest centrum zaufania. Liczba agentów, ich zgoda ani wynik Board
-nie stanowią samodzielnego dowodu prawdziwości i nie mogą zastąpić decyzji
-użytkownika w sprawach semantycznych.
+Nie jest centrum zaufania. Liczba modeli, ich zgoda ani synteza nie stanowią
+samodzielnego dowodu prawdziwości i nie mogą zastąpić decyzji użytkownika.
+
+Obowiązuje dodatkowo:
+
+```text
+AI AGREEMENT != PROOF
+SYNTHESIS != AUTHORIZATION
+DELIBERATION MAY NOT EXPAND THE CONTRACT
+```
+
+Szczegóły zawiera `docs/philosophy/HUMAN_AI_DELIBERATION_MODEL.md`.
 
 ### Creative OS
 
@@ -93,36 +114,46 @@ Creative OS jest pamięcią, konstytucją i mapą zależności. Przechowuje:
 
 ### Executor
 
-Executor otrzymuje zatwierdzony kierunek i zamienia go w działanie. Ma:
+Executor otrzymuje zatwierdzony kontrakt i zamienia go w działanie. Ma:
 
 - sprawdzić kontrakt zadania oraz warunki sukcesu;
-- zaplanować odwracalną ścieżkę wykonania;
+- zaplanować ścieżkę wykonania w granicach kontraktu;
 - wykonać pracę w dozwolonym środowisku;
 - mierzyć postęp i zatrzymać bezproduktywne retry;
 - zebrać dowód wykonania;
-- sprawdzić efekt wobec zatwierdzonego celu;
-- zwrócić wynik oraz jedno jasne dalsze działanie.
+- sprawdzić obserwowalny efekt wobec kryteriów kontraktu;
+- zwrócić wynik do review człowieka.
 
-Executor nie może sam zmienić celu, kanonu, priorytetów ani kryteriów sukcesu.
+Executor nie może sam zmienić celu, kanonu, priorytetów, zakresu autoryzacji ani kryteriów sukcesu.
 
-### Audyt
+Obowiązuje:
 
-Audyt jest okresowym lub zdarzeniowym mechanizmem korekty. Ma sprawdzać, czy:
+```text
+CAPABILITY != AUTHORITY
+EXECUTION != PROOF
+```
+
+### Verifier / Audyt
+
+Verifier i audyt pełnią inne role niż Executor i Critic.
+
+Verifier ustala, czy obserwowalne fakty spełniają wymagania kontraktu i evidence boundary.
+Audyt sprawdza okresowo lub zdarzeniowo, czy:
 
 - produkt nadal realizuje przyjęty cel;
 - rozwój nie został zdominowany przez warstwę pomocniczą;
 - deklarowane funkcje są rzeczywiście osiągalne;
 - testy mierzą właściwy rezultat;
-- system nie nadaje sobie fałszywego `PASS`;
+- system nie nadaje sobie fałszywego sukcesu;
 - nie wystąpił dryf od zaakceptowanego kierunku.
 
 Audyt nie tworzy nowej misji produktu i nie służy do oceniania autora.
 
 ## 4. Wynik przed wykonaniem
 
-Przed zmianą semantyczną albo wyborem istotnego kierunku system tworzy użytkowy
-`POTENTIAL_AND_DECISION_PACKET`. Jest to logiczny kontrakt wyniku, a nie jeszcze
-zaimplementowany format runtime.
+Przed zmianą semantyczną albo wyborem istotnego kierunku system może tworzyć użytkowy
+`POTENTIAL_AND_DECISION_PACKET`. Jest to logiczny kontrakt wyniku, a nie obecnie
+claimowany format runtime Executora.
 
 Pakiet powinien zawierać:
 
@@ -142,7 +173,7 @@ który ukrywa rozdroże pod nadmiarem danych.
 
 ## 5. Wynik po wykonaniu
 
-Po zatwierdzeniu kierunku Executor zwraca co najmniej:
+Po zatwierdzeniu kontraktu Executor zwraca co najmniej:
 
 - dokładny wykonany zakres;
 - rezultat użytkowy;
@@ -152,108 +183,137 @@ Po zatwierdzeniu kierunku Executor zwraca co najmniej:
 - status wymagający prawdy, nie samooceny;
 - jedno wskazanie dalszej pracy.
 
-Status techniczny `PASS` nie jest pełnym wynikiem produktu. Musi być powiązany
-z konkretnym celem, artefaktem, baseline i obserwowalnym rezultatem.
+Techniczny wynik testu lub wewnętrzny stan `PASS` nie oznacza automatycznie:
+
+```text
+HUMAN ACCEPTED
+PRODUCT ACCEPTED
+MERGED
+MATURITY LEVEL ACHIEVED
+```
 
 ## 6. Miejsce Action Authorization Packet
 
-`Action Authorization Packet` może w przyszłości zostać wewnętrznym kontraktem
-Executora, ograniczającym skutek wykonania do dokładnie zatwierdzonej czynności.
-Nie jest jednak głównym produktem, wynikiem użytkowym ani zamiennikiem eksploracji
-potencjału i decyzji.
+`ACTION_AUTHORIZATION_PACKET_v1.0.md` jest późniejszym, dedykowanym i zamrożonym
+kontraktem semantycznym terminalnej autoryzacji konkretnej consequential action.
 
-Obowiązuje status:
+Aktualny stan `main`:
 
 ```text
 INTERNAL SUPPORTING MECHANISM
-CONTRACT NOT FROZEN
-NOT IMPLEMENTED
-MUST NOT DEFINE M3A / M3B / M3C BY IMPLICATION
+CONTRACT: FROZEN
+VALIDATOR: IMPLEMENTED
+POSITIVE VALIDATION RESULT: READY_FOR_ATOMIC_CONSUMPTION
+ATOMIC CONSUMPTION LEDGER: NOT CLAIMED ON MAIN
+ACTION-RESULT BINDING: NOT CLAIMED ON MAIN
 ```
 
-Jego schema, pola, relacja do M3 i kryteria akceptacji mogą zostać określone dopiero
-przy zamrażaniu kontraktu M3. Do tego czasu nazwa nie uprawnia implementera do
-tworzenia mechanizmu ani zmiany terminalnych statusów.
+AAP nie jest głównym produktem, wynikiem użytkowym, rekomendacją ani dowodem wykonania.
+Nie może sam poszerzyć Task Contract ani polityki.
+
+Posiadanie credentialu lub technicznej capability nie tworzy autoryzacji.
+
+```text
+POSSESSION OF CREDENTIAL != AUTHORITY
+CAPABILITY != AUTHORITY
+```
+
+Dedykowany kontrakt AAP oraz stan kodu na `main` są źródłem prawdy dla jego szczegółowej semantyki i implementacji.
 
 ## 7. Non-goals
 
 System nie jest projektowany jako:
 
 - produkt cyberbezpieczeństwa;
-- kolejny ogólny agent do pisania kodu;
+- ogólny autonomiczny agent wykonujący dowolne zadania;
 - warstwa zatwierdzania każdej drobnej czynności;
-- biurokratyczna bramka blokująca autonomiczne decyzje techniczne;
+- biurokratyczna bramka blokująca odwracalne decyzje techniczne w ramach kontraktu;
 - komitet agentów, który sam wykonuje i sam zatwierdza własną pracę;
-- mechanizm literalnego wykonywania pierwszego rozwiązania użytkownika;
+- mechanizm literalnego wykonywania pierwszego rozwiązania użytkownika bez możliwości wcześniejszej deliberacji;
 - generator maksymalnej liczby pomysłów bez selekcji wartości;
 - właściciel kanonu, priorytetów albo semantycznego stanu projektów.
 
+Pierwszy product slice może świadomie wspierać wąską klasę zadań developerskich.
+Nie oznacza to celu budowy general-purpose autonomous coding agent.
+
 Sandbox, polityki, integralność stanu i dowód są koniecznymi fundamentami uczciwego
-wykonania. Pozostają jednak warstwą pomocniczą wobec celu: odkryć wartość, pomóc
-wybrać kierunek i rzeczywiście go zrealizować.
+wykonania. Pozostają jednak warstwą pomocniczą wobec rezultatu użytkowego.
 
 ## 8. Zasady projektowe
 
-1. Najpierw cel i potencjał, potem rozwiązanie.
-2. Rozwiązanie użytkownika jest kandydatem, nie automatycznie wiążącą architekturą.
-3. Poszerzenie przestrzeni rozwiązań ma być proporcjonalne do możliwej wartości,
-   nie tylko do ryzyka technicznego.
-4. Różne perspektywy mają dostarczać odmienne podstawy i kontrargumenty, a nie
-   powtarzać tę samą opinię wieloma głosami.
-5. Użytkownik decyduje o zmianach semantycznych; AI samodzielnie realizuje
-   odwracalne decyzje techniczne w zatwierdzonym kierunku.
-6. Zabezpieczenie jest uzasadnione, gdy chroni wynik albo granicę odpowiedzialności.
-   Nie może samo stać się miernikiem wartości produktu.
-7. Dowód ma odpowiadać na pytanie, czy osiągnięto cel, nie tylko czy wykonano komendę.
+1. Najpierw cel i potencjał, potem rozwiązanie — w warstwach, które są właścicielem deliberacji.
+2. Executor wykonuje kontrakt; nie redefiniuje celu.
+3. Poszerzenie przestrzeni rozwiązań nie może automatycznie poszerzyć zakresu wykonania.
+4. Różne perspektywy mają dostarczać odmienne podstawy i kontrargumenty, a nie powtarzać tę samą opinię wieloma głosami.
+5. Użytkownik lub autorytatywny kontrakt decyduje o zmianach semantycznych i zakresie authority.
+6. Zabezpieczenie jest uzasadnione, gdy chroni wynik albo granicę odpowiedzialności. Nie może samo stać się miernikiem wartości produktu.
+7. Dowód ma odpowiadać na pytanie, czy osiągnięto zakontraktowany obserwowalny rezultat, nie tylko czy wykonano komendę.
 8. Każda analiza prowadząca do pracy kończy się jasnym działaniem albo decyzją.
+9. AI recommendation nie jest authorization.
+10. Executor nie może być autorytatywnym verifierem własnej narracji.
 
 ## 9. Kolejność dalszej budowy
 
-Kanoniczne poziomy produktu, minimalne progi osi i bramki zawiera `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md`. Ten dokument zachowuje nadrzędny cel i role komponentów; drabina odpowiada za kolejność dojrzałości produktu.
+Aktualna krytyczna kolejność implementacji jest własnością:
 
-Obowiązująca krytyczna ścieżka:
+- `docs/EXECUTOR_BUILD_ORDER.md`.
+
+Po zaakceptowaniu PR #42 baseline brzmi:
 
 ```text
-P1 — kontrolowany pilot runtime i exact-SHA evidence
-→ P1 ACCEPT / REWORK / STOP
-→ P2 — jeden rzeczywisty worker AI na CASE-001–003
-→ P3 — jeden realny pilot wartości
-→ decyzja CONTINUE / REWORK / STOP
-→ dopiero potem inwestycje w powtarzalność, M3 lub Company Loop według zmierzonego ograniczenia
+PRODUCT / BUILD BASELINE
+→ DOCUMENT AUTHORITY RECONCILIATION
+→ GP001 MACHINE-READABLE CONTRACT
+→ FIRST VERTICAL RUNTIME SLICE
+→ ADVERSARIAL GP001 TESTS
+→ REAL END-TO-END RUN
+→ MATURITY ASSESSMENT
 ```
 
-M3 jest rozwojem osi zaufania i dowodu, a nie samodzielnym wynikiem użytkowym. Nie wolno rozpoczynać M3 przed pozytywną decyzją produktową po P3, chyba że użytkownik jawnie zmieni tę bramkę z powodu potwierdzonego ryzyka.
+`EXECUTOR_PRODUCT_CAPABILITY_LADDER.md` pozostaje autorytatywny dla definicji i dowodów P0/P1/P2/P3+, ale nie jest kolejką bieżących prac implementacyjnych.
 
-Company Loop może wejść do aktywnej roadmapy dopiero po pierwszym realnym dowodzie wartości Executora. Musi zostać oceniony przez porównanie z jednym mocnym agentem, a nie przez liczbę agentów lub raportów.
+Nie wracamy do rozwijania P1, M3 ani innych osi tylko dlatego, że istnieje otwarta historyczna praca. Taka praca wraca na critical path wyłącznie wtedy, gdy usuwa zmierzony blocker bieżącego product slice albo gdy po end-to-end run wymaga tego maturity assessment.
 
-Każdy nowy PR musi wskazać bieżący i docelowy poziom produktu, usuwany blocker, rezultat widoczny dla użytkownika, rozwijaną oś oraz dowód. Infrastruktura, panel, provider framework, M3 i wielorepozytoryjność pozostają odroczone, jeżeli nie usuwają aktualnego mierzonego ograniczenia.
+Każdy nowy PR krytycznej ścieżki powinien wskazać:
+
+```text
+BUILD MAP TARGET:
+MATURITY TARGET:
+CURRENT GAP:
+CHANGE:
+PROOF:
+NON-GOALS:
+```
 
 ## 10. Ochrona kierunku
 
 Każda przyszła funkcja powinna wskazać, który etap nadrzędnego przepływu produktu
-wzmacnia. Jeżeli nie można tego wykazać, funkcja pozostaje hipotezą albo trafia do
-Idea Inbox, zamiast automatycznie rozszerzać roadmapę.
+wzmacnia. Jeżeli nie można tego wykazać, funkcja pozostaje hipotezą albo trafia poza critical path zamiast automatycznie rozszerzać roadmapę.
 
 Audyt kierunku jest wymagany, gdy:
 
-- warstwa bezpieczeństwa zaczyna dominować nad odkrywaniem wartości;
-- Executor jest opisywany jako cały produkt;
-- Company Loop jest traktowany jako dowód prawdy;
+- warstwa bezpieczeństwa zaczyna dominować nad rezultatem użytkowym bez zmierzonego blockera;
+- Executor jest opisywany jako właściciel całego ekosystemu;
+- deliberation jest traktowana jako dowód prawdy;
 - wynik użytkowy zostaje zastąpiony technicznym statusem;
-- implementacja przyspiesza kosztem zatwierdzonego celu;
+- implementacja przyspiesza kosztem zatwierdzonego kontraktu;
+- capability zaczyna być mylone z authority;
 - pojawia się nowy kierunek o potencjale większym niż bieżąca roadmapa.
 
 ## 11. Status
 
 ```text
-PRODUCT PURPOSE: USER APPROVED / DOCUMENTED
+PRODUCT PURPOSE: USER APPROVED / AUTHORITATIVE FOR PURPOSE AND ROLE BOUNDARIES
+BUILD BASELINE: ACCEPTED THROUGH PR #42
+CURRENT BUILD TARGET: GP001 VERTICAL PRODUCT PATH
+CURRENT PROVEN MATURITY: P0 IN DECLARED SCOPE
+ACTIVE MATURITY ADVANCEMENT CLAIM: NONE
 GINSENG ROLE: DEFINED / NOT IMPLEMENTED HERE
-COMPANY LOOP ROLE: DEFINED / NOT IMPLEMENTED
+DELIBERATION MODEL: DEFINED / RUNTIME NOT CLAIMED
 CREATIVE OS ROLE: DEFINED / EXTERNAL SYSTEM
-EXECUTOR ROLE: FOUNDATION IMPLEMENTATION IN PROGRESS
+EXECUTOR ROLE: FOUNDATION IMPLEMENTATION EXISTS / GP001 END-TO-END NOT YET CLAIMED
 POTENTIAL_AND_DECISION_PACKET: LOGICAL CONTRACT / NOT IMPLEMENTED
-ACTION AUTHORIZATION PACKET: INTERNAL IDEA / CONTRACT NOT FROZEN / NOT IMPLEMENTED
-M3+: LOCKED
+ACTION AUTHORIZATION PACKET: CONTRACT FROZEN / VALIDATOR IMPLEMENTED / ATOMIC LEDGER NOT CLAIMED ON MAIN
 EXTERNAL PROJECT EXECUTION: FORBIDDEN
 AUTO MERGE: DISABLED
 ```

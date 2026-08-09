@@ -4,9 +4,11 @@ Repozytorium: `litrgratis-pixel/Executor`.
 
 Robocza nazwa systemu i pakietu Python: `creative-os-executor`. Nie oznacza ona osobnego repozytorium.
 
-Executor jest runtime wykonawczym większego systemu Creative OS. Otrzymuje zatwierdzony kierunek i zamienia go w odwracalne, testowalne działanie. Nie zastępuje Ginsenga ani Company Loop, których rolą jest wyjście poza pierwszą ramę użytkownika, odkrycie potencjału, porównanie wariantów i przygotowanie decyzji.
+Executor jest runtime wykonawczym większego systemu Creative OS. Otrzymuje zatwierdzony kierunek i zamienia go w odwracalne, testowalne działanie. Nie zastępuje Ginsenga ani warstw deliberacyjnych, których rolą jest wyjście poza pierwszą ramę użytkownika, odkrycie potencjału, porównanie wariantów i przygotowanie rekomendacji.
 
-Zabezpieczenia, sandbox i dowód są fundamentami uczciwego wykonania, ale nie stanowią głównego celu produktu. Nadrzędną definicję celu i granic zawiera `CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md`.
+Executor nie jest właścicielem celu. Aktualny pierwszy produktowy pion to wykonanie dobrze określonego zadania technicznego w repozytorium i pokazanie zmiany wraz z weryfikacją.
+
+Zabezpieczenia, sandbox i dowód są fundamentami uczciwego wykonania, ale nie stanowią głównego celu produktu.
 
 Aktualny zakres implementacji fundamentów obejmuje:
 
@@ -30,49 +32,79 @@ python -m executor.cli validate-test test_contracts/examples/valid_test.yaml --b
 
 Pliki `.yaml` używają składni JSON, która jest poprawnym podzbiorem YAML 1.2.
 
-## Dokumenty sterujące
-  * `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md` — kanoniczna drabina poziomów produktu, poziome osie dojrzałości, bramki i reguła odrzucania bocznych odnóg;
+## Jak czytać repo — źródła prawdy
 
-- `CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md` — nadrzędny cel produktu, role Ginsenga, Company Loop, Creative OS, Executora i audytu oraz kolejność dalszej budowy;
+`README.md` jest indeksem i skrótem statusu. Nie nadpisuje dedykowanych kontraktów.
+
+- `docs/governance/DOCUMENT_AUTHORITY.md` — właścicielstwo źródeł prawdy i reguły rozstrzygania konfliktów;
+- `CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md` — cel produktu i granice odpowiedzialności ekosystemu;
+- `docs/product/EXECUTOR_V1_PRODUCT_SPEC.md` — pierwszy użyteczny produktowy pion i użytkownik v1;
+- `docs/architecture/EXECUTOR_BUILD_MAP.md` — co architektonicznie budujemy;
+- `docs/architecture/IMPLEMENTATION_INVENTORY.md` — datowany obraz tego, co faktycznie istnieje;
+- `docs/EXECUTOR_BUILD_ORDER.md` — aktualna krytyczna kolejność budowy;
+- `docs/product/GOLDEN_PATH_001_FIX_FAILING_TEST.md` — pierwszy Golden Path;
+- `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md` — kanoniczne definicje poziomów maturity/proof, nie kolejka implementacyjna;
+- `docs/philosophy/HUMAN_AI_DELIBERATION_MODEL.md` — przekrojowy model deliberacji, nie dowód;
+- `ACTION_AUTHORIZATION_PACKET_v1.0.md` — zamrożony terminalny kontrakt autoryzacji konkretnej consequential action;
 - `EXECUTOR_CHARTER.md` — misja Executora, hierarchia zaufania i warunki zatrzymania;
 - `EXECUTOR_POLICY.yaml` — deterministyczna polityka wykonania;
 - `CREATIVE_OS_EXECUTOR_BUILD_INSTRUCTION_v0.2.md` — kontrakt implementacyjny;
-- `CREATIVE_OS_EXECUTOR_WORK_AND_AUDIT_PROTOCOL_v1.0.md` — zaakceptowane zasady autonomicznej pracy, rozmowy, pełnych instrukcji oraz audytu dowodowego;
-- `ACTION_AUTHORIZATION_PACKET_v1.0.md` — zamrożony terminalny kontrakt jednorazowej autoryzacji konkretnego działania.
+- `CREATIVE_OS_EXECUTOR_WORK_AND_AUDIT_PROTOCOL_v1.0.md` — zasady pracy i audytu.
 
-Protokół pracy i audytu jest obowiązującym źródłem instrukcji dla projektu `executor-self`. Jego obecność nie jest dowodem implementacji mechanizmów runtime; egzekwowanie każdej reguły wymaga osobnego testu.
+Otwarty draft PR, branch-only dokument albo komentarz review nie zmienia kanonu `main` przed merge.
 
-Action Authorization Packet jest zamrożonym kontraktem semantycznym i posiada walidator. Poprawny pakiet oznacza wyłącznie `READY_FOR_ATOMIC_CONSUMPTION`. Nie jest dowodem wykonania. Atomowy ledger konsumpcji i związanie wyniku akcji należą do projektu M3.
+## Action Authorization Packet
 
-Dokument celu produktu jest zatwierdzoną decyzją semantyczną, ale nie stanowi dowodu implementacji Ginsenga, Company Loop, `POTENTIAL_AND_DECISION_PACKET` ani M3.
+Action Authorization Packet jest zamrożonym kontraktem semantycznym i posiada walidator na `main`.
 
-## Poziom produktu
+Poprawny pakiet oznacza wyłącznie:
 
 ```text
-CURRENT MAIN PRODUCT LEVEL: P0 — FOUNDATION / ACHIEVED IN DECLARED SCOPE
+READY_FOR_ATOMIC_CONSUMPTION
+```
+
+Nie jest dowodem wykonania. Atomowy ledger konsumpcji i związanie wyniku akcji nie są obecnie claimowane jako wdrożone na `main`.
+
+## Build status versus maturity
+
+Po PR #42 rozdzielamy bieżący kierunek budowy od drabiny maturity.
+
+```text
+ARCHITECTURE / PRODUCT BUILD BASELINE: ACCEPTED
+PR #42 MATURITY ADVANCEMENT: NONE
+PR #42 RUNTIME IMPLEMENTATION CLAIM: NONE
+
+CURRENT BUILD TARGET: GP001 — FIX A FAILING TEST VERTICAL PATH
+NEXT BUILD ARTIFACT AFTER AUTHORITY RECONCILIATION: GP001 MACHINE-READABLE CONTRACT
+
+CURRENT PROVEN PRODUCT LEVEL: P0 — FOUNDATION / ACHIEVED IN DECLARED SCOPE
 P0 ACHIEVED SHA: b092a85e82eb81ec6dc7db4a7064409c6c383359
 P0 EVIDENCE PR: #16
 P0 EVIDENCE RUN ID: 30755381646
 P0 HUMAN DECISION: ACCEPTED THROUGH MERGE OF PR #16
-CURRENT TARGET: P1 — CONTROLLED PILOT RUNTIME
-FIRST TRUE PRODUCT MVP: P3 — REAL VALUE MVP
-M3: T3 TRUST AXIS / LOCKED UNTIL P3 PRODUCT DECISION CONTINUE
-COMPANY LOOP: TARGETED AT P5
+
+NEXT UNACHIEVED LADDER LEVEL: P1 — CONTROLLED PILOT RUNTIME
+ACTIVE MATURITY CLAIM: NONE — ASSESS ONLY AFTER PRODUCT RUN
+FIRST TRUE PRODUCT MVP IN LADDER: P3 — REAL VALUE MVP
 ```
 
-Pełne definicje, dowody i non-goals zawiera `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md`.
+`v1` w nazwie `EXECUTOR_V1_PRODUCT_SPEC.md` oznacza wersję pierwszego product slice. Nie oznacza `P4 — REPEATABLE EXECUTOR 1.0` ani produkcyjnej gotowości.
 
-## Status
+Techniczny wynik testu lub wewnętrzny stan `PASS` nie oznacza automatycznie `PRODUCT ACCEPTED`, `HUMAN ACCEPTED`, `MERGED` ani osiągnięcia poziomu maturity.
+
+## Status implementacji
 
 ```text
 M0: IMPLEMENTED
 M1: IMPLEMENTED
 M2A: IMPLEMENTED
 M2B: IMPLEMENTED / FIXTURES VERIFIED
-M3+: LOCKED
+M3+: NOT CLAIMED ON MAIN
 PRODUCT PURPOSE: USER APPROVED / DOCUMENTED
+BUILD BASELINE: ACCEPTED THROUGH PR #42
+GP001 PRODUCT PATH: DEFINED / NOT YET END-TO-END IMPLEMENTED
 POTENTIAL AND DECISION PACKET: LOGICAL CONTRACT / NOT IMPLEMENTED
-ACTION AUTHORIZATION PACKET: CONTRACT FROZEN / VALIDATOR IMPLEMENTED / LEDGER PENDING M3
+ACTION AUTHORIZATION PACKET: CONTRACT FROZEN / VALIDATOR IMPLEMENTED / ATOMIC LEDGER NOT CLAIMED ON MAIN
 WORK AND AUDIT PROTOCOL: DOCUMENTED / RUNTIME ENFORCEMENT NOT CLAIMED
 EXTERNAL PROJECT EXECUTION: FORBIDDEN
 AUTO MERGE: DISABLED
