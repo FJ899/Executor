@@ -53,7 +53,7 @@
   ],
   "holdout": {
     "visibility": "HIDDEN_FROM_IMPLEMENTER",
-    "location": "holdout/GP001_FIX_FAILING_TEST_CASE_001.enc",
+    "location": "tests/fixtures/gp001/GP001_FIX_FAILING_TEST_CASE_001.enc",
     "access": "REPLAY_ONLY"
   },
   "acceptance": [
