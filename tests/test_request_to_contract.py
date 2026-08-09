@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -19,6 +21,15 @@ PROFILE_PATH = ROOT / "formation_profiles" / "REQUEST_TO_CONTRACT_001.json"
 USER_REQUEST = "Napraw failing test dotyczący atomowości batcha."
 
 
+def git_head(root: Path = ROOT) -> str:
+    return subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"],
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip()
+
+
 def canonical_task() -> dict:
     return json.loads(TASK_PATH.read_text(encoding="utf-8"))
 
@@ -30,6 +41,7 @@ def sha256_file(path: Path) -> str:
 def session() -> RequestToContract001:
     return RequestToContract001(
         executor_root=ROOT,
+        executor_commit=git_head(),
         request_id="request-001",
         user_request=USER_REQUEST,
     )
@@ -118,6 +130,7 @@ class RequestToContract001Tests(unittest.TestCase):
         self.assertNotIn("user_facts", proposal.parameters)
         self.assertNotIn("authority_source", proposal.parameters)
         self.assertNotIn("human_decision", proposal.parameters)
+        self.assertIn("executor_commit", constructor.parameters)
 
     def test_only_verbatim_request_has_direct_user_provenance(self) -> None:
         current = session()
@@ -217,12 +230,14 @@ class RequestToContract001Tests(unittest.TestCase):
         self.assertEqual(second["proposed_write_scope"], ["project_registry/registry.py"])
         self.assertEqual(second["provenance"][0]["value"], USER_REQUEST)
 
-    def test_authorization_request_binds_profile_task_and_draft_hashes(self) -> None:
+    def test_authorization_request_binds_executor_profile_task_and_draft_hashes(self) -> None:
         current = session()
         propose_canonical(current)
         surface = prepare_clean_authorization_surface(current)
         request = current.export_human_authorization_request()
 
+        self.assertEqual(request["executor_repository"], "litrgratis-pixel/Executor")
+        self.assertEqual(request["executor_commit"], git_head())
         self.assertEqual(request["draft_sha256"], surface["draft_sha256"])
         self.assertEqual(request["formation_profile_sha256"], sha256_file(PROFILE_PATH))
         self.assertEqual(request["canonical_task_sha256"], sha256_file(TASK_PATH))
@@ -250,6 +265,21 @@ class RequestToContract001Tests(unittest.TestCase):
         self.assertEqual(surface["status"], "NEEDS_CLARIFICATION")
         with self.assertRaises(FormationError):
             current.export_human_authorization_request()
+
+    def test_non_authoritative_executor_root_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fake = Path(temp)
+            (fake / "formation_profiles").mkdir()
+            (fake / "formation_profiles" / "REQUEST_TO_CONTRACT_001.json").write_text(
+                PROFILE_PATH.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(FormationError, "unverified Executor formation source"):
+                RequestToContract001(
+                    executor_root=fake,
+                    executor_commit=git_head(),
+                    request_id="forged",
+                    user_request=USER_REQUEST,
+                )
 
 
 if __name__ == "__main__":
