@@ -1,8 +1,8 @@
 ---
 document: "Executor Build Order"
 version: "1.0"
-status: "PROPOSED EXECUTION ORDER / PENDING REPO MERGE"
-date: "2026-08-08"
+status: "USER ACCEPTED / ACTIVE ARCHITECTURE-PRODUCT BUILD ORDER"
+date: "2026-08-09"
 scope: "ordered path from architecture baseline to first proven product slice"
 repository: "litrgratis-pixel/Executor"
 ---
@@ -73,7 +73,9 @@ EXECUTION != PROOF
 
 ### PHASE A — Freeze the product/build baseline
 
-Current branch scope:
+Accepted through PR #42.
+
+Baseline files:
 
 1. `docs/product/EXECUTOR_V1_PRODUCT_SPEC.md`
 2. `docs/architecture/EXECUTOR_BUILD_MAP.md`
@@ -83,7 +85,7 @@ Current branch scope:
 6. `docs/safety/AI_FAILURE_ATLAS.md`
 7. this build-order document
 
-Exit condition:
+Status:
 
 ```text
 HUMAN REVIEW: ACCEPTED
@@ -93,14 +95,15 @@ MATURITY CLAIM: NONE
 
 ### PHASE B — Reconcile canonical documentation
 
-Create a separate documentation/governance PR that resolves known semantic conflicts without changing runtime.
+Resolve semantic conflicts without changing runtime.
 
 Minimum targets:
 
 - AAP freeze status conflict;
 - relationship of open PR #34 Product Contract to the new product slice;
 - technical `PASS` terminology versus Executor product status;
-- `v1` product-slice naming versus `P4 — REPEATABLE EXECUTOR 1.0` terminology.
+- `v1` product-slice naming versus `P4 — REPEATABLE EXECUTOR 1.0` terminology;
+- explicit authority ownership between Product Purpose, Build Map, Build Order, Inventory and Maturity Ladder.
 
 Exit condition:
 
@@ -214,7 +217,8 @@ Until GP001 needs them to remove a measured blocker:
 - enterprise integrations;
 - autonomous deployment;
 - broad task-class support;
-- cosmetic UI expansion.
+- cosmetic UI expansion;
+- P1/M3 work that does not remove a measured GP001 blocker.
 
 ## 6. Decision rule for every next PR
 
@@ -226,12 +230,12 @@ A PR enters the critical path only if all three are answerable:
 
 If those answers are missing, the work is deferred or moved outside the critical path.
 
-## 7. Immediate next PR after this baseline
+## 7. Immediate next artifact
 
-Recommended next change:
+After documentation authority reconciliation is accepted, the next critical-path artifact is:
 
-> **Documentation consistency and authority reconciliation.**
+> **GP001 machine-readable contract.**
 
-Reason: GP001 should not be encoded while repo documents disagree on contract/AAP status and while PR #34 contains a newer unmerged product contract that overlaps the newly agreed product boundary.
+It must freeze the first bounded failing-test scenario without embedding the solution.
 
-After that reconciliation, freeze the GP001 machine-readable contract and begin the first runtime vertical-slice PR.
+Only after that contract exists do we begin the first runtime vertical-slice PR.
