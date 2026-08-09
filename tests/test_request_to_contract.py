@@ -1,26 +1,30 @@
 from __future__ import annotations
 
-import copy
+import hashlib
+import inspect
 import json
 import unittest
 from pathlib import Path
 
-from executor.gp001_contract import validate_gp001_task_contract
 from executor.request_to_contract import (
     FormationError,
     FormationStatus,
-    HumanDecisionReceipt,
     RequestToContract001,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
 TASK_PATH = ROOT / "tasks" / "GP001_FIX_FAILING_TEST_CASE_001.yaml"
+PROFILE_PATH = ROOT / "formation_profiles" / "REQUEST_TO_CONTRACT_001.json"
 USER_REQUEST = "Napraw failing test dotyczący atomowości batcha."
 
 
 def canonical_task() -> dict:
     return json.loads(TASK_PATH.read_text(encoding="utf-8"))
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def session() -> RequestToContract001:
@@ -40,7 +44,6 @@ def propose_canonical(
     current.propose_interpretation(
         understood_objective="Naprawić regresję atomowości ProjectRegistry.add_many.",
         proposed_task_contract=canonical_task(),
-        user_facts=[("$.request.topic", "failing test")],
         model_inferences=[
             ("$.target.repository", "litrgratis-pixel/executor-pilot-target", 0.99),
             (
@@ -54,7 +57,7 @@ def propose_canonical(
     )
 
 
-def prepare_for_authorization(current: RequestToContract001) -> dict:
+def prepare_clean_authorization_surface(current: RequestToContract001) -> dict:
     current.create_draft()
     findings = current.critique()
     if findings:
@@ -63,7 +66,7 @@ def prepare_for_authorization(current: RequestToContract001) -> dict:
 
 
 class RequestToContract001Tests(unittest.TestCase):
-    def test_request_is_preserved_and_non_executable_before_authorization(self) -> None:
+    def test_request_is_preserved_and_never_executable_in_phase_one(self) -> None:
         current = session()
         self.assertEqual(current.status, FormationStatus.REQUEST_RECEIVED)
         with self.assertRaises(FormationError):
@@ -75,60 +78,59 @@ class RequestToContract001Tests(unittest.TestCase):
         self.assertEqual(surface["request"], USER_REQUEST)
         self.assertEqual(surface["status"], "DRAFT_CONTRACT_CREATED")
         self.assertFalse(surface["executable"])
-        self.assertEqual(surface["provenance"][0]["source"], "USER")
-        self.assertEqual(surface["provenance"][0]["value"], USER_REQUEST)
-        self.assertTrue(any(item["source"] == "MODEL" for item in surface["provenance"]))
+        with self.assertRaises(FormationError):
+            current.frozen_task_contract()
 
-    def test_canonical_proposal_requires_hash_bound_human_accept_before_freeze(self) -> None:
+    def test_clean_draft_stops_at_verified_external_human_authority_boundary(self) -> None:
         current = session()
         propose_canonical(current)
-        surface = prepare_for_authorization(current)
+        surface = prepare_clean_authorization_surface(current)
 
-        self.assertEqual(surface["status"], "AWAITING_HUMAN_AUTHORIZATION")
-        self.assertFalse(surface["executable"])
-        draft_sha = surface["draft_sha256"]
-        self.assertIsNotNone(draft_sha)
-
-        result = current.record_human_decision(
-            HumanDecisionReceipt(
-                decision="ACCEPT",
-                draft_sha256=draft_sha,
-                authority_source="HUMAN_AUTHORITY",
-                authority_evidence_ref="human-gate:test-request-001",
-            )
+        self.assertEqual(
+            surface["status"], "AWAITING_VERIFIED_HUMAN_AUTHORIZATION"
         )
-
-        self.assertIsNotNone(result)
-        assert result is not None
-        self.assertEqual(result["status"], "AUTHORIZED_AND_FROZEN")
-        self.assertEqual(result["formation_evidence"]["authority_source"], "HUMAN_AUTHORITY")
-        self.assertEqual(result["task_contract"], canonical_task())
-        self.assertEqual(validate_gp001_task_contract(result["task_contract"]).status.value, "VALID")
-
-    def test_model_cannot_be_declared_as_human_authority(self) -> None:
+        self.assertFalse(surface["executable"])
+        request = current.export_human_authorization_request()
+        self.assertEqual(
+            request["required_authority"], "VERIFIED_EXTERNAL_HUMAN_AUTHORITY"
+        )
+        self.assertEqual(request["draft_sha256"], surface["draft_sha256"])
+        self.assertEqual(request["allowed_decisions"], ["ACCEPT", "MODIFY", "REJECT"])
         with self.assertRaises(FormationError):
-            HumanDecisionReceipt(
-                decision="ACCEPT",
-                draft_sha256="0" * 64,
-                authority_source="MODEL",
-                authority_evidence_ref="model-self-approval",
-            )
+            current.frozen_task_contract()
 
-    def test_stale_or_wrong_draft_hash_cannot_authorize(self) -> None:
+    def test_self_declared_human_authority_cannot_create_executable_contract(self) -> None:
         current = session()
         propose_canonical(current)
-        prepare_for_authorization(current)
+        prepare_clean_authorization_surface(current)
 
-        with self.assertRaises(FormationError):
-            current.record_human_decision(
-                HumanDecisionReceipt(
-                    decision="ACCEPT",
-                    draft_sha256="0" * 64,
-                    authority_source="HUMAN_AUTHORITY",
-                    authority_evidence_ref="human-gate:stale",
-                )
-            )
-        self.assertEqual(current.status, FormationStatus.AWAITING_HUMAN_AUTHORIZATION)
+        self.assertFalse(hasattr(current, "record_human_decision"))
+        self.assertFalse(hasattr(current, "authorize"))
+        self.assertFalse(hasattr(current, "freeze"))
+        with self.assertRaisesRegex(FormationError, "verified external human authorization"):
+            current.frozen_task_contract()
+
+    def test_public_api_cannot_inject_user_facts_or_profile_override(self) -> None:
+        constructor = inspect.signature(RequestToContract001)
+        proposal = inspect.signature(RequestToContract001.propose_interpretation)
+
+        self.assertNotIn("profile_path", constructor.parameters)
+        self.assertNotIn("user_facts", proposal.parameters)
+        self.assertNotIn("authority_source", proposal.parameters)
+        self.assertNotIn("human_decision", proposal.parameters)
+
+    def test_only_verbatim_request_has_direct_user_provenance(self) -> None:
+        current = session()
+        propose_canonical(current)
+        current.create_draft()
+        surface = current.decision_surface()
+
+        user_records = [item for item in surface["provenance"] if item["source"] == "USER"]
+        model_records = [item for item in surface["provenance"] if item["source"] == "MODEL"]
+        self.assertEqual(len(user_records), 1)
+        self.assertEqual(user_records[0]["path"], "$.user_request")
+        self.assertEqual(user_records[0]["value"], USER_REQUEST)
+        self.assertGreaterEqual(len(model_records), 2)
 
     def test_scope_expansion_is_blocked_by_critique(self) -> None:
         widened = canonical_task()
@@ -148,8 +150,10 @@ class RequestToContract001Tests(unittest.TestCase):
         self.assertIn("CONTRACT_DIVERGENCE_FROM_ACCEPTED_GP001_PROFILE", codes)
         self.assertEqual(surface["status"], "NEEDS_CLARIFICATION")
         self.assertFalse(surface["executable"])
+        with self.assertRaises(FormationError):
+            current.export_human_authorization_request()
 
-    def test_open_question_blocks_authorization_instead_of_becoming_an_assumption(self) -> None:
+    def test_open_question_blocks_instead_of_becoming_an_assumption(self) -> None:
         current = session()
         propose_canonical(current, questions=("Czy wolno rozszerzyć zmianę na tests/**?",))
         current.create_draft()
@@ -159,100 +163,19 @@ class RequestToContract001Tests(unittest.TestCase):
         self.assertIn("OPEN_QUESTIONS_REQUIRE_CLARIFICATION", {item.code for item in findings})
         self.assertEqual(surface["status"], "NEEDS_CLARIFICATION")
         with self.assertRaises(FormationError):
-            current.record_human_decision(
-                HumanDecisionReceipt(
-                    decision="ACCEPT",
-                    draft_sha256=surface["draft_sha256"],
-                    authority_source="HUMAN_AUTHORITY",
-                    authority_evidence_ref="human-gate:cannot-accept-ambiguity",
-                )
-            )
+            current.export_human_authorization_request()
 
     def test_discovery_remains_report_only_and_does_not_expand_contract(self) -> None:
         discovery = "Registry architecture could be refactored more broadly."
         current = session()
         propose_canonical(current, discoveries=(discovery,))
-        surface = prepare_for_authorization(current)
+        surface = prepare_clean_authorization_surface(current)
 
         self.assertEqual(surface["discovered_but_out_of_scope"], [discovery])
         self.assertEqual(surface["proposed_write_scope"], ["project_registry/registry.py"])
-        self.assertEqual(surface["status"], "AWAITING_HUMAN_AUTHORIZATION")
-
-    def test_modify_invalidates_previous_review_and_requires_new_critique(self) -> None:
-        widened = canonical_task()
-        widened["golden_path"]["scope"]["allowed_paths"].append("README.md")
-
-        current = session()
-        current.propose_interpretation(
-            understood_objective="Napraw test.",
-            proposed_task_contract=widened,
-            model_inferences=[("$.scope", ["project_registry/registry.py", "README.md"], 0.7)],
+        self.assertEqual(
+            surface["status"], "AWAITING_VERIFIED_HUMAN_AUTHORIZATION"
         )
-        current.create_draft()
-        current.critique()
-        blocked_surface = current.present_for_authorization()
-        old_sha = blocked_surface["draft_sha256"]
-
-        current.record_human_decision(
-            HumanDecisionReceipt(
-                decision="MODIFY",
-                draft_sha256=old_sha,
-                authority_source="HUMAN_AUTHORITY",
-                authority_evidence_ref="human-gate:remove-scope-expansion",
-            ),
-            modified_task_contract=canonical_task(),
-            modification_note="Usuń rozszerzenie scope; pozostaw tylko GP001.",
-        )
-
-        self.assertEqual(current.status, FormationStatus.DRAFT_CONTRACT_CREATED)
-        self.assertNotEqual(current.draft_sha256, old_sha)
-        findings = current.critique()
-        self.assertEqual(findings, ())
-        surface = current.present_for_authorization()
-        self.assertEqual(surface["status"], "AWAITING_HUMAN_AUTHORIZATION")
-        self.assertTrue(
-            any(
-                item["source"] == "USER" and item["path"] == "$.proposed_task_contract"
-                for item in surface["provenance"]
-            )
-        )
-
-    def test_reject_is_terminal_and_creates_no_frozen_contract(self) -> None:
-        current = session()
-        propose_canonical(current)
-        surface = prepare_for_authorization(current)
-
-        current.record_human_decision(
-            HumanDecisionReceipt(
-                decision="REJECT",
-                draft_sha256=surface["draft_sha256"],
-                authority_source="HUMAN_AUTHORITY",
-                authority_evidence_ref="human-gate:reject-request-001",
-            )
-        )
-
-        self.assertEqual(current.status, FormationStatus.REJECTED)
-        with self.assertRaises(FormationError):
-            current.frozen_task_contract()
-
-    def test_frozen_contract_is_returned_as_copy_not_mutable_authority_state(self) -> None:
-        current = session()
-        propose_canonical(current)
-        surface = prepare_for_authorization(current)
-        current.record_human_decision(
-            HumanDecisionReceipt(
-                decision="ACCEPT",
-                draft_sha256=surface["draft_sha256"],
-                authority_source="HUMAN_AUTHORITY",
-                authority_evidence_ref="human-gate:copy-test",
-            )
-        )
-
-        first = current.frozen_task_contract()
-        first["id"] = "MUTATED-BY-CALLER"
-        second = current.frozen_task_contract()
-        self.assertEqual(second["id"], "GP001-FIX-FAILING-TEST-CASE-001")
-        self.assertNotEqual(first, second)
 
     def test_caller_cannot_skip_formation_states(self) -> None:
         current = session()
@@ -262,19 +185,71 @@ class RequestToContract001Tests(unittest.TestCase):
             current.critique()
         with self.assertRaises(FormationError):
             current.present_for_authorization()
+        with self.assertRaises(FormationError):
+            current.export_human_authorization_request()
 
-    def test_user_request_and_model_inference_remain_distinct_provenance(self) -> None:
+    def test_proposal_is_copied_before_caller_can_mutate_it(self) -> None:
+        proposal = canonical_task()
+        current = session()
+        current.propose_interpretation(
+            understood_objective="Naprawić regresję atomowości.",
+            proposed_task_contract=proposal,
+        )
+        proposal["golden_path"]["scope"]["allowed_paths"].append("README.md")
+
+        current.create_draft()
+        self.assertEqual(current.critique(), ())
+        surface = current.present_for_authorization()
+        self.assertEqual(surface["proposed_write_scope"], ["project_registry/registry.py"])
+
+    def test_decision_surface_is_defensive_copy(self) -> None:
         current = session()
         propose_canonical(current)
-        current.create_draft()
-        surface = current.decision_surface()
+        prepare_clean_authorization_surface(current)
 
-        user_records = [item for item in surface["provenance"] if item["source"] == "USER"]
-        model_records = [item for item in surface["provenance"] if item["source"] == "MODEL"]
-        self.assertGreaterEqual(len(user_records), 2)
-        self.assertGreaterEqual(len(model_records), 2)
-        self.assertEqual(user_records[0]["value"], USER_REQUEST)
-        self.assertNotEqual(user_records[0]["source"], model_records[0]["source"])
+        first = current.decision_surface()
+        first["target"]["name"] = "attacker/other"
+        first["proposed_write_scope"].append("README.md")
+        first["provenance"][0]["value"] = "forged request"
+
+        second = current.decision_surface()
+        self.assertEqual(second["target"]["name"], "litrgratis-pixel/executor-pilot-target")
+        self.assertEqual(second["proposed_write_scope"], ["project_registry/registry.py"])
+        self.assertEqual(second["provenance"][0]["value"], USER_REQUEST)
+
+    def test_authorization_request_binds_profile_task_and_draft_hashes(self) -> None:
+        current = session()
+        propose_canonical(current)
+        surface = prepare_clean_authorization_surface(current)
+        request = current.export_human_authorization_request()
+
+        self.assertEqual(request["draft_sha256"], surface["draft_sha256"])
+        self.assertEqual(request["formation_profile_sha256"], sha256_file(PROFILE_PATH))
+        self.assertEqual(request["canonical_task_sha256"], sha256_file(TASK_PATH))
+        self.assertFalse(request["decision_surface"]["executable"])
+
+    def test_noncanonical_task_cannot_reach_clean_authorization_request(self) -> None:
+        changed = canonical_task()
+        changed["golden_path"]["problem"]["statement"] = (
+            "Fix GP001 and refactor the whole registry architecture."
+        )
+        current = session()
+        current.propose_interpretation(
+            understood_objective="Naprawić test i przebudować registry.",
+            proposed_task_contract=changed,
+            model_inferences=[("$.broader_refactor", True, 0.9)],
+        )
+        current.create_draft()
+        findings = current.critique()
+        surface = current.present_for_authorization()
+
+        self.assertIn(
+            "CONTRACT_DIVERGENCE_FROM_ACCEPTED_GP001_PROFILE",
+            {item.code for item in findings},
+        )
+        self.assertEqual(surface["status"], "NEEDS_CLARIFICATION")
+        with self.assertRaises(FormationError):
+            current.export_human_authorization_request()
 
 
 if __name__ == "__main__":
