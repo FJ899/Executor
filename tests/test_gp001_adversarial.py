@@ -76,7 +76,10 @@ class GP001AdversarialAuthorityTest(unittest.TestCase):
 
     def test_task_identity_tamper_cannot_cross_authorization_gate(self):
         self.runtime.task["id"] = "ATTACKER-TASK"
-        with self.assertRaisesRegex(GP001Blocked, "Controlled External Fixture authority"):
+        with self.assertRaisesRegex(
+            GP001Blocked,
+            "frozen GP001 contract|Controlled External Fixture authority",
+        ):
             self.runtime._authorize(
                 run_id="attack-task",
                 mutation=_mutation("project_registry/registry.py"),
@@ -126,6 +129,48 @@ class GP001AdversarialAuthorityTest(unittest.TestCase):
             self.runtime._authorize(
                 run_id="attack-task-scope",
                 mutation=_mutation("tests/test_registry.py"),
+                now=None,
+            )
+
+    def test_task_and_cached_scope_cannot_be_expanded_together(self):
+        self.runtime.task["golden_path"]["scope"]["allowed_paths"] = [
+            "tests/test_registry.py",
+        ]
+        self.runtime.task["golden_path"]["scope"]["protected_paths"] = []
+        self.runtime.allowed = ("tests/test_registry.py",)
+        self.runtime.protected = ()
+        with self.assertRaisesRegex(GP001Blocked, "outside the frozen GP001 contract"):
+            self.runtime._authorize(
+                run_id="attack-task-and-cache",
+                mutation=_mutation("tests/test_registry.py"),
+                now=None,
+            )
+
+    def test_regression_commands_cannot_be_removed_after_validation(self):
+        self.runtime.regression_commands = []
+        with self.assertRaisesRegex(GP001Blocked, "execution state changed"):
+            self.runtime._authorize(
+                run_id="attack-regressions",
+                mutation=_mutation("project_registry/registry.py"),
+                now=None,
+            )
+
+    def test_backend_cannot_be_replaced_after_validation(self):
+        self.runtime.backend = object()
+        with self.assertRaisesRegex(GP001Blocked, "backend changed"):
+            self.runtime._authorize(
+                run_id="attack-backend",
+                mutation=_mutation("project_registry/registry.py"),
+                now=None,
+            )
+
+    def test_backend_scope_cache_cannot_be_widened_after_validation(self):
+        self.runtime.backend.allowed = ("tests/test_registry.py",)
+        self.runtime.backend.protected = ()
+        with self.assertRaisesRegex(GP001Blocked, "backend authority state changed"):
+            self.runtime._authorize(
+                run_id="attack-backend-scope",
+                mutation=_mutation("project_registry/registry.py"),
                 now=None,
             )
 
