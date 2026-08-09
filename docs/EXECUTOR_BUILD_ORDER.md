@@ -1,13 +1,13 @@
 ---
 document: "Executor Build Order"
-version: "1.0"
-status: "USER ACCEPTED / ACTIVE ARCHITECTURE-PRODUCT BUILD ORDER"
+version: "1.1"
+status: "USER ACCEPTED / ACTIVE ARCHITECTURE-PRODUCT BUILD ORDER CANDIDATE"
 date: "2026-08-09"
-scope: "ordered path from architecture baseline to first proven product slice"
+scope: "ordered path from first repeatable execution slice to governed request-to-contract product entry"
 repository: "litrgratis-pixel/Executor"
 ---
 
-# Executor Build Order v1
+# Executor Build Order v1.1
 
 ## 1. Goal
 
@@ -25,13 +25,13 @@ BUILD MAP
 IMPLEMENTATION INVENTORY
      |
      v
-GAP
+CURRENT PRODUCT GAP
      |
      v
 MINIMAL PR
      |
      v
-END-TO-END RESULT
+ATTACK / END-TO-END RESULT
      |
      v
 PROOF / MATURITY ASSESSMENT
@@ -43,19 +43,26 @@ Failure-driven safety work attacks each relevant step but does not replace the p
 
 First user: software developer / engineer.
 
-First promise:
+Current product promise:
 
-> Safely perform a well-defined repository task and show what changed and whether it works.
+> A user can express a bounded repository request in normal language; Executor System turns it into an explicit draft contract, requires authorization, executes only the frozen contract, and returns evidence for review.
 
-First golden path:
+First technical golden path remains:
 
 > `GP001 — Fix a failing test.`
+
+Current next product slice:
+
+> `REQUEST_TO_CONTRACT_001 — form and authorize GP001 from a normal user request.`
 
 ## 3. Non-goals
 
 Executor v1 does not attempt to:
 
 - autonomously redefine user goals;
+- treat AI interpretation as authoritative user intent;
+- turn a request directly into execution authority;
+- promote a draft contract without authorization;
 - replace project authority;
 - expand task scope without authorization;
 - certify its own correctness;
@@ -64,178 +71,247 @@ Executor v1 does not attempt to:
 These non-goals preserve the core boundaries:
 
 ```text
+REQUEST != CONTRACT
+AI INTERPRETATION != USER INTENT
+DRAFT CONTRACT != AUTHORIZED CONTRACT
 CONTRACT != RECOMMENDATION
 CAPABILITY != AUTHORITY
 EXECUTION != PROOF
 ```
 
-## 4. Ordered work
+## 4. Completed critical-path phases
 
-### PHASE A — Freeze the product/build baseline
+### PHASE A — Product/build baseline
 
 Accepted through PR #42.
 
-Baseline files:
+### PHASE B — Document authority reconciliation
 
-1. `docs/product/EXECUTOR_V1_PRODUCT_SPEC.md`
-2. `docs/architecture/EXECUTOR_BUILD_MAP.md`
-3. `docs/philosophy/HUMAN_AI_DELIBERATION_MODEL.md`
-4. `docs/architecture/IMPLEMENTATION_INVENTORY.md`
-5. `docs/product/GOLDEN_PATH_001_FIX_FAILING_TEST.md`
-6. `docs/safety/AI_FAILURE_ATLAS.md`
-7. this build-order document
+Accepted through PR #43.
 
-Status:
+### PHASE C — GP001 machine-readable contract
 
-```text
-HUMAN REVIEW: ACCEPTED
-RUNTIME CHANGE: NONE
-MATURITY CLAIM: NONE
-```
+Accepted through PR #44.
 
-### PHASE B — Reconcile canonical documentation
+### PHASE D — First vertical runtime slice and controlled authority
 
-Resolve semantic conflicts without changing runtime.
+Accepted through PR #45.
 
-Minimum targets:
+### PHASE E — Adversarial GP001 attack
 
-- AAP freeze status conflict;
-- relationship of open PR #34 Product Contract to the new product slice;
-- technical `PASS` terminology versus Executor product status;
-- `v1` product-slice naming versus `P4 — REPEATABLE EXECUTOR 1.0` terminology;
-- explicit authority ownership between Product Purpose, Build Map, Build Order, Inventory and Maturity Ladder.
+Accepted through PR #46.
 
-Exit condition:
-
-> One readable authority chain with no contradictory status claims for the current build path.
-
-### PHASE C — Freeze GP001 machine-readable contract
-
-Define one bounded failing-test scenario with:
-
-- pinned repository/source identity;
-- reproducible pre-change failure;
-- allowed code paths;
-- protected acceptance material;
-- required regression command;
-- bounded retries/time/actions;
-- terminal statuses;
-- evidence requirements.
-
-Do not write the solution into the contract.
-
-Exit condition:
-
-> An implementation can attempt GP001 without guessing scope or success criteria.
-
-### PHASE D — Build the smallest vertical product slice
-
-Implement only missing glue required for:
+Falsification history retained:
 
 ```text
-start task
-  -> acquire/read pinned repo
-  -> reproduce failure
-  -> analyze
-  -> produce bounded plan
-  -> authorization gate
-  -> edit allowed code
-  -> run target test
-  -> run regressions
-  -> scope/test-integrity verification
-  -> concise report
+F-1 caller-forged authority
+F-2 implementation-level policy bypass
+F-3 post-validation authority drift
 ```
 
-Reuse existing contract, state, policy, sandbox and evidence components where they fit. Do not rewrite strong foundations merely to match new names.
+### PHASE F — Real GP001 end-to-end execution
 
-Each PR must name:
+Accepted through PR #47.
+
+Observed bounded terminal state:
 
 ```text
-BUILD MAP TARGET:
-MATURITY TARGET:
-CURRENT GAP:
-CHANGE:
-PROOF:
-NON-GOALS:
+ACTION_COMPLETED_REVIEW_REQUIRED
+human_decision_required: true
 ```
 
-### PHASE E — Attack GP001 with relevant failure classes
+### PHASE G — GP001 repeatability / replay
 
-Critical Failure Atlas cases for the first slice:
+Accepted through PR #48.
 
-- FAI-001 Scope Expansion;
-- FAI-002 Capability Abuse;
-- FAI-004 Self Validation;
-- FAI-006 Role Collapse where applicable;
-- FAI-007 Acceptance Bypass.
+Observed replay gate:
 
-FAI-003 credential misuse becomes critical only if GP001 receives credentials capable of side effects beyond the source/workspace boundary.
+```text
+contractual_equivalence: EQUIVALENT
+ephemeral_independence: DISTINCT
+human_decision_required: true
+```
 
-FAI-005 consensus illusion is not a blocker until deliberation/multiple model roles influence authoritative outcome.
+The above phases establish one bounded repeatable execution slice. They do not establish a maturity or product-readiness claim.
 
-Exit condition:
+## 5. Current phase — governed request-to-contract formation
 
-> Known GP001 false-success paths fail closed within the declared threat model.
+### PHASE H — REQUEST_TO_CONTRACT_001
 
-### PHASE F — Run the first end-to-end product proof
+Purpose:
 
-Use a real bounded task consistent with the maturity ladder.
+> Prove that one normal human request can be converted into a truthful, bounded draft contract without silently manufacturing user intent or execution authority.
 
-Measure:
+Use the existing GP001 problem so only the formation boundary changes.
 
-- failure reproduced before change;
-- solution produced without human code-writing;
-- target test result;
-- regression result;
-- scope integrity;
-- evidence completeness;
-- human review time;
-- execution time/cost;
-- whether review was cheaper than manual implementation.
+Target path:
 
-Exit condition:
+```text
+USER REQUEST
+      |
+      v
+INTERPRET
+      |
+      v
+DRAFT TASK CONTRACT
+      |
+      v
+CRITIQUE
+      |
+      v
+HUMAN DECISION
+  ACCEPT / MODIFY / REJECT
+      |
+      v
+FROZEN TASK CONTRACT
+      |
+      v
+EXISTING GP001 RUNTIME
+```
 
-> We can answer whether GP001 is genuinely useful, not merely technically runnable.
+### H1 — Authority baseline
 
-### PHASE G — Assess maturity after the run
+Before formation code becomes critical-path implementation, canonical documentation must state:
 
-Only after the product run:
+```text
+AI INTERPRETATION != USER INTENT
+REQUEST != CONTRACT
+DRAFT CONTRACT != AUTHORIZED CONTRACT
+CONTRACT FORMATION IS A GOVERNED ACTION
+```
 
-- map evidence to `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md`;
-- declare `ACCEPT`, `REWORK`, `STOP`, or the exact existing ladder status supported by evidence;
-- do not invent a new maturity level to reward implementation effort.
+### H2 — Formation contract/state model
 
-## 5. Work explicitly deferred
+Minimum non-executable states:
 
-Until GP001 needs them to remove a measured blocker:
+```text
+REQUEST_RECEIVED
+INTERPRETATION_PROPOSED
+DRAFT_CONTRACT_CREATED
+DRAFT_CRITIQUED
+AWAITING_HUMAN_AUTHORIZATION
+```
 
+Only an explicit authority transition may create:
+
+```text
+AUTHORIZED_AND_FROZEN
+```
+
+### H3 — User/AI provenance
+
+Formation output must distinguish:
+
+- user-supplied facts;
+- AI-inferred proposals;
+- unresolved assumptions;
+- discoveries kept out of scope.
+
+### H4 — Draft critique
+
+Before human authorization, critique must detect or report at least:
+
+- silent scope expansion;
+- unsupported repository/commit/target inference;
+- weakened success conditions;
+- discovered work added without authority.
+
+Critique may recommend a correction. It may not authorize it.
+
+### H5 — Human decision surface
+
+Minimum user-facing draft:
+
+```text
+REQUEST
+UNDERSTOOD OBJECTIVE
+TARGET / INPUT IDENTITY
+PROPOSED WRITE SCOPE
+PROTECTED MATERIAL
+SUCCESS CONDITIONS
+DISCOVERED BUT OUT OF SCOPE
+UNRESOLVED ASSUMPTIONS
+STATUS: DRAFT — USER AUTHORIZATION REQUIRED
+```
+
+Allowed decisions:
+
+```text
+ACCEPT
+MODIFY
+REJECT
+```
+
+### H6 — Semantic compatibility with GP001
+
+The accepted formation output must freeze into a task contract semantically compatible with the existing GP001 runtime contract.
+
+Do not modify GP001 execution authority, protected paths, success criteria or terminal semantics merely to make formation easier.
+
+### H7 — Adversarial formation tests
+
+Attack formation with examples such as:
+
+- user asks for X; model adds Y;
+- user names no repository; model invents one;
+- model changes protected test scope;
+- critique discovers Y and silently includes it;
+- draft attempts to execute before authorization;
+- modified/rejected draft remains executable;
+- AI-generated `ACCEPT` is treated as human authorization.
+
+Expected behavior is fail closed or visible `NEEDS_CLARIFICATION`, never silent authority expansion.
+
+### H8 — First request-to-result E2E
+
+Only after formation attacks pass:
+
+```text
+normal user request
+  -> governed draft
+  -> human authorization
+  -> frozen GP001 contract
+  -> existing GP001 execution
+  -> ACTION_COMPLETED_REVIEW_REQUIRED
+```
+
+This will be the first product path that begins with a human request rather than an internal contract artifact.
+
+## 6. Work explicitly deferred
+
+Until `REQUEST_TO_CONTRACT_001` needs them to remove a measured blocker:
+
+- separate proposer/critic/researcher agent services;
 - multi-agent orchestration;
+- generalized natural-language contract generation;
 - generalized deliberation runtime;
 - long-term Executor-owned project memory;
-- research capability;
+- broad research capability;
+- GP002 for breadth alone;
 - marketplace;
 - enterprise integrations;
 - autonomous deployment;
-- broad task-class support;
-- cosmetic UI expansion;
-- P1/M3 work that does not remove a measured GP001 blocker.
+- automatic contract authorization;
+- cosmetic UI expansion.
 
-## 6. Decision rule for every next PR
+## 7. Decision rule for every next PR
 
 A PR enters the critical path only if all three are answerable:
 
-1. Which GP001 or product blocker does it remove?
+1. Which current product blocker does it remove?
 2. Which Build Map element owns it?
 3. What observable evidence will show that the blocker is gone?
 
-If those answers are missing, the work is deferred or moved outside the critical path.
+For formation work add a fourth question:
 
-## 7. Immediate next artifact
+4. Could this change accidentally turn AI interpretation into authority?
 
-After documentation authority reconciliation is accepted, the next critical-path artifact is:
+If these answers are missing, the work is deferred or moved outside the critical path.
 
-> **GP001 machine-readable contract.**
+## 8. Immediate next artifact
 
-It must freeze the first bounded failing-test scenario without embedding the solution.
+After the contract-formation governance baseline is accepted, the next critical-path artifact is:
 
-Only after that contract exists do we begin the first runtime vertical-slice PR.
+> **REQUEST_TO_CONTRACT_001 machine-readable formation contract/state model and adversarial tests.**
+
+Do not begin GP002, a generalized CLI, multi-agent roles or broader capabilities before this boundary is demonstrated.

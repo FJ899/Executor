@@ -1,20 +1,20 @@
 ---
 document: "Executor Implementation Inventory"
-version: "0.1"
-status: "OBSERVATIONAL BASELINE / PENDING REVIEW"
-date: "2026-08-08"
-scope: "current implementation mapped to Executor Build Map and first product slice"
+version: "0.2"
+status: "OBSERVATIONAL BASELINE / CURRENT THROUGH GP001 REPLAY"
+date: "2026-08-09"
+scope: "current implementation mapped to Executor Build Map and next product slice"
 repository: "litrgratis-pixel/Executor"
-baseline: "main at inventory start; open draft PR work is listed separately and is not counted as main"
+baseline: "main after accepted GP001 real E2E and replay repeatability work"
 ---
 
-# Executor Implementation Inventory v0.1
+# Executor Implementation Inventory v0.2
 
 ## 1. Purpose
 
 This inventory answers:
 
-> What from the Build Map actually exists today, and does it respect the intended responsibility boundaries?
+> What from the Build Map actually exists today, and what is the next missing product boundary?
 
 It is not a maturity claim and does not promote any P-level.
 
@@ -22,172 +22,176 @@ It is not a maturity claim and does not promote any P-level.
 
 - `EXISTS` — implemented on `main` in a meaningful bounded form;
 - `PARTIAL` — some required behavior exists but the Build Map element is incomplete;
-- `SKELETON` — structure or state exists without a usable end-to-end capability;
+- `SKELETON` — structure exists without a usable bounded flow;
 - `MISSING` — no implementation evidence found for the required product behavior;
 - `LOCKED / LATER` — intentionally outside the current product slice;
-- `OPEN DRAFT` — work exists in a non-merged branch/PR and is not counted as main.
+- `OPEN DRAFT` — work exists outside accepted `main` and is not counted as canonical implementation.
 
 ## 3. Main-branch inventory
 
 | Build Map element | Status | Current evidence | Product implication |
 |---|---|---|---|
-| F1 Contract Interpretation Boundary | PARTIAL | project/task/test validation and policy checks are exposed by `executor/cli.py`; higher-level Product Contract exists only in open draft PR #34 | Contract machinery exists, but the newest product-boundary contract is not canonical on main |
-| F2 Source & Workspace Access | PARTIAL | repository read path and pinned commit arguments exist in `executor/cli.py`; README declares M2B fixture scope and forbids external-project execution | Enough foundation for controlled reads; not yet a user-ready arbitrary repo workflow |
-| F3 Execution State Model | EXISTS | `executor/state_machine.py` defines explicit lifecycle, integrity-checked event state and fail-closed transitions | Strong foundation, but state-machine existence is not an end-to-end product |
-| F4 Evidence Boundary | PARTIAL | checkpoints/state integrity and evidence-oriented governance exist; authoritative external proof remains a separate gate | Evidence foundation is strong, but do not equate Executor-owned records with acceptance |
-| S1 Runtime Engine | PARTIAL | runtime/state components exist, but main does not expose the complete Golden Path #001 from user task to verified code fix | Primary vertical-slice gap |
-| S2 Planning Layer | SKELETON | `PLANNED` and approval states exist; no product-level bounded plan generation flow is proven on main | Need one short plan artifact tied to the task contract |
-| S3 Action Execution Layer | PARTIAL | repository/policy/sandbox foundations exist; real product write execution remains constrained and pilot work is still in drafts | Must prove bounded edit + commands on the golden path |
-| S4 Verification Loop | PARTIAL | test contracts, policy and verification concepts exist; complete target-fail-before / target-pass-after / regression / scope sequence is not yet a single product path | Define GP001 verification as one contract |
-| I1 Execution State & Working Memory | EXISTS | `RunStore`, snapshots, checkpoints and revalidation exist | Reuse; do not add strategic memory to Executor |
-| I2 Context Management | PARTIAL | contracts and snapshots capture bounded run inputs | Need product-level selection of only relevant repository context |
-| I3 Tool Management | PARTIAL | policy checks constrain paths, network, secrets and commands | Capability exposure exists but needs product-level action authorization mapping |
-| I4 Sandbox & Isolation | PARTIAL | README declares Docker-only M2B fixture isolation and no host fallback; external project execution remains forbidden | Preserve as hidden assurance layer while building product UX |
-| C1 Software Engineering Capability | PARTIAL | pilot runtime work and CASE-001–003 exist in open drafts; main foundation can validate and inspect but not yet deliver the first real user workflow | This is the first capability to finish |
-| C2 Analysis Capability | LOCKED / LATER | not required for first product slice | Do not build now |
-| C3 Research Capability | LOCKED / LATER | not required for first product slice | Do not build now |
-| C4 Operational Capability | LOCKED / LATER | not required for first product slice | Do not build now |
-| UX1 Interface | PARTIAL | CLI exists, but it exposes internal validation/state commands rather than a simple product task entrypoint | User-facing start command is a real gap |
-| UX2 Interaction Model | MISSING | no proven concise task -> plan -> authorization -> result interaction on main | Must be designed around GP001 |
-| UX3 Result Report | PARTIAL | machine-readable command outputs exist; product-level concise review report is not yet the primary UX | Build one result schema for GP001 |
-| LEVEL 6 Extensions | LOCKED / LATER | multi-agent, marketplace, broad integrations are not needed for GP001 | Explicitly defer |
+| F0 Request-to-Contract Boundary | MISSING | no accepted runtime yet converts a user request into a governed draft contract and human-authorized frozen contract | **Primary next product gap** |
+| F1 Contract Interpretation Boundary | EXISTS (bounded) | GP001 machine-readable contract, contract validation and action-boundary revalidation are accepted on `main` | Kernel can execute a frozen bounded contract; it does not yet form one from user language |
+| F2 Source & Workspace Access | EXISTS (bounded) | Controlled External Fixture authority pins exact repository + commit; real GP001 E2E acquired and checked exact source identity | Proven for one controlled fixture, not arbitrary repositories |
+| F3 Execution State Model | PARTIAL | explicit execution lifecycle, action-boundary state revalidation and replay evidence exist; contract-formation lifecycle is not implemented | Formation states must be added without collapsing them into execution state |
+| F4 Evidence Boundary | EXISTS (bounded) | GP001 real E2E records input identity, authority binding, pre/post test state, regression state, scope and review-required status | Evidence is usable for the bounded vertical slice; still not a general product/maturity claim |
+| S0 Contract Formation Flow | MISSING | no accepted `INTERPRET -> PROPOSE -> CRITIQUE -> HUMAN AUTHORIZATION -> FREEZE` implementation | `REQUEST_TO_CONTRACT_001` owns this gap |
+| S1 Runtime Engine | EXISTS (GP001 bounded) | accepted GP001 runtime performs pinned failure reproduction, authorized mutation, verification and report | First execution vertical slice exists |
+| S2 Planning Layer | PARTIAL | GP001 E2E produces a deterministic bounded plan, but no general AI planning layer is claimed | Enough for GP001 execution; formation/planning must stay separate |
+| S3 Action Execution Layer | EXISTS (GP001 bounded) | one exact `WRITE_REPOSITORY` mutation is policy/AAP bound and executed in sandbox | Proven only for the accepted fixture/action class |
+| S4 Verification Loop | EXISTS (GP001 bounded) | target FAIL before, target PASS after, 13-test regression PASS, compileall PASS, exact scope and protected-material checks | First real verification loop exists |
+| I1 Execution State & Working Memory | EXISTS (bounded) | run state, checkpoints, execution artifacts and replay observations exist | Do not add strategic/user-goal memory to Executor |
+| I2 Context Management | PARTIAL | execution context is pinned and bounded; formation context does not yet distinguish user facts from AI inference in a runtime artifact | Request-to-contract must introduce provenance/assumption separation |
+| I3 Tool Management | EXISTS (bounded) | policy, action authorization, exact fixture binding, no generic external-project capability | Preserve capability/authority separation during formation work |
+| I4 Sandbox & Isolation | EXISTS (GP001 bounded) | real hosted-runner Docker execution, immutable image identity and cleanup checks passed | Proven for one bounded fixture |
+| C1 Software Engineering Capability | PARTIAL / FIRST SLICE WORKS | GP001 real E2E and repeatability prove one failing-test repair path | Capability is real but still narrow and not user-accessible from natural language |
+| C2 Analysis Capability | LOCKED / LATER | not required for current slice | Do not build now |
+| C3 Research Capability | LOCKED / LATER | not required for `REQUEST_TO_CONTRACT_001` | Do not build unless a measured formation blocker requires it |
+| C4 Operational Capability | LOCKED / LATER | not required for current slice | Defer |
+| UX1 Request Surface | MISSING | accepted product path still begins from a prepared contract/harness rather than a normal user request | **Primary user-facing gap** |
+| UX2 Contract Decision Surface | MISSING | no accepted draft-contract review surface with accept/modify/reject | Build in `REQUEST_TO_CONTRACT_001` |
+| UX3 Execution Interaction Model | PARTIAL | GP001 report is concise and review-oriented, but user does not yet enter through request formation | Reuse after contract authorization |
+| UX4 Result Report | EXISTS (GP001 bounded) | real GP001 ends in `ACTION_COMPLETED_REVIEW_REQUIRED` with evidence and human decision required | Preserve terminal semantics |
+| LEVEL 6 Extensions | LOCKED / LATER | multi-agent, marketplace, broad integrations not required | Explicitly defer |
 
-## 4. Open draft work that must not be counted as main
+## 4. Accepted vertical-slice evidence
 
-The repository currently contains significant unmerged work, including:
-
-- PR #29 — controlled pilot runtime, still `REWORK / DRAFT` in its recorded state;
-- PR #34 — Product Contract v1.0, draft and not merged;
-- PRs #17–#21 — M3/self-test stack, drafts and not part of current main;
-- PRs #36/#38 — temporary CI/adversarial helper branches that explicitly say never merge.
-
-Inventory rule:
-
-> A useful implementation on an open branch may inform design, but it does not count as existing product capability on `main` until accepted under its gate.
-
-## 5. Responsibility-boundary checks
-
-### Planner
-
-Current finding: planning exists as lifecycle semantics more than as a user-facing bounded planning capability.
-
-Required boundary:
+The following sequence has been accepted on the product critical path:
 
 ```text
-PLAN = how to execute the contract
-PLAN != redefine the contract
+PRODUCT / BUILD BASELINE
+      -> DOCUMENT AUTHORITY RECONCILIATION
+      -> GP001 MACHINE-READABLE CONTRACT
+      -> CONTROLLED EXTERNAL FIXTURE AUTHORITY
+      -> FIRST VERTICAL RUNTIME SLICE
+      -> ADVERSARIAL GP001 VALIDATION
+      -> REAL GP001 E2E
+      -> REPEATABILITY / REPLAY
 ```
 
-### Critic / deliberation
-
-Current finding: no requirement for a separate critic implementation in the first product slice.
-
-Required boundary:
+Observed bounded result:
 
 ```text
-CRITIQUE = improve recommendation
-CRITIQUE != authorize execution
+exact input identity: MATCH
+controlled fixture authority: BOUND
+pre-change target test: FAIL
+post-change target test: PASS
+regression checks: PASS
+scope: ALLOWED
+protected material: UNCHANGED
+terminal status: ACTION_COMPLETED_REVIEW_REQUIRED
+human decision required: true
+replay contractual equivalence: EQUIVALENT
+replay ephemeral identity: DISTINCT
 ```
 
-### Executor
+This establishes a repeatable bounded execution slice. It does not establish general product maturity.
 
-Current finding: technical foundations are much stronger than the user-facing vertical workflow.
+## 5. Falsification history that now constrains implementation
 
-Required boundary:
+### F-1 — Caller-forged authority
+
+Closed by removing caller-owned authority context from the public GP001 path.
+
+### F-2 — Implementation-level policy bypass
+
+Closed by moving Controlled External Fixture authority into verified policy binding rather than runtime hard-code.
+
+### F-3 — Post-validation authority drift
+
+Closed by revalidating frozen contract-derived authority-critical state before consequential actions.
+
+Formation work must preserve the same discipline:
+
+> A generated interpretation or draft must not become authority merely because it exists in memory or was produced by an AI component.
+
+## 6. Current primary product gap
+
+The largest gap is no longer the execution vertical slice.
+
+It is the missing front door:
 
 ```text
-EXECUTOR = perform bounded work
-EXECUTOR != accept its own work as product truth
+USER REQUEST
+  -> INTERPRETATION
+  -> DRAFT TASK CONTRACT
+  -> CONTRACT CRITIQUE
+  -> HUMAN AUTHORIZATION
+  -> FROZEN TASK CONTRACT
+  -> EXISTING GP001 RUNTIME
 ```
 
-### Verifier
+This is the boundary between ordinary AI assistance and governed execution.
 
-Current finding: proof architecture has received substantial work, but product UX must not become a verifier UI.
+## 7. Immediate implementation targets
 
-Required boundary:
+### GAP-008 — Governed contract formation
+
+Implement formation states that cannot directly execute:
 
 ```text
-VERIFIER = establish facts against requirements
-VERIFIER != interpret Executor narrative as proof
+REQUEST_RECEIVED
+INTERPRETATION_PROPOSED
+DRAFT_CONTRACT_CREATED
+DRAFT_CRITIQUED
+AWAITING_HUMAN_AUTHORIZATION
 ```
 
-## 6. Known semantic/documentation conflicts
+Only an explicit authorization transition may create `AUTHORIZED_AND_FROZEN`.
 
-These are inventory findings, not fixes in this PR.
+### GAP-009 — User/AI provenance
 
-### INV-CONFLICT-001 — AAP freeze status
+The draft must distinguish at least:
 
-`README.md` states that the Action Authorization Packet is frozen and has a validator, while `CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md` still states `CONTRACT NOT FROZEN` and `NOT IMPLEMENTED` in its AAP section.
+- what the user actually supplied;
+- what the system inferred;
+- what remains unresolved;
+- what was discovered but remains out of scope.
 
-Required action: reconcile in a dedicated governance/document-consistency change. Do not infer a new runtime status from either sentence alone.
+### GAP-010 — Contract critique
 
-### INV-CONFLICT-002 — Product Contract not on main
+Before authorization, detect/report:
 
-PR #34 contains a newer explicit Executor Product Contract, but it remains an open draft and therefore cannot be treated as canonical main state.
+- silent scope expansion;
+- unsupported target/repository/commit inference;
+- weakened success criteria;
+- hidden out-of-scope work.
 
-Required action: review whether the newly agreed v1 product slice supersedes, complements, or requires revision of PR #34 before merge.
+Critique cannot authorize its own correction.
 
-### INV-CONFLICT-003 — Technical PASS vs product status
+### GAP-011 — Human contract decision surface
 
-`executor/state_machine.py` contains a technical `PASS` state that is locked on main pending a replay gate, while the draft Product Contract says Executor must not return `PRODUCT PASS` as its own terminal product decision.
-
-Required action: preserve a strict semantic distinction between a technical verification state and product/human acceptance.
-
-### INV-CONFLICT-004 — “Executor 1.0” naming
-
-The maturity ladder uses `P4 — REPEATABLE EXECUTOR 1.0`. The new `EXECUTOR_V1_PRODUCT_SPEC.md` uses `v1` for the first product slice.
-
-Required action: keep the explicit note that product-slice specification version does not claim P4/release 1.0; consider renaming later if this still creates operator confusion.
-
-## 7. First product gap
-
-The largest gap is not another safety primitive.
-
-It is the missing complete path:
+Expose:
 
 ```text
-USER TASK
-  -> pinned repo
-  -> reproduce failing test
-  -> bounded plan
-  -> authorization
-  -> bounded code change
-  -> target + regression + scope verification
-  -> concise review report
+ACCEPT
+MODIFY
+REJECT
 ```
 
-Individual foundations already exist. The product milestone is to connect the minimum required subset into one trustworthy vertical slice.
+and ensure a draft remains non-executable until `ACCEPT` or an equivalent superior-authority action.
 
-## 8. Immediate next implementation targets
+### GAP-012 — GP001 semantic compatibility
 
-### GAP-001 — Canonical product/build documentation
+The first authorized formation output must freeze into a task contract semantically compatible with the already accepted GP001 contract/runtime, without changing GP001's execution authority or success criteria.
 
-Close this documentation branch through human review before treating the new build order as repo canon.
+## 8. Stop rule
 
-### GAP-002 — Documentation consistency
+Until `REQUEST_TO_CONTRACT_001` is proven end to end, do not implement:
 
-Reconcile AAP status, Product Contract status, and any conflicting authority hierarchy without changing runtime.
+- generalized natural-language contract generation;
+- separate multi-agent services;
+- autonomous contract authorization;
+- long-term Executor-owned project memory;
+- GP002 merely to add breadth;
+- generalized research capability;
+- marketplace;
+- enterprise integrations;
+- autonomous deployment.
 
-### GAP-003 — Golden Path task contract
+The next product question is not whether Executor can do more.
 
-Freeze one machine-readable GP001 input contract for a pinned failing-test case.
+It is:
 
-### GAP-004 — Product entrypoint
-
-Provide one simple entrypoint for running the golden path without requiring the user to manually operate low-level state commands.
-
-### GAP-005 — Vertical orchestration
-
-Connect existing validation/state/isolation components into the GP001 lifecycle.
-
-### GAP-006 — Product report
-
-Produce one concise review report with pre-change reproduction, diff, post-change tests, regressions, scope and limitations.
-
-### GAP-007 — End-to-end proof
-
-Run GP001 on a real bounded task, inspect evidence, measure human review effort, and only then assess the applicable maturity gate.
-
-## 9. Stop rule
-
-Until GP001 is demonstrated end to end, do not start implementation of multi-agent orchestration, generalized research capability, long-term Executor-owned project memory, marketplace, enterprise integrations, or autonomous deployment unless a concrete blocker proves one is necessary for GP001.
+> Can Executor translate one bounded human request into a truthful draft, keep interpretation separate from authority, obtain human authorization, and hand the frozen contract to the already proven execution kernel?

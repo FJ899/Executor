@@ -1,9 +1,9 @@
 ---
 document: "Executor v1 Product Spec"
-version: "1.0"
-status: "USER APPROVED CONCEPT / PENDING REPO MERGE"
-date: "2026-08-08"
-scope: "first user, first product promise, first end-to-end workflow and explicit non-goals"
+version: "1.1"
+status: "USER ACCEPTED DIRECTION / ACTIVE PRODUCT BASELINE CANDIDATE"
+date: "2026-08-09"
+scope: "first user, request-to-contract front door, first product promise, first end-to-end workflow and explicit non-goals"
 repository: "litrgratis-pixel/Executor"
 ---
 
@@ -13,9 +13,11 @@ repository: "litrgratis-pixel/Executor"
 
 This document answers one product question:
 
-> What can the first user actually do with Executor?
+> What can the first user actually do with Executor System?
 
-`v1` in this document means the **first product slice specification**. It is not a claim that the repository has reached release `1.0`, and it does not replace the P0-Pn maturity ladder. Product scope and maturity proof are separate axes.
+`v1` in this document means the **first product-slice specification**. It is not a claim that the repository has reached release `1.0`, and it does not replace the P0-Pn maturity ladder. Product scope and maturity proof are separate axes.
+
+Executor is a system. The execution program/kernel is one part of that system.
 
 ## 2. First user
 
@@ -25,71 +27,148 @@ The first product is not aimed at every user, every company workflow, or every d
 
 ## 3. One product promise
 
-> Executor safely performs a well-defined technical task in a repository and shows what changed and whether the change works.
+> Executor System turns a bounded user request into an explicit contract proposal, requires authorization before that proposal becomes executable, then performs the authorized repository task and shows what changed and whether the change works.
 
-Executor is not the owner of the user's goal. It receives a bounded task contract and executes within it.
+Executor is not the owner of the user's goal.
 
-## 4. Golden Path #001
+The formation layer may interpret and propose. The human owns authorization of the contract. The execution kernel executes the frozen contract.
 
-The first complete user scenario is:
+## 4. Three product layers
+
+### Level 1 — User Experience
+
+What the human sees:
+
+```text
+Fix the failing test about batch atomicity.
+```
+
+The user should not need to understand task YAML, AAP packets, Python classes, Docker workflows or internal model prompts.
+
+### Level 2 — Cognitive / Contract Layer
+
+Responsible for:
+
+```text
+INTERPRET
+   -> PROPOSE DRAFT CONTRACT
+   -> CRITIQUE
+   -> PRESENT FOR HUMAN DECISION
+```
+
+Prompts and AI roles may exist here, but they do not create execution authority by themselves.
+
+### Level 3 — Execution Kernel
+
+Responsible for:
+
+- contract validation;
+- policy enforcement;
+- action authorization;
+- sandbox execution;
+- file/Git/test/tool operations;
+- execution state;
+- evidence collection;
+- verification and truthful reporting.
+
+The kernel executes an authorized contract. It does not infer what the user "really meant".
+
+## 5. Golden Path #001
+
+The first complete technical scenario remains:
 
 > **Fix a failing test.**
 
-Example input:
+The accepted GP001 runtime has already demonstrated the bounded execution half of the product path.
+
+The next product gap is the front half:
 
 ```text
-Fix the failing test in this repository.
-```
-
-Expected user-visible flow:
-
-```text
-USER TASK
+USER REQUEST
    |
    v
-TASK CONTRACT
+DRAFT TASK CONTRACT
    |
    v
-REPRODUCE FAILURE
-   |
-   v
-ANALYZE
-   |
-   v
-PROPOSE BOUNDED PLAN
+CONTRACT CRITIQUE
    |
    v
 HUMAN AUTHORIZATION
    |
    v
-EXECUTE
+FROZEN TASK CONTRACT
    |
    v
-VERIFY
+EXISTING GP001 RUNTIME
    |
    v
-REPORT
+ACTION_COMPLETED_REVIEW_REQUIRED
 ```
 
-## 5. Product workflow
+## 6. Product workflow
 
-### Step 1 — Receive a bounded task
+### Step 0 — Receive the user request
 
-Required input must identify at least:
+The first user-facing input may be natural language, for example:
 
+```text
+Fix the failing test about batch atomicity.
+```
+
+The request is not automatically executable authority.
+
+### Step 1 — Form a draft task contract
+
+The system proposes explicit fields including:
+
+- understood objective;
 - repository and pinned input state;
-- problem to solve;
+- target test or acceptance condition;
+- proposed write scope;
+- protected material;
 - expected result;
-- acceptance criteria;
-- allowed change scope;
 - required verification;
-- prohibited actions.
+- prohibited actions;
+- out-of-scope discoveries;
+- unresolved assumptions.
 
-Missing required authority or acceptance information results in `BLOCKED`, not guessing.
+The draft must remain visibly non-executable.
 
-### Step 2 — Analyze the repository
+Core rules:
 
-Executor may:
+```text
+REQUEST != CONTRACT
+AI INTERPRETATION != USER INTENT
+DRAFT CONTRACT != AUTHORIZED CONTRACT
+```
+
+### Step 2 — Critique the draft
+
+Critique asks whether the proposed contract:
+
+- silently expanded the request;
+- inferred unsupported authority;
+- omitted a material ambiguity;
+- weakened acceptance criteria;
+- included discovered work that belongs in a separate contract.
+
+Critique improves the proposal. It does not authorize it.
+
+### Step 3 — Human authorization
+
+The user must be able to:
+
+```text
+ACCEPT
+MODIFY
+REJECT
+```
+
+Only an accepted contract becomes frozen execution authority.
+
+### Step 4 — Analyze the repository
+
+After authorization, Executor may:
 
 - inspect repository structure;
 - read relevant files;
@@ -101,7 +180,7 @@ Discovery does not expand execution authority.
 
 Out-of-contract findings are reported as recommendations for a separate task.
 
-### Step 3 — Produce a bounded plan
+### Step 5 — Produce a bounded execution plan
 
 The plan answers:
 
@@ -109,23 +188,7 @@ The plan answers:
 
 It does not redefine what the user should want.
 
-For the golden path, the plan should be short and reviewable, for example:
-
-```text
-1. Modify src/validator.py.
-2. Do not modify the failing test.
-3. Run the target test.
-4. Run the regression suite.
-5. Report the diff and verification result.
-```
-
-### Step 4 — Human authorization
-
-Before the first product slice performs repository mutation, the user must be able to accept, modify, or cancel the proposed execution plan when the plan is not already fully authorized by the task contract.
-
-Recommendation is not authorization.
-
-### Step 5 — Execute
+### Step 6 — Execute
 
 Minimum v1 actions:
 
@@ -136,9 +199,9 @@ Minimum v1 actions:
 - inspect Git diff;
 - run required tests.
 
-Execution remains bounded by contract, policy, workspace, and sandbox constraints.
+Execution remains bounded by contract, policy, workspace and sandbox constraints.
 
-### Step 6 — Verify
+### Step 7 — Verify
 
 A successful golden-path candidate requires all of the following:
 
@@ -150,16 +213,19 @@ CHANGE SCOPE: WITHIN CONTRACT
 PROHIBITED TEST WEAKENING: NOT DETECTED
 ```
 
-A target test turning green is not sufficient if the test was deleted, skipped, weakened, or otherwise bypassed outside explicit contract authority.
+A target test turning green is not sufficient if the test was deleted, skipped, weakened or otherwise bypassed outside explicit contract authority.
 
-### Step 7 — Report
+### Step 8 — Report
 
 The user-facing report should prioritize the decision-relevant result rather than command count.
 
 Minimum report:
 
 ```text
-TASK:
+REQUEST:
+...
+
+AUTHORIZED CONTRACT:
 ...
 
 PLAN:
@@ -178,27 +244,34 @@ STATUS:
 ACTION_COMPLETED_REVIEW_REQUIRED | BLOCKED | FAILED
 ```
 
-## 6. What must exist for the first product slice
+## 7. What must exist for the first product slice
 
-- a usable interface for starting the task;
+- a natural-language or equally simple request surface;
+- governed request-to-contract formation;
+- visible draft-contract state;
+- contract critique for unsupported inference/scope expansion;
+- human contract-authorization boundary;
 - pinned repository/source access;
 - task-contract validation;
 - repository inspection;
 - bounded planning;
-- human authorization boundary;
+- action authorization;
 - file/action execution;
 - test execution;
 - diff and scope verification;
 - truthful final report;
 - evidence sufficient to review the result.
 
-## 7. What is intentionally not part of v1
+## 8. What is intentionally not part of v1
 
 The first product slice does not require:
 
+- general natural-language understanding for arbitrary domains;
 - multi-agent orchestration;
+- separate proposer/critic/researcher services;
 - long-term project memory owned by Executor;
 - autonomous strategic decisions;
+- autonomous contract authorization;
 - autonomous deployment;
 - agent marketplace;
 - generalized research product;
@@ -208,24 +281,28 @@ The first product slice does not require:
 
 Safety, evidence, isolation and governance may exist underneath the product slice, but they must not dominate the user-facing workflow.
 
-## 8. Product success criteria
+## 9. Product success criteria
 
-The first product slice is useful only if a real user can complete Golden Path #001 end to end and reviewing the produced change is cheaper than manually solving the same bounded problem.
+The first product slice is useful only if a real user can start with a normal request and complete Golden Path #001 end to end without manually constructing internal Executor machinery.
 
 Minimum product questions:
 
-1. Could the user start the task without understanding internal Executor machinery?
-2. Did Executor reproduce the failure before editing?
-3. Did it stay inside the authorized scope?
-4. Did it produce a sensible fix without the human writing the solution?
-5. Did verification test the real acceptance condition rather than a proxy?
-6. Is the final report short enough to support a human decision?
-7. Is review cheaper than manual implementation?
+1. Could the user start with a normal request rather than a hand-authored internal contract?
+2. Did the system distinguish interpretation from user-authorized intent?
+3. Did the draft expose its proposed scope and assumptions before execution authority existed?
+4. Did critique detect or report attempted scope expansion?
+5. Could the user accept, modify or reject the draft?
+6. Did Executor reproduce the failure before editing?
+7. Did it stay inside the authorized scope?
+8. Did it produce a sensible fix without the human writing the solution?
+9. Did verification test the real acceptance condition rather than a proxy?
+10. Is the final report short enough to support a human decision?
+11. Is review cheaper than manual implementation?
 
-## 9. Relationship to maturity
+## 10. Relationship to maturity
 
 This product spec defines **what we are trying to make usable first**.
 
 `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md` remains responsible for claims about P0, P1, P2, P3 and later maturity levels.
 
-A feature may exist without its maturity proof. A maturity level may certify only a bounded slice. Architecture, implementation status, and proof status must not be collapsed into one claim.
+A feature may exist without its maturity proof. A maturity level may certify only a bounded slice. Architecture, implementation status and proof status must not be collapsed into one claim.
