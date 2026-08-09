@@ -3,18 +3,20 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import stat
 import subprocess
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
 from executor.action_authorization import (
     AuthorizationContext,
+    packet_payload_sha256,
     validate_action_authorization_packet,
 )
 from executor.contracts import ValidationStatus, load_contract
@@ -25,13 +27,28 @@ from executor.repository_access import (
     validate_scope_pattern,
 )
 from executor.repository_identity import RepositoryIdentityError, verify_repository_checkout
-from executor.repository_snapshot import RepositorySnapshotError, verify_source_tree
+from executor.repository_snapshot import (
+    RepositorySnapshotError,
+    verify_source_tree,
+    verify_worktree_file,
+)
 from executor.sandbox.docker import (
     DockerSandboxBackend,
     SandboxExecutionError,
     SandboxUnavailable,
 )
+from executor.sandbox.policy_snapshot import (
+    ExecutionPolicyError,
+    ExecutionPolicySnapshot,
+    load_execution_policy_snapshot,
+)
 from executor.sandbox.spec import CommandRule, SandboxExecutionContext, SandboxResult, SandboxSpec
+
+
+_CANONICAL_TASK_PATH = "tasks/GP001_FIX_FAILING_TEST_CASE_001.yaml"
+_PROJECT_CONTRACT_PATH = "project_contracts/executor-self.yaml"
+_POLICY_ISSUER_ID = "executor-policy"
+_RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 class GP001RuntimeError(RuntimeError):
@@ -115,13 +132,26 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 
 def _changed_paths(root: Path) -> tuple[str, ...]:
-    output = _git(root, "status", "--porcelain=v1", "--untracked-files=all").stdout
+    output = _git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all").stdout
+    records = output.split("\0")
     paths: set[str] = set()
-    for line in output.splitlines():
-        if len(line) < 4:
-            raise GP001RuntimeError(f"unexpected Git status record: {line!r}")
-        raw = line[3:].rsplit(" -> ", 1)[-1]
-        paths.add(canonical_repository_path(raw))
+    index = 0
+    while index < len(records):
+        record = records[index]
+        if not record:
+            index += 1
+            continue
+        if len(record) < 4:
+            raise GP001RuntimeError(f"unexpected Git status record: {record!r}")
+        status = record[:2]
+        path = record[3:]
+        if "R" in status or "C" in status:
+            index += 1
+            if index >= len(records) or not records[index]:
+                raise GP001RuntimeError("incomplete Git rename/copy status record")
+            path = records[index]
+        paths.add(canonical_repository_path(path))
+        index += 1
     return tuple(sorted(paths))
 
 
@@ -167,7 +197,7 @@ def build_gp001_sandbox_spec(task: dict[str, Any], image: str) -> SandboxSpec:
 class GP001DockerSandboxBackend(DockerSandboxBackend):
     """Exact GP001 exception; global external-project execution stays disabled."""
 
-    def __init__(self, *, policy_snapshot, task: dict[str, Any], docker_binary: str = "docker"):
+    def __init__(self, *, policy_snapshot: ExecutionPolicySnapshot, task: dict[str, Any], docker_binary: str = "docker"):
         super().__init__(policy_snapshot=policy_snapshot, docker_binary=docker_binary)
         if validate_gp001_task_contract(task).status != ValidationStatus.VALID:
             raise SandboxExecutionError("GP001 sandbox requires a valid task contract")
@@ -232,48 +262,68 @@ class GP001DockerSandboxBackend(DockerSandboxBackend):
 
 
 class GP001Runtime:
-    """First vertical runtime: contract -> fail -> authorized mutation -> verify -> report."""
+    """First vertical runtime: canonical contract -> fail -> authorized mutation -> verify -> report."""
 
     def __init__(
         self,
         *,
-        task_path: str | Path,
+        executor_root: str | Path,
+        executor_commit: str,
         runs_root: str | Path,
-        sandbox_backend,
-        sandbox_spec: SandboxSpec,
+        image: str,
+        docker_binary: str = "docker",
     ) -> None:
-        self.task_path = Path(task_path).resolve(strict=True)
-        self.task = load_contract(self.task_path)
-        validation = validate_gp001_task_contract(self.task)
-        if validation.status != ValidationStatus.VALID:
-            raise GP001Blocked(f"invalid GP001 task: {validation.to_dict()}")
+        try:
+            snapshot = load_execution_policy_snapshot(executor_root, commit=executor_commit)
+            root = snapshot.repository_root
+            task_bytes = verify_worktree_file(root, commit=executor_commit, path=_CANONICAL_TASK_PATH)
+            task_path = root / _CANONICAL_TASK_PATH
+            task = load_contract(task_path)
+            validation = validate_gp001_task_contract(task)
+            if validation.status != ValidationStatus.VALID:
+                raise GP001Blocked(f"invalid canonical GP001 task: {validation.to_dict()}")
+            test_relative = canonical_repository_path(task["test_contract"]["path"])
+            test_bytes = verify_worktree_file(root, commit=executor_commit, path=test_relative)
+            project_bytes = verify_worktree_file(root, commit=executor_commit, path=_PROJECT_CONTRACT_PATH)
+        except (
+            ExecutionPolicyError,
+            RepositorySnapshotError,
+            RepositoryPathError,
+            OSError,
+        ) as exc:
+            raise GP001Blocked(f"cannot load authoritative GP001 runtime inputs: {exc}") from exc
 
-        root = self.task_path.parent.parent
-        test_path = (root / canonical_repository_path(self.task["test_contract"]["path"])).resolve(strict=True)
-        test_path.relative_to(root)
-        self.task_sha256 = _sha256(self.task_path.read_bytes())
-        self.test_sha256 = _file_sha256(test_path)
-        if self.test_sha256 != self.task["test_contract"]["sha256"].lower():
+        self.policy_snapshot = snapshot
+        self.task_path = task_path
+        self.task = task
+        self.task_sha256 = _sha256(task_bytes)
+        self.test_sha256 = _sha256(test_bytes)
+        self.project_contract_sha256 = _sha256(project_bytes)
+        if self.test_sha256 != task["test_contract"]["sha256"].lower():
             raise GP001Blocked("locked GP001 test contract hash mismatch")
 
-        self.repository = self.task["repositories"]["target"]["name"]
-        self.input_commit = self.task["repositories"]["target"]["commit"]
+        self.repository = task["repositories"]["target"]["name"]
+        self.input_commit = task["repositories"]["target"]["commit"]
         self.allowed = tuple(
             canonical_repository_path(p)
-            for p in self.task["golden_path"]["scope"]["allowed_paths"]
+            for p in task["golden_path"]["scope"]["allowed_paths"]
         )
         if len(self.allowed) != 1:
             raise GP001Blocked("first GP001 runtime requires exactly one writable path")
         self.protected = tuple(
             validate_scope_pattern(p)
-            for p in self.task["golden_path"]["scope"]["protected_paths"]
+            for p in task["golden_path"]["scope"]["protected_paths"]
         )
-        commands = self.task["golden_path"]["commands"]
+        commands = task["golden_path"]["commands"]
         self.target_command = list(commands["target_test_argv"])
         self.regression_commands = [list(v) for v in commands["regression_argv"]]
         self.runs_root = Path(runs_root).expanduser().resolve(strict=False)
-        self.backend = sandbox_backend
-        self.spec = sandbox_spec
+        self.spec = build_gp001_sandbox_spec(task, image)
+        self.backend = GP001DockerSandboxBackend(
+            policy_snapshot=snapshot,
+            task=task,
+            docker_binary=docker_binary,
+        )
         self._consumed_packet_ids: set[str] = set()
 
     def _verify_clean_input(self, workspace: str | Path) -> Path:
@@ -293,56 +343,115 @@ class GP001Runtime:
                 raise
             raise GP001Blocked(f"input identity verification failed: {exc}") from exc
 
+    def _authorization_context(self, run_id: str) -> AuthorizationContext:
+        evidence_ref = f"policy-snapshot:{self.policy_snapshot.source_sha256}"
+        return AuthorizationContext(
+            run_id=run_id,
+            task_id=self.task["id"],
+            risk_class=self.task["risk_class"],
+            mode=self.task["mode"],
+            executor_commit=self.policy_snapshot.commit,
+            policy_sha256=self.policy_snapshot.source_sha256,
+            project_contract_sha256=self.project_contract_sha256,
+            task_contract_sha256=self.task_sha256,
+            test_contract_sha256=self.test_sha256,
+            repository_commits={self.repository: self.input_commit},
+            allowed_paths=self.allowed,
+            external_projects=self.policy_snapshot.external_projects,
+            auto_merge=self.policy_snapshot.auto_merge,
+            default_network=self.policy_snapshot.default_network,
+            default_secrets=self.policy_snapshot.default_secrets,
+            verified_issuer_evidence={
+                evidence_ref: ("POLICY_VERIFIER", _POLICY_ISSUER_ID),
+            },
+        )
+
     def _authorize(
         self,
-        packet: dict[str, Any],
-        context: AuthorizationContext,
+        *,
+        run_id: str,
         mutation: AuthorizedFileMutation,
         now: datetime | None,
     ) -> dict[str, Any]:
         mutation.validate()
-        expected_repo = {self.repository: self.input_commit}
-        checks = (
-            (context.task_id == self.task["id"], "task_id"),
-            (context.risk_class == self.task["risk_class"], "risk_class"),
-            (context.mode == self.task["mode"], "mode"),
-            (context.repository_commits == expected_repo, "repository_commits"),
-            (tuple(context.allowed_paths) == self.allowed, "allowed_paths"),
-            (context.task_contract_sha256.lower() == self.task_sha256, "task_contract_sha256"),
-            (context.test_contract_sha256.lower() == self.test_sha256, "test_contract_sha256"),
-            (not context.external_projects, "external_projects"),
-            (not context.auto_merge, "auto_merge"),
-            (not context.default_network, "default_network"),
-            (not context.default_secrets, "default_secrets"),
-            (mutation.canonical_path() == self.allowed[0], "mutation_path"),
-        )
-        failed = [name for ok, name in checks if not ok]
-        if failed:
-            raise GP001Blocked(f"AAP context does not match GP001 contract: {failed}")
+        if mutation.canonical_path() != self.allowed[0]:
+            raise GP001Blocked("mutation path is outside the frozen GP001 contract")
+        if self.policy_snapshot.external_projects or self.policy_snapshot.auto_merge:
+            raise GP001Blocked("GP001 canonical policy must keep external execution and auto-merge disabled")
+        if self.policy_snapshot.default_network or self.policy_snapshot.default_secrets:
+            raise GP001Blocked("GP001 canonical policy must keep network and secrets disabled")
 
+        current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+        context = self._authorization_context(run_id)
+        evidence_ref = next(iter(context.verified_issuer_evidence))
+        packet_id = f"gp001-{run_id}-{mutation.expected_after_sha256[:16]}"
+        if len(packet_id) > 128:
+            packet_id = f"gp001-{_sha256(packet_id.encode())[:48]}"
+        issued_at = current.replace(microsecond=0)
+        expires_at = issued_at + timedelta(minutes=10)
+        packet = {
+            "schema_version": "executor-action-authorization/1.0",
+            "packet_id": packet_id,
+            "run_id": run_id,
+            "issued_at": issued_at.isoformat().replace("+00:00", "Z"),
+            "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
+            "issuer": {
+                "role": "POLICY_VERIFIER",
+                "id": _POLICY_ISSUER_ID,
+                "evidence_ref": evidence_ref,
+            },
+            "bindings": {
+                "task_id": context.task_id,
+                "risk_class": context.risk_class,
+                "mode": context.mode,
+                "executor_commit": context.executor_commit,
+                "policy_sha256": context.policy_sha256,
+                "project_contract_sha256": context.project_contract_sha256,
+                "task_contract_sha256": context.task_contract_sha256,
+                "test_contract_sha256": context.test_contract_sha256,
+                "repository_commits": context.repository_commits,
+            },
+            "action": {
+                "kind": "WRITE_REPOSITORY",
+                "argv": mutation.authorization_argv(),
+                "paths": [mutation.canonical_path()],
+                "network": False,
+                "secrets": [],
+                "external_project": False,
+            },
+            "decision": {
+                "status": "AUTHORIZED",
+                "reasons": [
+                    "Mutation stays inside the canonical user-approved GP001 task contract",
+                    "Mutation is bound to exact before/after file hashes",
+                ],
+            },
+            "constraints": {
+                "max_uses": 1,
+                "max_duration_seconds": 600,
+                "manual_confirmation_required": False,
+            },
+            "integrity": {"algorithm": "SHA-256", "payload_sha256": ""},
+        }
+        packet["integrity"]["payload_sha256"] = packet_payload_sha256(packet)
         result, decision = validate_action_authorization_packet(
             packet,
             context=context,
-            now=now,
+            now=current,
             consumed_packet_ids=self._consumed_packet_ids,
         )
         if result.status != ValidationStatus.VALID or decision is None:
-            raise GP001Blocked(f"mutation authorization rejected: {result.to_dict()}")
-        action, issuer = packet["action"], packet["issuer"]
-        if decision.action_kind != "WRITE_REPOSITORY" or issuer.get("role") != "USER":
-            raise GP001Blocked("GP001 mutation requires verified USER WRITE_REPOSITORY authorization")
-        if action.get("paths") != [mutation.canonical_path()]:
-            raise GP001Blocked("AAP does not bind the exact mutation path")
-        if action.get("argv") != mutation.authorization_argv():
-            raise GP001Blocked("AAP does not bind the exact mutation before/after hashes")
-        if action.get("network") is not False or action.get("secrets") != []:
-            raise GP001Blocked("AAP mutation may not request network or secrets")
+            raise GP001Blocked(f"policy authorization rejected: {result.to_dict()}")
+        if decision.action_kind != "WRITE_REPOSITORY" or decision.issuer_role != "POLICY_VERIFIER":
+            raise GP001Blocked("GP001 requires POLICY_VERIFIER WRITE_REPOSITORY authorization")
         self._consumed_packet_ids.add(decision.packet_id)
         return {
             "packet_id": decision.packet_id,
             "payload_sha256": decision.payload_sha256,
             "issuer_role": decision.issuer_role,
             "issuer_id": decision.issuer_id,
+            "issuer_evidence_ref": decision.issuer_evidence_ref,
+            "action_argv": mutation.authorization_argv(),
         }
 
     def _run(self, root: Path, run_dir: Path, argv: list[str], purpose: str, label: str) -> SandboxResult:
@@ -385,22 +494,25 @@ class GP001Runtime:
         self,
         *,
         workspace: str | Path,
-        authorization_packet: dict[str, Any],
-        authorization_context: AuthorizationContext,
         mutation: AuthorizedFileMutation,
+        run_id: str | None = None,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         started = time.monotonic()
-        run_dir = self.runs_root / authorization_context.run_id
+        actual_run_id = run_id or f"gp001-{uuid.uuid4().hex}"
+        if _RUN_ID.fullmatch(actual_run_id) is None:
+            raise GP001Blocked("run_id contains unsupported characters")
+        run_dir = self.runs_root / actual_run_id
         report: dict[str, Any] = {
             "schema_version": "executor-gp001-runtime-result/1.0",
             "task_id": self.task["id"],
-            "run_id": authorization_context.run_id,
+            "run_id": actual_run_id,
             "repository": self.repository,
             "input_commit": self.input_commit,
             "status": "FAILED",
             "error": None,
             "authorization": None,
+            "authorization_model": "CANONICAL_USER_APPROVED_TASK_PLUS_POLICY_VERIFIER_ACTION_GATE",
             "authorization_consumption": "RUN_LOCAL_REPLAY_GUARD_ONLY",
             "changed_paths": [],
             "diff_path": None,
@@ -430,9 +542,7 @@ class GP001Runtime:
             try:
                 run_dir.mkdir(mode=0o700)
             except FileExistsError as exc:
-                raise GP001Blocked(
-                    f"run directory already exists: {authorization_context.run_id}"
-                ) from exc
+                raise GP001Blocked(f"run directory already exists: {actual_run_id}") from exc
 
             pre = self._run(root, run_dir, self.target_command, "GP001_PRECHANGE", "pre-target")
             report["commands"].append(_result_payload(pre))
@@ -443,7 +553,9 @@ class GP001Runtime:
             report["evidence"]["pre_change_target_test"] = "FAIL"
 
             report["authorization"] = self._authorize(
-                authorization_packet, authorization_context, mutation, now
+                run_id=actual_run_id,
+                mutation=mutation,
+                now=now,
             )
             self._mutate(root, mutation)
 
