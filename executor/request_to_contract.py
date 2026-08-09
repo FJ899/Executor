@@ -12,7 +12,6 @@ from executor.gp001_contract import validate_gp001_task_contract
 
 
 _PROFILE_SCHEMA = "executor-contract-formation-profile/1.0"
-_HUMAN_AUTHORITY_SOURCE = "HUMAN_AUTHORITY"
 
 
 class FormationError(RuntimeError):
@@ -24,11 +23,8 @@ class FormationStatus(str, Enum):
     INTERPRETATION_PROPOSED = "INTERPRETATION_PROPOSED"
     DRAFT_CONTRACT_CREATED = "DRAFT_CONTRACT_CREATED"
     DRAFT_CRITIQUED = "DRAFT_CRITIQUED"
-    AWAITING_HUMAN_AUTHORIZATION = "AWAITING_HUMAN_AUTHORIZATION"
     NEEDS_CLARIFICATION = "NEEDS_CLARIFICATION"
-    AUTHORIZED_AND_FROZEN = "AUTHORIZED_AND_FROZEN"
-    REJECTED = "REJECTED"
-    CANCELLED = "CANCELLED"
+    AWAITING_VERIFIED_HUMAN_AUTHORIZATION = "AWAITING_VERIFIED_HUMAN_AUTHORIZATION"
 
 
 @dataclass(frozen=True)
@@ -58,28 +54,6 @@ class ProvenanceRecord:
         if self.confidence is not None:
             payload["confidence"] = self.confidence
         return payload
-
-
-@dataclass(frozen=True)
-class HumanDecisionReceipt:
-    decision: str
-    draft_sha256: str
-    authority_source: str
-    authority_evidence_ref: str
-
-    def __post_init__(self) -> None:
-        if self.decision not in {"ACCEPT", "MODIFY", "REJECT"}:
-            raise FormationError("decision must be ACCEPT, MODIFY or REJECT")
-        if self.authority_source != _HUMAN_AUTHORITY_SOURCE:
-            raise FormationError("formation decision must come from HUMAN_AUTHORITY")
-        if len(self.draft_sha256) != 64:
-            raise FormationError("draft_sha256 must be a SHA-256 hex digest")
-        try:
-            int(self.draft_sha256, 16)
-        except ValueError as exc:
-            raise FormationError("draft_sha256 must be hexadecimal") from exc
-        if not self.authority_evidence_ref.strip():
-            raise FormationError("authority_evidence_ref is required")
 
 
 @dataclass(frozen=True)
@@ -115,12 +89,13 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 
 class RequestToContract001:
-    """Govern one GP001 request from natural language to a frozen task contract.
+    """Govern one known GP001 request up to a verified human authority boundary.
 
-    This kernel does not perform natural-language inference and does not authenticate
-    a human identity. It records a model/process proposal, critiques it against the
-    accepted GP001 contract profile, and only freezes after receiving a hash-bound
-    decision receipt from the superior human-authority boundary.
+    This slice deliberately stops before authorization/freeze. A process-local
+    claim such as ``authority_source=HUMAN`` is not accepted as proof that a
+    human authorized the draft. A later superior boundary must provide verified
+    external evidence bound to the exact draft hash before executable authority
+    can exist.
     """
 
     def __init__(
@@ -158,8 +133,7 @@ class RequestToContract001:
             raise FormationError("formation profile target task escaped executor root") from exc
 
         self._canonical_task = _load_json(target_file)
-        expected_task_id = self._profile.get("expected_task_id")
-        if self._canonical_task.get("id") != expected_task_id:
+        if self._canonical_task.get("id") != self._profile.get("expected_task_id"):
             raise FormationError("canonical task id does not match formation profile")
         validation = validate_gp001_task_contract(self._canonical_task)
         if validation.status.value != "VALID":
@@ -181,8 +155,6 @@ class RequestToContract001:
         self._draft_sha256: str | None = None
         self._draft_snapshot: str | None = None
         self._critique: list[CritiqueFinding] = []
-        self._frozen_contract: dict[str, Any] | None = None
-        self._authorization: dict[str, Any] | None = None
 
     @property
     def draft_sha256(self) -> str | None:
@@ -230,11 +202,6 @@ class RequestToContract001:
     def create_draft(self) -> dict[str, Any]:
         if self.status is not FormationStatus.INTERPRETATION_PROPOSED:
             raise FormationError("draft may only be created after interpretation proposal")
-        self._refresh_draft()
-        self.status = FormationStatus.DRAFT_CONTRACT_CREATED
-        return self.decision_surface()
-
-    def _refresh_draft(self) -> None:
         if self._proposed_task is None:
             raise FormationError("no proposed task contract")
         payload = {
@@ -251,6 +218,8 @@ class RequestToContract001:
         self._draft_snapshot = _canonical_json(payload)
         self._draft_sha256 = _sha256_text(self._draft_snapshot)
         self._critique = []
+        self.status = FormationStatus.DRAFT_CONTRACT_CREATED
+        return self.decision_surface()
 
     def critique(self) -> tuple[CritiqueFinding, ...]:
         if self.status is not FormationStatus.DRAFT_CONTRACT_CREATED:
@@ -267,18 +236,16 @@ class RequestToContract001:
                     message=f"{issue.path}: {issue.message}",
                 )
             )
-
         if _canonical_json(self._proposed_task) != _canonical_json(self._canonical_task):
             findings.append(
                 CritiqueFinding(
                     code="CONTRACT_DIVERGENCE_FROM_ACCEPTED_GP001_PROFILE",
                     message=(
                         "proposed executable contract differs from the accepted GP001 "
-                        "contract; the difference must be explicitly resolved before authorization"
+                        "contract and cannot be promoted by interpretation alone"
                     ),
                 )
             )
-
         if self._open_questions:
             findings.append(
                 CritiqueFinding(
@@ -297,7 +264,7 @@ class RequestToContract001:
         if any(item.blocking for item in self._critique):
             self.status = FormationStatus.NEEDS_CLARIFICATION
         else:
-            self.status = FormationStatus.AWAITING_HUMAN_AUTHORIZATION
+            self.status = FormationStatus.AWAITING_VERIFIED_HUMAN_AUTHORIZATION
         return self.decision_surface()
 
     def decision_surface(self) -> dict[str, Any]:
@@ -326,96 +293,29 @@ class RequestToContract001:
             "critique": [finding.to_dict() for finding in self._critique],
             "draft_sha256": self._draft_sha256,
             "status": self.status.value,
-            "executable": self.status is FormationStatus.AUTHORIZED_AND_FROZEN,
+            "executable": False,
         }
 
-    def record_human_decision(
-        self,
-        receipt: HumanDecisionReceipt,
-        *,
-        modified_task_contract: dict[str, Any] | None = None,
-        modification_note: str = "",
-    ) -> dict[str, Any] | None:
-        if self.status not in {
-            FormationStatus.AWAITING_HUMAN_AUTHORIZATION,
-            FormationStatus.NEEDS_CLARIFICATION,
-        }:
-            raise FormationError("human decision is not legal in the current formation state")
-        if self._draft_sha256 is None or receipt.draft_sha256 != self._draft_sha256:
-            raise FormationError("human decision is not bound to the current draft")
-
-        if receipt.decision == "REJECT":
-            self.status = FormationStatus.REJECTED
-            self._authorization = {
-                "decision": "REJECT",
-                "draft_sha256": receipt.draft_sha256,
-                "authority_source": receipt.authority_source,
-                "authority_evidence_ref": receipt.authority_evidence_ref,
-            }
-            return None
-
-        if receipt.decision == "MODIFY":
-            if modified_task_contract is None:
-                raise FormationError("MODIFY requires a replacement proposed task contract")
-            if not modification_note.strip():
-                raise FormationError("MODIFY requires a modification note")
-            self._proposed_task = copy.deepcopy(modified_task_contract)
-            self._provenance.append(
-                ProvenanceRecord(
-                    path="$.proposed_task_contract",
-                    source="USER",
-                    value=copy.deepcopy(modified_task_contract),
-                    note=modification_note.strip(),
-                )
+    def export_human_authorization_request(self) -> dict[str, Any]:
+        if self.status is not FormationStatus.AWAITING_VERIFIED_HUMAN_AUTHORIZATION:
+            raise FormationError(
+                "human authorization request requires a clean critiqued draft"
             )
-            self._open_questions = []
-            self._refresh_draft()
-            self.status = FormationStatus.DRAFT_CONTRACT_CREATED
-            return None
-
-        if self.status is not FormationStatus.AWAITING_HUMAN_AUTHORIZATION:
-            raise FormationError("ACCEPT is forbidden while clarification is required")
-        if any(item.blocking for item in self._critique):
-            raise FormationError("blocking critique findings prevent ACCEPT")
-        if self._proposed_task is None:
-            raise FormationError("no proposed task contract")
-
-        validation = validate_gp001_task_contract(self._proposed_task)
-        if validation.status.value != "VALID":
-            raise FormationError("accepted task contract is not GP001-valid")
-        if _canonical_json(self._proposed_task) != _canonical_json(self._canonical_task):
-            raise FormationError("accepted task diverged from REQUEST_TO_CONTRACT_001 profile")
-
-        frozen = copy.deepcopy(self._proposed_task)
-        task_sha256 = _sha256_text(_canonical_json(frozen))
-        self._authorization = {
-            "decision": "ACCEPT",
-            "draft_sha256": receipt.draft_sha256,
-            "authority_source": receipt.authority_source,
-            "authority_evidence_ref": receipt.authority_evidence_ref,
-        }
-        self._frozen_contract = frozen
-        self.status = FormationStatus.AUTHORIZED_AND_FROZEN
+        if self._draft_sha256 is None:
+            raise FormationError("draft hash missing")
         return {
-            "schema_version": "executor-authorized-formation-result/1.0",
+            "schema_version": "executor-human-formation-authorization-request/1.0",
             "request_id": self.request_id,
             "formation_profile": self._profile["id"],
-            "status": self.status.value,
-            "task_contract_sha256": task_sha256,
-            "task_contract": copy.deepcopy(frozen),
-            "formation_evidence": {
-                "user_request": self.user_request,
-                "draft_sha256": receipt.draft_sha256,
-                "authority_source": receipt.authority_source,
-                "authority_evidence_ref": receipt.authority_evidence_ref,
-                "out_of_scope_discoveries": list(self._out_of_scope_discoveries),
-                "provenance": [record.to_dict() for record in self._provenance],
-            },
+            "draft_sha256": self._draft_sha256,
+            "allowed_decisions": ["ACCEPT", "MODIFY", "REJECT"],
+            "decision_surface": self.decision_surface(),
+            "required_authority": "VERIFIED_EXTERNAL_HUMAN_AUTHORITY",
+            "status": "AWAITING_VERIFIED_HUMAN_AUTHORIZATION",
         }
 
     def frozen_task_contract(self) -> dict[str, Any]:
-        if self.status is not FormationStatus.AUTHORIZED_AND_FROZEN:
-            raise FormationError("no executable task contract exists before authorization and freeze")
-        if self._frozen_contract is None:
-            raise FormationError("frozen contract missing")
-        return copy.deepcopy(self._frozen_contract)
+        raise FormationError(
+            "no executable contract exists: verified external human authorization "
+            "and freeze are not implemented in REQUEST_TO_CONTRACT_001 phase 1"
+        )
