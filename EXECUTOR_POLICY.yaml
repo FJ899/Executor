@@ -2,6 +2,13 @@
   "schema_version": "executor-policy/1.0",
   "execution": {
     "external_projects": false,
+    "controlled_external_fixtures": [
+      {
+        "task": "GP001-FIX-FAILING-TEST-CASE-001",
+        "repository": "litrgratis-pixel/executor-pilot-target",
+        "commit": "3934a94a5eebf750079200589d6dc40e024d44a0"
+      }
+    ],
     "auto_merge": false,
     "default_network": false,
     "default_secrets": []
