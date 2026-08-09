@@ -1,8 +1,8 @@
 ---
 document: "Golden Path 001 — Fix Failing Test"
 version: "1.0"
-status: "PROPOSED PRODUCT ACCEPTANCE PATH / PENDING REPO MERGE"
-date: "2026-08-08"
+status: "ACCEPTED PRODUCT PATH / MACHINE CONTRACT IN PHASE C"
+date: "2026-08-09"
 scope: "first end-to-end Executor user scenario"
 repository: "litrgratis-pixel/Executor"
 ---
@@ -159,3 +159,38 @@ Golden Path #001 is not complete because supporting components exist individuall
 It is complete only when the full path is demonstrated end to end on a pinned repository input, with a real failing condition, no manual solution edit by the user, truthful evidence, and a reviewable result.
 
 Fixture runs may develop the path. Product proof requires a real repository task consistent with the applicable maturity gate.
+
+## 9. Machine-readable Phase C contract
+
+The first bounded development instance of GP001 is pinned to the controlled `CASE-001` regression in `litrgratis-pixel/executor-pilot-target`.
+
+Machine-readable sources:
+
+```text
+tasks/GP001_FIX_FAILING_TEST_CASE_001.yaml
+test_contracts/GP001_FIX_FAILING_TEST_CASE_001.yaml
+tests/fixtures/gp001/contract_source.json
+```
+
+The GP001-specific structural validator is:
+
+```text
+python -m executor.gp001_contract tasks/GP001_FIX_FAILING_TEST_CASE_001.yaml
+```
+
+The contract fixes, before execution:
+
+- target repository and exact commit;
+- exact failing test;
+- one exact allowed code path;
+- protected acceptance/test paths;
+- report-only treatment of out-of-scope discoveries;
+- explicit authorization requirement before mutation;
+- exact target and regression commands;
+- bounded model/execution/time/patch budgets;
+- required before/after/scope observations;
+- terminal result limited to `ACTION_COMPLETED_REVIEW_REQUIRED`, `BLOCKED`, or `FAILED`.
+
+The controlled CASE-001 input is a development vehicle for the vertical path. Passing it will not by itself claim product value, a new maturity level, or completion of GP001 on a real repository task.
+
+Until repository identity and run evidence are independently available, authoritative validation is expected to remain evidence-blocked rather than infer execution readiness.
