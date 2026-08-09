@@ -610,4 +610,6 @@ FORMATION CANNOT MINT ITS OWN HUMAN AUTHORITY
 VERIFIED HUMAN AUTHORITY != TECHNICAL PROOF
 ```
 
+PR #51 remains a draft until a separate user decision authorizes merge. Direction acceptance is not merge authorization.
+
 Only after this model is accepted for merge should Executor implement the first minimal verified-human-authority boundary contract.
