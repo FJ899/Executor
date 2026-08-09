@@ -48,6 +48,9 @@ from executor.sandbox.spec import CommandRule, SandboxExecutionContext, SandboxR
 _CANONICAL_TASK_PATH = "tasks/GP001_FIX_FAILING_TEST_CASE_001.yaml"
 _PROJECT_CONTRACT_PATH = "project_contracts/executor-self.yaml"
 _POLICY_ISSUER_ID = "executor-policy"
+_CONTROLLED_TASK_ID = "GP001-FIX-FAILING-TEST-CASE-001"
+_CONTROLLED_FIXTURE_REPOSITORY = "litrgratis-pixel/executor-pilot-target"
+_CONTROLLED_FIXTURE_COMMIT = "3934a94a5eebf750079200589d6dc40e024d44a0"
 _RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
@@ -97,6 +100,17 @@ def _sha256(payload: bytes) -> str:
 
 def _file_sha256(path: Path) -> str:
     return _sha256(path.read_bytes())
+
+
+def _is_controlled_gp001_task(task: dict[str, Any]) -> bool:
+    repositories = task.get("repositories")
+    target = repositories.get("target") if isinstance(repositories, dict) else None
+    return (
+        task.get("id") == _CONTROLLED_TASK_ID
+        and isinstance(target, dict)
+        and target.get("name") == _CONTROLLED_FIXTURE_REPOSITORY
+        and target.get("commit") == _CONTROLLED_FIXTURE_COMMIT
+    )
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -195,12 +209,16 @@ def build_gp001_sandbox_spec(task: dict[str, Any], image: str) -> SandboxSpec:
 
 
 class GP001DockerSandboxBackend(DockerSandboxBackend):
-    """Exact GP001 exception; global external-project execution stays disabled."""
+    """Exact controlled GP001 fixture; generic external-project execution stays disabled."""
 
     def __init__(self, *, policy_snapshot: ExecutionPolicySnapshot, task: dict[str, Any], docker_binary: str = "docker"):
         super().__init__(policy_snapshot=policy_snapshot, docker_binary=docker_binary)
         if validate_gp001_task_contract(task).status != ValidationStatus.VALID:
             raise SandboxExecutionError("GP001 sandbox requires a valid task contract")
+        if not _is_controlled_gp001_task(task):
+            raise SandboxExecutionError(
+                "GP001 sandbox accepts only the canonical controlled executor-pilot-target fixture"
+            )
         self.repository = task["repositories"]["target"]["name"]
         self.input_commit = task["repositories"]["target"]["commit"]
         self.allowed = tuple(
@@ -215,7 +233,9 @@ class GP001DockerSandboxBackend(DockerSandboxBackend):
     def authorize(self, context: SandboxExecutionContext) -> Path:
         policy = self._authoritative_policy()
         if policy.external_projects or policy.auto_merge:
-            raise SandboxExecutionError("GP001 requires global external execution and auto-merge disabled")
+            raise SandboxExecutionError(
+                "GP001 controlled-fixture path requires generic external execution and auto-merge disabled"
+            )
         if policy.default_network or policy.default_secrets:
             raise SandboxExecutionError("GP001 requires network=false and no secrets")
         if context.purpose not in {"GP001_PRECHANGE", "GP001_POSTCHANGE"}:
@@ -282,6 +302,8 @@ class GP001Runtime:
             validation = validate_gp001_task_contract(task)
             if validation.status != ValidationStatus.VALID:
                 raise GP001Blocked(f"invalid canonical GP001 task: {validation.to_dict()}")
+            if not _is_controlled_gp001_task(task):
+                raise GP001Blocked("canonical GP001 task no longer binds the controlled fixture identity")
             test_relative = canonical_repository_path(task["test_contract"]["path"])
             test_bytes = verify_worktree_file(root, commit=executor_commit, path=test_relative)
             project_bytes = verify_worktree_file(root, commit=executor_commit, path=_PROJECT_CONTRACT_PATH)
@@ -377,7 +399,9 @@ class GP001Runtime:
         if mutation.canonical_path() != self.allowed[0]:
             raise GP001Blocked("mutation path is outside the frozen GP001 contract")
         if self.policy_snapshot.external_projects or self.policy_snapshot.auto_merge:
-            raise GP001Blocked("GP001 canonical policy must keep external execution and auto-merge disabled")
+            raise GP001Blocked(
+                "GP001 controlled-fixture path requires generic external execution and auto-merge disabled"
+            )
         if self.policy_snapshot.default_network or self.policy_snapshot.default_secrets:
             raise GP001Blocked("GP001 canonical policy must keep network and secrets disabled")
 
