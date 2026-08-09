@@ -12,6 +12,7 @@ from executor.gp001_contract import validate_gp001_task_contract
 
 
 _PROFILE_SCHEMA = "executor-contract-formation-profile/1.0"
+_PROFILE_PATH = Path("formation_profiles/REQUEST_TO_CONTRACT_001.json")
 
 
 class FormationError(RuntimeError):
@@ -78,24 +79,28 @@ def _sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def _load_json(path: Path) -> dict[str, Any]:
+def _sha256_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def _load_json_bytes(path: Path) -> tuple[dict[str, Any], bytes]:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        raw = path.read_bytes()
+        payload = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise FormationError(f"cannot load formation input {path}: {exc}") from exc
     if not isinstance(payload, dict):
         raise FormationError(f"formation input must be an object: {path}")
-    return payload
+    return payload, raw
 
 
 class RequestToContract001:
     """Govern one known GP001 request up to a verified human authority boundary.
 
-    This slice deliberately stops before authorization/freeze. A process-local
-    claim such as ``authority_source=HUMAN`` is not accepted as proof that a
-    human authorized the draft. A later superior boundary must provide verified
-    external evidence bound to the exact draft hash before executable authority
-    can exist.
+    Phase 1 deliberately stops before authorization/freeze. The only direct USER
+    provenance is the verbatim request. Structured extraction is MODEL provenance.
+    A later superior boundary must provide verified external human evidence bound
+    to the exact draft before executable authority can exist.
     """
 
     def __init__(
@@ -104,7 +109,6 @@ class RequestToContract001:
         executor_root: Path,
         request_id: str,
         user_request: str,
-        profile_path: Path | None = None,
     ) -> None:
         self.executor_root = executor_root.resolve()
         self.request_id = request_id.strip()
@@ -114,10 +118,13 @@ class RequestToContract001:
         if not self.user_request:
             raise FormationError("user_request is required")
 
-        profile_file = profile_path or (
-            self.executor_root / "formation_profiles" / "REQUEST_TO_CONTRACT_001.json"
-        )
-        self._profile = _load_json(profile_file)
+        profile_file = (self.executor_root / _PROFILE_PATH).resolve()
+        try:
+            profile_file.relative_to(self.executor_root)
+        except ValueError as exc:
+            raise FormationError("canonical formation profile escaped executor root") from exc
+        self._profile, profile_raw = _load_json_bytes(profile_file)
+        self._profile_sha256 = _sha256_bytes(profile_raw)
         if self._profile.get("schema_version") != _PROFILE_SCHEMA:
             raise FormationError("invalid request-to-contract formation profile schema")
         if self._profile.get("id") != "REQUEST_TO_CONTRACT_001":
@@ -132,7 +139,8 @@ class RequestToContract001:
         except ValueError as exc:
             raise FormationError("formation profile target task escaped executor root") from exc
 
-        self._canonical_task = _load_json(target_file)
+        self._canonical_task, task_raw = _load_json_bytes(target_file)
+        self._canonical_task_sha256 = _sha256_bytes(task_raw)
         if self._canonical_task.get("id") != self._profile.get("expected_task_id"):
             raise FormationError("canonical task id does not match formation profile")
         validation = validate_gp001_task_contract(self._canonical_task)
@@ -165,7 +173,6 @@ class RequestToContract001:
         *,
         understood_objective: str,
         proposed_task_contract: dict[str, Any],
-        user_facts: Iterable[tuple[str, Any]] = (),
         model_inferences: Iterable[tuple[str, Any, float | None]] = (),
         out_of_scope_discoveries: Iterable[str] = (),
         open_questions: Iterable[str] = (),
@@ -180,10 +187,6 @@ class RequestToContract001:
 
         self._understood_objective = objective
         self._proposed_task = copy.deepcopy(proposed_task_contract)
-        for path, value in user_facts:
-            self._provenance.append(
-                ProvenanceRecord(path=path, source="USER", value=copy.deepcopy(value))
-            )
         for path, value, confidence in model_inferences:
             self._provenance.append(
                 ProvenanceRecord(
@@ -207,6 +210,8 @@ class RequestToContract001:
         payload = {
             "schema_version": "executor-contract-formation-draft/1.0",
             "profile_id": self._profile["id"],
+            "profile_sha256": self._profile_sha256,
+            "canonical_task_sha256": self._canonical_task_sha256,
             "request_id": self.request_id,
             "user_request": self.user_request,
             "understood_objective": self._understood_objective,
@@ -307,6 +312,8 @@ class RequestToContract001:
             "schema_version": "executor-human-formation-authorization-request/1.0",
             "request_id": self.request_id,
             "formation_profile": self._profile["id"],
+            "formation_profile_sha256": self._profile_sha256,
+            "canonical_task_sha256": self._canonical_task_sha256,
             "draft_sha256": self._draft_sha256,
             "allowed_decisions": ["ACCEPT", "MODIFY", "REJECT"],
             "decision_surface": self.decision_surface(),
