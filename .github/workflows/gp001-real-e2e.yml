@@ -60,6 +60,7 @@ jobs:
       - name: Execute real GP001 vertical slice
         shell: bash
         env:
+          PYTHONPATH: ${{ github.workspace }}
           EXECUTOR_ROOT: ${{ github.workspace }}
           GP001_WORKSPACE: ${{ runner.temp }}/gp001-target
           GP001_RUNS_ROOT: ${{ runner.temp }}/gp001-runs
