@@ -1,13 +1,13 @@
 ---
 document: "Verified Human Authority Model"
-version: "0.1"
-status: "PROPOSED GOVERNANCE MODEL / PENDING HUMAN REVIEW"
+version: "0.2"
+status: "DIRECTION ACCEPTED / DRAFT PENDING MERGE"
 date: "2026-08-09"
-scope: "evidence and identity requirements for human authorization of an exact contract"
+scope: "evidence, identity and bounded-authorization requirements for human authorization of an exact contract"
 repository: "litrgratis-pixel/Executor"
 ---
 
-# Verified Human Authority Model v0.1
+# Verified Human Authority Model v0.2
 
 ## 1. Purpose
 
@@ -20,6 +20,12 @@ The core rule is:
 > **A HUMAN DECISION IS AUTHORITY ONLY WHEN EXTERNAL EVIDENCE BINDS A VERIFIED ACTOR, AN EXACT DECISION AND THE EXACT CONTRACT IDENTITY THAT ACTOR REVIEWED.**
 
 The formation layer may prepare review material and request a decision. It may not prove its own human authorization.
+
+A second governing rule is equally important:
+
+> **HUMAN AUTHORITY IS A BOUNDED AUTHORIZATION, NOT A GENERAL DELEGATION.**
+
+A human approval authorizes only the exact decision request and exact contract identity to which the verified decision is bound. It does not create standing trust for later contracts or unrelated actions.
 
 ## 2. Why this boundary exists
 
@@ -53,7 +59,7 @@ The next problem is not "how to add an approval button".
 
 The problem is:
 
-> How can Executor establish that a verified human actor approved exactly the immutable contract identity that will later be frozen for execution?
+> How can Executor establish that a verified human actor approved exactly the immutable contract identity that will later be frozen for execution, and only that contract identity?
 
 ## 3. Distinct objects
 
@@ -150,7 +156,7 @@ The formation layer may consume a verified receipt. It may not mint one merely b
 
 The executable contract identity created only after the verified receipt has been validated against the exact current draft.
 
-The authorized contract must be byte-/canonical-identity equivalent to the contract identity approved by the human.
+The authorized contract must be canonical-identity equivalent to the contract identity approved by the human.
 
 ## 4. Minimal authority chain
 
@@ -220,6 +226,8 @@ VERIFIED ROLE / IDENTITY EVIDENCE
 
 The formation kernel must not be able to add itself to the trusted actor set.
 
+Authentication proves approximately who the actor is. It does not prove what that actor authorized.
+
 ## 7. Exact contract identity rule
 
 The central invariant is:
@@ -244,53 +252,50 @@ AUTHORIZED_AND_FROZEN = FORBIDDEN
 
 Human approval of one contract never transfers automatically to a later modified contract.
 
-## 8. F-5 — Approval Drift
+## 8. Bounded authorization rule
 
-Failure mechanism:
+Human authority is not a standing capability grant.
 
-```text
-DRAFT A
-  |
-  v
-HUMAN REVIEWS A
-  |
-  v
-HUMAN ACCEPTS A
-  |
-  v
-SYSTEM CHANGES A -> B
-  |
-  v
-OLD APPROVAL REUSED
-  |
-  v
-B EXECUTED
-```
-
-This is a real authority failure even if:
-
-- the human actor was authentic;
-- the human genuinely clicked ACCEPT;
-- the original approval evidence is valid.
-
-The failure is identity drift: the verified decision does not authorize the executed contract.
-
-Invariant:
+Correct meaning:
 
 ```text
-HUMAN APPROVAL OF CONTRACT A
-        !=
-HUMAN APPROVAL OF CONTRACT B
+VERIFIED HUMAN ACTOR
+  authorizes
+DECISION D
+  for
+DECISION REQUEST R
+  covering
+EXACT CONTRACT C
+  reviewed through
+EXACT MATERIAL M
 ```
 
-Required behavior:
+Incorrect meaning:
 
 ```text
-any semantic or canonical draft change
-      -> new contract hash
-      -> previous ACCEPT becomes stale for freeze
-      -> new review / authorization required
+VERIFIED HUMAN ACTOR
+  once approved something
+      -> Executor is now generally trusted
+      -> future contracts/actions inherit approval
 ```
+
+Therefore:
+
+```text
+ONE APPROVAL
+    !=
+GENERAL DELEGATION
+```
+
+and:
+
+```text
+AUTHORIZATION EVENT A
+    !=
+AUTHORITY FOR FUTURE CONTRACTS B, C, D
+```
+
+A future delegation model, if ever introduced, must be a separate explicit governance object with its own scope, duration, revocation, actor and capability semantics. It must never be inferred from a normal contract approval.
 
 ## 9. F-4 retained — Self-Declared Decision Authority
 
@@ -317,7 +322,97 @@ Required behavior:
 - process-local construction cannot mint a trusted receipt;
 - formation remains fail-closed when superior evidence is absent.
 
-## 10. Additional adversarial cases
+## 10. F-5 — Approval Drift
+
+Failure mechanism:
+
+```text
+DRAFT A
+  |
+  v
+HUMAN REVIEWS A
+  |
+  v
+HUMAN ACCEPTS A
+  |
+  v
+SYSTEM CHANGES A -> B
+  |
+  v
+OLD APPROVAL REUSED
+  |
+  v
+B EXECUTED
+```
+
+This is a real authority failure even if:
+
+- the human actor was authentic;
+- the human genuinely chose ACCEPT;
+- the original approval evidence is valid.
+
+The failure is identity drift: the verified decision does not authorize the executed contract.
+
+Invariant:
+
+```text
+HUMAN APPROVAL OF CONTRACT A
+        !=
+HUMAN APPROVAL OF CONTRACT B
+```
+
+Required behavior:
+
+```text
+any semantic or canonical draft change
+      -> new contract hash
+      -> previous ACCEPT becomes stale for freeze
+      -> new review / authorization required
+```
+
+## 11. F-6 — Authorization Generalization / Delegation Drift
+
+Failure mechanism:
+
+```text
+HUMAN APPROVES CONTRACT A
+      |
+      v
+SYSTEM RECORDS "USER TRUSTS EXECUTOR"
+      |
+      v
+LATER CONTRACT B OR ACTION Y
+      |
+      v
+OLD APPROVAL TREATED AS STANDING AUTHORITY
+      |
+      v
+B / Y EXECUTED WITHOUT NEW BOUNDED AUTHORIZATION
+```
+
+This differs from F-5.
+
+F-5 changes the identity of the contract after a valid approval.
+
+F-6 keeps the original approval valid for A but improperly generalizes it into authority for some other contract or action.
+
+Invariant:
+
+```text
+HUMAN AUTHORITY IS BOUNDED AUTHORIZATION,
+NOT GENERAL DELEGATION
+```
+
+Required behavior:
+
+```text
+receipt for request R / contract C
+      can authorize only R / C
+```
+
+Any attempt to use the receipt as a capability token for another contract, another decision request or unrelated future work must fail closed.
+
+## 12. Required adversarial cases
 
 The future boundary must be attacked at least with these cases.
 
@@ -353,7 +448,13 @@ Expected result: old receipt cannot freeze the new draft.
 
 A receipt valid for one decision request is reused for another request or later contract instance.
 
-Expected result: reject unless the governing model explicitly proves the two identities are the same authorization event.
+Expected result: reject unless the identities are provably the same authorization event and same exact contract identity.
+
+### Generalized approval
+
+A valid receipt for contract A is presented as evidence that the actor generally trusts Executor or authorizes contract B.
+
+Expected result: reject.
 
 ### Fabricated decision event
 
@@ -365,7 +466,7 @@ Expected result: reject.
 
 Human chose `REJECT` or `MODIFY`, but a downstream component substitutes `ACCEPT`.
 
-Expected result: cryptographic/evidence binding or equivalent authoritative verification must expose the mismatch; freeze is forbidden.
+Expected result: authoritative evidence binding must expose the mismatch; freeze is forbidden.
 
 ### Incomplete review material
 
@@ -375,7 +476,7 @@ Expected result: the mechanism must not treat this as proof of informed approval
 
 The exact completeness policy belongs to the future implementation contract, but the omission must not be invisible.
 
-## 11. What a verified decision proves
+## 13. What a verified decision proves
 
 A valid verified decision receipt may prove only:
 
@@ -395,6 +496,8 @@ It does not prove:
 - that the contract is safe under all policies;
 - that the user request was perfectly interpreted;
 - that later modified contracts are authorized;
+- that different contracts are authorized;
+- that Executor has standing delegated authority;
 - that execution evidence is valid;
 - that product acceptance has occurred.
 
@@ -404,9 +507,10 @@ Therefore:
 VERIFIED HUMAN AUTHORITY != TECHNICAL CORRECTNESS
 VERIFIED HUMAN AUTHORITY != EXECUTION SUCCESS
 VERIFIED HUMAN AUTHORITY != PROOF OF RESULT
+VERIFIED HUMAN AUTHORITY != GENERAL DELEGATION
 ```
 
-## 12. Authority versus authentication
+## 14. Authority versus authentication
 
 Authentication answers approximately:
 
@@ -422,7 +526,9 @@ An authenticated session alone does not authorize an arbitrary contract.
 
 A contract hash alone does not prove a human approved it.
 
-## 13. Required future implementation boundary
+A previous valid approval does not create standing permission for future contracts.
+
+## 15. Required future implementation boundary
 
 The next implementation must create a component or adapter whose authority does not originate from the formation caller.
 
@@ -444,12 +550,13 @@ EXTERNAL / SUPERIOR HUMAN AUTHORITY BOUNDARY
 FORMATION FREEZE GATE
   verifies receipt
   verifies exact current contract identity
+  verifies receipt is bounded to this request/contract
   freezes only exact approved contract
 ```
 
 The same process may host some of these operations in an early implementation only if the authority evidence itself cannot be forged by the untrusted/caller-controlled portion and the trust ownership remains explicit.
 
-## 14. Implementation non-goals
+## 16. Implementation non-goals
 
 This governance model does not yet choose:
 
@@ -464,23 +571,43 @@ This governance model does not yet choose:
 - ledger;
 - receipt transport;
 - multi-user organization model;
-- delegation policy;
+- delegation implementation;
 - quorum approval;
 - automatic approval.
 
 Those choices are premature until the authority semantics are accepted.
 
-## 15. Acceptance conditions for the model
+## 17. Minimal authorization receipt design — next design problem
 
-This document is sufficient as the next governance baseline only if it makes the following statements unambiguous:
+The next design step must define the smallest receipt contract capable of proving the model above without selecting a full UI or identity platform.
+
+At minimum it must answer:
+
+```text
+WHO produced the decision?
+WHAT decision was made?
+WHICH decision request was answered?
+WHICH exact contract identity was reviewed?
+WHICH exact review material was shown?
+WHEN / under which freshness identity did it occur?
+WHY can the formation caller not forge this evidence?
+WHY can the receipt not authorize any other contract?
+```
+
+The design must remain non-executable until those properties have adversarial tests.
+
+## 18. Acceptance conditions for the model
+
+This document is sufficient as the governance baseline only if it makes the following statements unambiguous:
 
 ```text
 HUMAN ACTION != VERIFIED HUMAN AUTHORITY
 AUTHENTICATED ACTOR != AUTHORIZATION OF ARBITRARY CONTRACT
 APPROVAL OF A != APPROVAL OF B
 AUTHORIZATION MUST BIND TO EXACT CONTRACT IDENTITY
+HUMAN AUTHORITY IS BOUNDED AUTHORIZATION, NOT GENERAL DELEGATION
 FORMATION CANNOT MINT ITS OWN HUMAN AUTHORITY
 VERIFIED HUMAN AUTHORITY != TECHNICAL PROOF
 ```
 
-Only after this model is accepted should Executor implement the first `VERIFIED_HUMAN_AUTHORITY_BOUNDARY` mechanism.
+Only after this model is accepted for merge should Executor implement the first minimal verified-human-authority boundary contract.
