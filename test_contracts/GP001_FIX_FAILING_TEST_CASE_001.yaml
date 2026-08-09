@@ -1,0 +1,67 @@
+{
+  "schema_version": "executor-test/1.0",
+  "test_id": "GP001-FIX-FAILING-TEST-CASE-001",
+  "source_claims": [
+    {
+      "claim": "target_repository_commit == \"3934a94a5eebf750079200589d6dc40e024d44a0\"",
+      "source": {
+        "file": "tests/fixtures/gp001/contract_source.json",
+        "selector": "$.target_repository_commit"
+      }
+    },
+    {
+      "claim": "target_test_blob_sha == \"c040b86152072f209622326e5a7b53a9884a4db1\"",
+      "source": {
+        "file": "tests/fixtures/gp001/contract_source.json",
+        "selector": "$.target_test_blob_sha"
+      }
+    },
+    {
+      "claim": "allowed_change_path == \"project_registry/registry.py\"",
+      "source": {
+        "file": "tests/fixtures/gp001/contract_source.json",
+        "selector": "$.allowed_change_path"
+      }
+    }
+  ],
+  "positive_control": {
+    "description": "After an authorized in-scope code fix, the pinned target test and required regressions pass.",
+    "expected": "post_change_target_test == PASS"
+  },
+  "negative_control": {
+    "description": "On the pinned baseline before edits, the target test fails.",
+    "expected": "pre_change_target_test == FAIL"
+  },
+  "tamper_control": {
+    "description": "Changing pinned input identity or protected acceptance material is detected.",
+    "method": "immutable_input_hash",
+    "expected": "DETECTED"
+  },
+  "unchanged_controls": [
+    {
+      "name": "input_identity",
+      "assertion": "input_commit_changed == false"
+    },
+    {
+      "name": "protected_tests",
+      "assertion": "protected_test_material_changed == false"
+    },
+    {
+      "name": "scope",
+      "assertion": "out_of_scope_change_count == 0"
+    }
+  ],
+  "holdout": {
+    "visibility": "HIDDEN_FROM_IMPLEMENTER",
+    "location": "tests/fixtures/gp001/GP001_FIX_FAILING_TEST_CASE_001.enc",
+    "access": "REPLAY_ONLY"
+  },
+  "acceptance": [
+    "pre_change_target_test == FAIL",
+    "post_change_target_test == PASS",
+    "regression_checks == PASS",
+    "out_of_scope_change_count == 0",
+    "protected_test_material_changed == false",
+    "input_commit_changed == false"
+  ]
+}

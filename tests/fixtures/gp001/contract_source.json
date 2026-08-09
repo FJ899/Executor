@@ -1,0 +1,8 @@
+{
+  "target_repository": "litrgratis-pixel/executor-pilot-target",
+  "target_repository_commit": "3934a94a5eebf750079200589d6dc40e024d44a0",
+  "target_test": "tests.test_registry.ProjectRegistryTests.test_duplicate_batch_does_not_partially_mutate_registry",
+  "target_test_file": "tests/test_registry.py",
+  "target_test_blob_sha": "c040b86152072f209622326e5a7b53a9884a4db1",
+  "allowed_change_path": "project_registry/registry.py"
+}
