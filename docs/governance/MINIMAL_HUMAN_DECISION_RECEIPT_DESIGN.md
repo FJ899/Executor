@@ -1,23 +1,24 @@
 ---
 document: "Minimal Human Decision Receipt Design"
-version: "0.4"
+version: "0.5"
 status: "AUTHORITY CONTEXT OWNERSHIP REVIEW / IMPLEMENTATION BLOCKED"
 date: "2026-08-09"
-scope: "human decision record, canonical authority-requirement ownership, external evidence and freeze verification"
+scope: "human decision record, canonical authority policy identity, external evidence and freeze verification"
 repository: "litrgratis-pixel/Executor"
 ---
 
-# Minimal Human Decision Receipt Design v0.4
+# Minimal Human Decision Receipt Design v0.5
 
 ```text
 HUMAN DECISION RECEIPT != VERIFIED AUTHORITY EVIDENCE
 AUTHENTICATION != AUTHORIZATION
 AUTHORIZATION != DELEGATION
 AUTHORITY REQUIREMENT != AUTHORITY OWNERSHIP
-LOWER-TRUST LAYER MAY NOT WEAKEN HIGHER-TRUST AUTHORITY REQUIREMENT
+VALID POLICY CONTENT != CANONICAL POLICY AUTHORITY
+LOWER TRUST MAY NOT WEAKEN HIGHER TRUST
 ```
 
-## 1. Boundary
+## 1. End-to-end authority boundary
 
 ```text
 USER REQUEST
@@ -26,7 +27,7 @@ FORMATION KERNEL
     creates exact draft + review + decision request
     ↓
 CANONICAL AUTHORITY REQUIREMENT RESOLUTION
-    derives requirements from superior trusted sources
+    derives requirements from verified superior sources
     ↓
 HUMAN DECISION ADAPTER
     records human action; DOES NOT prove authority
@@ -38,153 +39,128 @@ EXTERNAL AUTHORITY EVIDENCE
     proves actor + required authority context independently
     ↓
 FREEZE GATE
-    recomputes/resolves canonical requirement
-    verifies evidence + exact current identities
+    re-verifies canonical sources
+    resolves effective requirement
+    verifies evidence + exact identities
     ↓
 AUTHORIZED_AND_FROZEN
 ```
 
-No component may silently combine contract interpretation, authority-requirement ownership, human decision capture, external authority ownership, evidence verification and freeze.
+No component may silently combine contract interpretation, authority-policy ownership, decision capture, external IAM ownership, evidence verification and freeze.
 
-## 2. Existing Executor trust hierarchy constrains the design
+## 2. Existing Executor trust hierarchy is the root for requirement ownership
 
-`EXECUTOR_POLICY.yaml` already defines the trust order:
+`EXECUTOR_POLICY.yaml` already establishes:
 
 ```text
 executor_policy
-project_contract
-task_contract
-authoritative_source
-untrusted_repository_data
-generated_data
+> project_contract
+> task_contract
+> authoritative_source
+> untrusted_repository_data
+> generated_data
 ```
 
-Therefore a formation profile or generated decision record cannot become a new authority source merely because it is convenient for implementation.
+The design must reuse this hierarchy rather than inventing a parallel authority-policy store.
 
-The design must preserve the existing higher-level rule:
+For the current Executor project, `project_contracts/executor-self.yaml` already identifies `EXECUTOR_POLICY.yaml` as an `authoritative_instruction`, and semantic changes to that policy are USER-owned.
 
-```text
-LOWER TRUST CANNOT OVERRIDE HIGHER TRUST
-```
+Therefore the current GP001 authority boundary can reuse existing verified project/policy identity machinery.
 
-## 3. Authority requirement versus authority ownership
-
-Core invariant:
-
-> **AUTHORITY REQUIREMENT != AUTHORITY OWNERSHIP.**
+## 3. Authority requirement != authority ownership
 
 Executor may know:
 
 ```text
-WHAT proof class is required
-WHICH external evidence profile is acceptable
-WHICH exact governed transition the requirement applies to
+WHAT authority evidence is required
+WHICH evidence verifier/profile is acceptable
+WHICH exact transition the proof applies to
 ```
 
 without owning:
 
 ```text
-WHO currently holds that authority
-WHO belongs to which organization
-WHO has which external role or entitlement
+WHO currently holds the external role
+WHO belongs to an organization
+WHO has current IAM permissions
 ```
 
-The external authority system owns changing identity/role membership.
+External authority systems own mutable role/identity truth.
 
-Executor owns only the canonical rule describing what evidence must be presented before a governed transition may occur.
+Executor owns only the canonical requirement for the governed transition.
 
-## 4. Who may define the authority requirement?
-
-Authority requirements must originate from already-trusted governance layers, not request-specific caller input.
-
-Conceptual ownership:
+## 4. Requirement ownership by trust layer
 
 ```text
 EXECUTOR_POLICY
-    owns system-level trust hierarchy and non-bypassable minimum rules
+    system-wide trust hierarchy and non-bypassable minima
         ↓
-PROJECT_CONTRACT / equivalent superior project governance
-    may define project/domain-specific authority requirements
+PROJECT_CONTRACT / superior project governance
+    project/domain-specific authority requirements
         ↓
-TASK_CONTRACT
-    may carry or add narrower requirements
-    may NOT remove superior requirements
+TASK CONTRACT
+    may carry/reference/add narrower constraints
+    cannot delete or replace superior constraints
         ↓
 FORMATION PROFILE
-    may reference / transport the resolved requirement
-    is NOT an independent authority owner
+    process configuration / reference only
+    not an independent authority owner
 ```
 
-The current `REQUEST_TO_CONTRACT_001` formation profile is therefore not sufficient, by itself, to establish a new authority class.
+Formation code, model output and caller arguments may not choose a weaker authority class or evidence source.
 
-A profile can say:
+## 5. Conjunctive requirement composition
 
-```text
-resolve authority requirement according to canonical policy X
-```
+Authority is not modeled as a simple LOW/MEDIUM/HIGH scalar.
 
-It must not be able to say:
-
-```text
-for this request, LOW_RISK_APPROVER is enough
-```
-
-when a superior policy requires something else.
-
-## 5. Requirement composition is conjunctive, not overriding
-
-Authority classes are not assumed to form a simple numeric ladder.
-
-Therefore the design does not use:
-
-```text
-LOW < MEDIUM < HIGH
-```
-
-as its security rule.
-
-Instead, all applicable canonical superior requirements survive composition:
+All applicable superior constraints survive:
 
 ```text
 EFFECTIVE AUTHORITY REQUIREMENT
-    =
-SYSTEM REQUIREMENT
-AND
-PROJECT REQUIREMENT
-AND
-ANY VALID NARROWER TASK-SPECIFIC REQUIREMENT
+=
+SYSTEM REQUIREMENTS
+AND PROJECT REQUIREMENTS
+AND VALID ADDITIONAL TASK-SPECIFIC REQUIREMENTS
 ```
 
-A lower layer may add another constraint.
+Lower layers may add constraints.
 
-It may never replace or delete a superior constraint.
+They may not remove or override superior constraints.
 
-Example:
+No `last-write-wins` authority semantics are allowed.
+
+## 6. Canonical authority policy source identity
+
+A policy or project contract is authoritative because of both content and origin.
+
+Minimum canonical source binding:
 
 ```text
-EXECUTOR_POLICY:
-verified human authority required
-
-PROJECT_CONTRACT:
-production deployment approval required
-
-TASK-SPECIFIC RULE:
-service owner approval also required
+repository
+commit
+path
+blob/content sha256
+source role
+trust layer
 ```
 
-Effective requirement:
+For the current controlled Executor slice, the authority requirement should be resolved from files tracked at the exact verified Executor commit already bound by formation.
 
-```text
-verified human authority
-AND production deployment approval
-AND service owner approval
-```
+A mutable worktree copy is not authority.
 
-not whichever requirement appeared last.
+An untracked file is not authority.
 
-## 6. Canonical authority requirement identity
+A caller-selected alternate repository is not authority.
 
-The resolved requirement is a small immutable verification object, not an IAM database.
+A copied policy with valid syntax is not authoritative merely because its contents look plausible.
+
+Core invariant:
+
+> **VALID POLICY CONTENT != CANONICAL POLICY AUTHORITY.**
+
+## 7. Authority requirement identity
+
+The effective resolved requirement is a small immutable verification object, not an IAM database.
 
 Minimum semantics:
 
@@ -195,9 +171,12 @@ required_authority_classes[]
 trusted_evidence_profiles[]
 required_context_keys[]
 source_bindings[]:
-  source_type
-  source_identity
-  source_sha256
+  trust_layer
+  repository
+  commit
+  path
+  content_sha256
+  source_role
 executor_commit
 ```
 
@@ -207,22 +186,13 @@ Canonical serialization yields:
 authority_requirement_sha256
 ```
 
-Every contributing superior source must be represented in `source_bindings`.
+The hash is bound into review material, decision request, Human Decision Receipt and freeze verification state.
 
-The requirement identity must be bound into:
+## 8. Human Decision Receipt
 
-```text
-review material
-decision request
-human decision receipt
-freeze verification state
-```
+The receipt records a decision fact, not an entitlement.
 
-## 7. Human Decision Receipt
-
-The receipt is a decision record, not a permission system.
-
-Minimum semantic fields:
+Minimum semantics:
 
 ```text
 schema_version
@@ -243,42 +213,35 @@ observed_at
 freshness_id
 ```
 
-It deliberately does not define trusted `permissions`, `roles`, `general_trust` or delegated capabilities.
+Receipt fields do not become trusted permissions merely by existing.
 
-Those facts must not become authoritative merely because the receipt contains them.
-
-## 8. External authority evidence
+## 9. External authority evidence
 
 ```text
 DECISION FACT != AUTHORITY TO MAKE THAT DECISION
 ```
 
-External evidence must independently establish the facts demanded by the canonical authority requirement, such as:
+Evidence must independently establish the facts demanded by the canonical requirement:
 
 ```text
 verified actor subject
 verified issuer / trust owner
-verified authority class / context
-binding to decision event or request
-freshness / validity required by the evidence profile
+verified authority class/context
+binding to decision event/request
+freshness / validity required by the trusted evidence profile
 ```
 
-The freeze gate validates evidence against the canonical requirement.
+Freeze Gate compares this evidence to the resolved requirement.
 
 It never asks the receipt what authority should have been required.
 
-## 9. F-7 — Authority Substitution
+## 10. F-7 — Authority Substitution
 
 Failure:
 
 ```text
-correct authority requirement exists
-        ↓
-Human A / context A is required
-        ↓
-system accepts Human B / context B because "some human approved"
-        ↓
-freeze
+correct requirement
++ wrong actor/account/organization/context accepted as equivalent
 ```
 
 Invariant:
@@ -288,127 +251,142 @@ Invariant:
 AUTHORITY IDENTITY MUST BIND TO EXACT DECISION CONTEXT
 ```
 
-## 10. F-8 — Authority Requirement Injection / Downgrade
+## 11. F-8 — Authority Requirement Injection / Downgrade
 
 Failure:
 
 ```text
-SUPERIOR POLICY REQUIRES AUTHORITY A
-        ↓
-caller / model / task / formation profile injects weaker or different requirement B
-        ↓
+superior policy requires A
+    ↓
+caller/model/task/formation injects weaker or different B
+    ↓
 real actor valid for B approves
+    ↓
+B is honestly verified
+    ↓
+freeze
+```
+
+Invariant:
+
+```text
+AUTHORITY REQUIREMENT MUST COME FROM CANONICAL SUPERIOR SOURCES
+CALLER/MODEL MAY NOT SELECT OR DOWNGRADE IT
+LOWER TRUST MAY NOT OVERRIDE HIGHER TRUST
+MISSING REQUIRED SOURCE = FAIL CLOSED
+```
+
+## 12. F-9 — Authority Policy Source Substitution
+
+Failure:
+
+```text
+system expects project/policy source S
         ↓
-system correctly verifies B
+caller supplies structurally valid alternate S2
+        ↓
+S2 defines an acceptable-looking requirement
+        ↓
+Freeze Gate validates content but not canonical origin
         ↓
 freeze
 ```
 
-The decision and evidence may be genuine.
-
-The failure is that the system asked the wrong authorization question.
-
-Distinction:
+Examples:
 
 ```text
-F-7:
-correct requirement
-+ wrong authority principal/context accepted
+correct policy path from wrong repository
+correct file from wrong commit
+copied policy from mutable workspace
+untracked replacement file
+same schema under attacker-selected path
+valid project contract pointing at attacker-selected policy
+```
 
+This differs from F-8:
+
+```text
 F-8:
-wrong or weakened requirement
-+ correctly verified evidence for that wrong requirement
+wrong requirement value/composition
+
+F-9:
+wrong authority-policy source accepted as canonical
 ```
 
 Invariants:
 
 ```text
-AUTHORITY REQUIREMENT MUST COME FROM CANONICAL TRUSTED SOURCES
-CALLER / MODEL MAY NOT SELECT OR DOWNGRADE REQUIRED AUTHORITY
-LOWER TRUST MAY NOT OVERRIDE HIGHER TRUST
-MISSING REQUIRED SOURCE OR REQUIREMENT = FAIL CLOSED
+AUTHORITY POLICY SOURCE MUST BIND TO EXACT REPOSITORY + COMMIT + PATH + CONTENT IDENTITY
+CALLER MAY NOT SELECT THE CANONICAL POLICY OR PROJECT CONTRACT SOURCE
+MUTABLE WORKSPACE CONTENT != CANONICAL AUTHORITY SOURCE
 ```
 
-## 11. F-8 attacks against the trust hierarchy
+## 13. Requirement and policy drift
 
-Required attacks include:
-
-```text
-caller supplies required_authority
-model labels task low risk and weakens requirement
-task contract removes project requirement
-formation profile invents its own authority class
-formation profile chooses its own evidence issuer
-missing project authority rule falls back to permissive default
-stale project policy is used after canonical policy changes
-one superior source is silently omitted during requirement composition
-last-write-wins replaces conjunction
-freeze gate authors its own weaker requirement
-```
-
-Every case must fail closed.
-
-## 12. Authority requirement drift
-
-Human approval must bind to the requirement that existed at review time.
+Any canonical policy or requirement change after review invalidates the previous decision for freeze.
 
 ```text
-requirement A
+source/policy A
     ↓
-human reviews and accepts
+human reviews and ACCEPTS
     ↓
-canonical policy changes to requirement B
+source/policy becomes B
     ↓
-old approval reused
+old receipt reused
 ```
 
 must fail.
 
-Required behavior:
+Required transition:
 
 ```text
-canonical requirement changes
-    -> new authority_requirement_sha256
-    -> new review-material identity
-    -> new decision-request identity
-    -> previous human decision stale for freeze
-    -> new review / decision required
+policy/source change
+ -> new source binding
+ -> new authority_requirement_sha256
+ -> new review_material_sha256
+ -> new decision_request_sha256
+ -> previous decision stale
+ -> new human review required
 ```
 
-## 13. Exact freeze rule
+## 14. Exact Freeze Gate algorithm — design semantics
 
 Only `ACCEPT` may be freeze-eligible.
 
-Freeze gate must independently:
+Freeze Gate must independently:
 
 ```text
-1. verify identities of all canonical authority-requirement sources;
-2. recompute / resolve the effective conjunctive requirement;
-3. verify authority_requirement_sha256 against the review and receipt;
-4. verify all required external evidence profiles/classes/contexts;
-5. verify actor subject bindings;
-6. verify exact decision-request identity;
-7. verify exact review-material identity;
-8. verify exact current draft == exact contract to be frozen;
-9. verify exact formation profile / canonical task / Executor commit bindings.
+1. resolve expected Executor/project canonical source identities from the already-verified formation state;
+2. verify repository + exact commit identities;
+3. verify tracked policy/project-contract files at those commits;
+4. verify content/blob hashes and source roles;
+5. resolve all applicable authority requirements in trust order;
+6. compose them conjunctively without lower-level deletion;
+7. recompute authority_requirement_sha256;
+8. compare it with the review/request/receipt binding;
+9. verify every required external authority evidence profile/class/context;
+10. verify exact actor subject binding;
+11. verify exact decision-request identity;
+12. verify exact review-material identity;
+13. verify exact current draft identity == contract to be frozen.
 ```
 
-It must not accept a precomputed requirement merely because the caller supplied a matching JSON object.
+It may not accept a precomputed requirement or policy source solely because the caller supplied a valid-looking object.
 
-Any mismatch or missing superior source:
+Any missing or mismatched superior source:
 
 ```text
 AUTHORIZED_AND_FROZEN = FORBIDDEN
 ```
 
-## 14. Freeze Gate is not a second IAM
+## 15. Freeze Gate is not IAM and not policy owner
 
 Freeze Gate may know:
 
 ```text
+canonical source identities
 required authority class identifiers
 trusted evidence profile identifiers
-canonical source identities/hashes
 verification rules
 ```
 
@@ -422,65 +400,51 @@ enterprise permissions
 standing delegation
 ```
 
-Those mutable ownership facts remain external.
+It also must not author the authority policy it verifies.
 
-The gate answers:
+## 16. Replay
 
-> Does independently verified evidence satisfy the canonically resolved requirement for this exact transition?
-
-It does not answer:
-
-> Who should be an admin in this organization?
-
-## 15. Replay
-
-No global one-time-use receipt ledger is introduced.
+No global one-time receipt-consumption ledger is introduced.
 
 ```text
-same receipt
-+ different request/contract/review/authority-requirement identity
-= INVALID
-
-same receipt
-+ same immutable identities
-+ same still-valid external authority evidence
-= same authorization fact
+same receipt + different source/requirement/request/contract/review identity = INVALID
+same receipt + same immutable identities + still-valid evidence = same authorization fact
 ```
 
-Same-identity verification is idempotent, not a new delegation.
+Same-identity verification is idempotent, not new authority.
 
-## 16. Required adversarial cases before implementation
+## 17. Required adversarial cases before implementation
 
 At minimum:
 
 1. caller-forged Human Decision Receipt;
 2. fabricated authority evidence reference;
-3. valid login but no required authority;
-4. Human A receipt paired with Human B evidence;
-5. correct actor under wrong organization/account context;
-6. caller injects weaker requirement;
+3. valid login without required authority;
+4. Human A receipt + Human B evidence;
+5. correct actor in wrong authority context;
+6. caller injects weaker authority requirement;
 7. model proposes weaker requirement;
-8. task contract deletes superior requirement;
+8. task deletes superior requirement;
 9. formation profile invents authority requirement;
-10. formation profile chooses caller-controlled evidence profile;
-11. missing requirement falls back to permissive default;
-12. one superior policy source omitted from conjunctive composition;
-13. last-write-wins replaces a stricter/different superior requirement;
-14. canonical requirement changes after human review;
-15. wrong authority-requirement hash in receipt;
-16. correct evidence for wrong authority class/context;
-17. wrong contract/request/review identity;
-18. stale approval after contract mutation;
-19. old approval generalized to another task/action;
-20. `REJECT` substituted as `ACCEPT`;
-21. `MODIFY` executed without new formation/review;
-22. missing/unverifiable external evidence;
-23. decision adapter certifies its own evidence;
-24. formation kernel acts as authority verifier;
-25. freeze gate creates or weakens its own requirement;
-26. receipt self-declared roles influence verifier.
+10. lower layer replaces rather than conjunctively adds;
+11. missing source defaults permissively;
+12. wrong project contract repository;
+13. wrong project contract commit;
+14. copied/dirty/untracked authority-policy file;
+15. correct policy filename from wrong path/repository;
+16. caller-selected alternative evidence profile;
+17. canonical source changes after human review;
+18. wrong authority-requirement hash in receipt;
+19. correct evidence for wrong authority class/context;
+20. wrong request/review/contract identity;
+21. stale approval after draft mutation;
+22. old approval generalized as standing trust;
+23. `REJECT` -> `ACCEPT` substitution;
+24. `MODIFY` executed without new review;
+25. decision adapter certifies own evidence;
+26. Freeze Gate authors or selects its own weaker policy.
 
-Unauthorized result:
+Expected:
 
 ```text
 FAIL CLOSED
@@ -488,80 +452,81 @@ NO FROZEN CONTRACT
 NO EXECUTION AUTHORITY
 ```
 
-## 17. Current adversarial-review findings
+## 18. Current adversarial-review findings
 
 ```text
 R-1 Authorization Receipt was too strong
-    -> Human Decision Receipt
+ -> Human Decision Receipt
 
-R-2 decision adapter role was too broad
-    -> decision capture separated from authority evidence
+R-2 adapter role was too broad
+ -> decision capture separated from authority evidence
 
-R-3 receipt self-described its bounded authority
-    -> boundedness moved to verifier exact-identity semantics
+R-3 receipt self-described bounded authority
+ -> boundedness moved to exact verifier semantics
 
 R-4 authority substitution was implicit
-    -> F-7 explicit
+ -> F-7 explicit
 
-R-5 authority context ownership was ambiguous
-    -> requirement separated from external authority ownership
+R-5 authority context ownership ambiguous
+ -> requirement separated from external authority ownership
 
-R-6 caller-selected weak requirement could still pass honest verification
-    -> F-8 explicit
+R-6 valid weak approval could pass after requirement injection
+ -> F-8 explicit
 
-R-7 authority requirement could drift after review
-    -> requirement hash bound into review / request / receipt / freeze
+R-7 requirement could drift after review
+ -> requirement identity bound into full review/decision chain
 
-R-8 formation profile appeared able to own authority requirement
-    -> rejected because current Executor trust hierarchy places executor_policy and project_contract above task/generated layers
+R-8 formation profile looked like authority owner
+ -> rejected; it is below existing executor_policy/project_contract trust hierarchy
 
-R-9 simple "last requirement wins" composition could erase superior constraints
-    -> effective authority requirement is conjunctive; lower layers may add but not remove
+R-9 override composition could erase superior constraints
+ -> conjunction required
+
+R-10 canonical project/policy source itself could be substituted
+ -> F-9 explicit; source binds repo + commit + path + content identity
+
+R-11 existing project-bundle validation can be reused
+ -> no new AuthorityPolicyStore / second policy root is justified
 ```
 
-F-7 and F-8 must be reflected in PR #51 before #51 is ever merged.
+F-7, F-8 and F-9 must be reconciled into PR #51 before #51 is ever merged.
 
-## 18. Current conclusion of Authority Context Ownership Review
+## 19. Authority Context Ownership Review — current result
 
-The design now has a provisional ownership answer:
+Provisional ownership is now explicit:
 
 ```text
 EXECUTOR_POLICY
-  owns trust hierarchy / system minimums
+  owns system trust hierarchy / system minima
 
 PROJECT_CONTRACT or equivalent superior project governance
-  owns project-specific authority requirements
+  owns project/domain authority requirements
 
-TASK / FORMATION LAYERS
-  consume, reference or add constraints
-  cannot weaken superior requirements
+TASK / FORMATION
+  consume/reference/add constraints
+  cannot weaken or redefine superior policy
 
 EXTERNAL AUTHORITY SYSTEM
   owns mutable truth about who currently possesses authority
 
+HUMAN DECISION RECEIPT
+  records the exact decision event
+
 FREEZE GATE
-  independently resolves requirements and verifies evidence
-  owns neither IAM membership nor requirement policy
+  verifies canonical source identity + effective requirement + external evidence
+  owns neither IAM membership nor authority policy
 ```
 
-This avoids both bad extremes:
+For current GP001, canonical authority-policy material can be read from the same exact verified Executor commit already bound by formation, using the repository/project verification mechanisms already present in Executor.
 
-```text
-caller declares authority context
-```
-
-and:
-
-```text
-Freeze Gate becomes a full IAM database
-```
-
-## 19. Next unresolved design question
+## 20. Next design question
 
 Implementation remains blocked.
 
-The next root-of-trust question is narrower:
+The Authority Context Ownership question is substantially answered.
 
-> **How does the Freeze Gate verify the canonical identity/version of project-level authority policy without trusting mutable candidate/workspace content?**
+The next unresolved issue is now the **external evidence trust adapter**:
 
-The answer must reuse an existing superior canonical/evidence boundary where possible rather than invent another authority system.
+> How does Freeze Gate verify `authority_evidence_ref` from an approved external authority system without letting the decision adapter or caller choose the verifier/issuer at runtime?
+
+This must be solved as another bounded design problem, not by embedding a full IAM system into Executor.
