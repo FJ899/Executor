@@ -1,7 +1,7 @@
 ---
 document: "REQUEST_TO_CONTRACT_001"
-version: "0.1"
-status: "IMPLEMENTATION CANDIDATE / PENDING HUMAN REVIEW"
+version: "0.2"
+status: "FORMATION PHASE 1 CANDIDATE / VERIFIED HUMAN AUTHORITY PENDING"
 date: "2026-08-09"
 scope: "first governed request-to-contract formation slice for existing GP001"
 repository: "litrgratis-pixel/Executor"
@@ -11,7 +11,7 @@ repository: "litrgratis-pixel/Executor"
 
 ## Goal
 
-Prove one narrow product transition:
+Prove the first safe portion of the product transition:
 
 ```text
 USER REQUEST
@@ -26,28 +26,47 @@ DRAFT TASK CONTRACT
 CONTRACT CRITIQUE
       |
       v
-HUMAN DECISION
-      |
-      v
-AUTHORIZED_AND_FROZEN
+AWAITING VERIFIED HUMAN AUTHORIZATION
 ```
 
-The slice reuses the already accepted GP001 task and does not add a new execution capability.
+This phase intentionally stops there.
 
-## What the implementation does
+It does **not** create `AUTHORIZED_AND_FROZEN`, because the repository does not yet contain an independently verified human-authority evidence boundary for contract formation.
+
+## Why phase 1 stops before freeze
+
+The first implementation attempted to accept a process-local object labelled `HUMAN_AUTHORITY` and use it to freeze the draft.
+
+Adversarial review rejected that design.
+
+A caller-controlled string or object is not evidence that a human made a decision. Accepting it would repeat the earlier false-authority class in a new layer.
+
+The required rule is:
+
+```text
+SELF-DECLARED HUMAN AUTHORITY
+        !=
+VERIFIED HUMAN AUTHORITY
+```
+
+Therefore the formation kernel is fail-closed until a superior boundary can provide independently verified evidence bound to the exact current draft.
+
+## What phase 1 implements
 
 `executor/request_to_contract.py`:
 
 - records the verbatim user request;
-- stores user facts separately from model inferences;
+- treats that verbatim request as the only direct `USER` provenance available to this kernel;
+- records structured interpretation as `MODEL` provenance;
+- does not let a caller inject additional fields labelled `USER`;
+- uses the canonical `REQUEST_TO_CONTRACT_001` profile rather than a caller-selected profile;
 - records out-of-scope discoveries separately from executable scope;
 - records unresolved questions;
 - creates a hash-bound draft;
-- critiques the proposed executable task against the accepted GP001 task profile;
-- blocks authorization when the draft diverges or questions remain unresolved;
-- supports human `ACCEPT`, `MODIFY` and `REJECT` transitions;
-- invalidates prior review when `MODIFY` produces a new draft;
-- freezes only an exact, valid GP001-compatible task contract after `ACCEPT` bound to the current draft hash.
+- critiques the proposed executable task against the accepted GP001 contract;
+- blocks a divergent contract or unresolved question;
+- exports a human-authorization request bound to the exact draft, canonical formation profile and canonical GP001 task hashes;
+- never returns an executable or frozen task contract in phase 1.
 
 ## Decision surface
 
@@ -69,28 +88,34 @@ DRAFT SHA-256
 STATUS
 ```
 
-Before authorization:
+All phase-1 surfaces contain:
 
 ```text
 executable: false
 ```
 
-After the governed acceptance transition:
+A clean draft ends at:
 
 ```text
-status: AUTHORIZED_AND_FROZEN
+AWAITING_VERIFIED_HUMAN_AUTHORIZATION
 ```
 
 ## Provenance rule
 
-The implementation keeps distinct records for:
+The only direct user evidence currently accepted by this kernel is the verbatim request:
 
 ```text
 source: USER
+path: $.user_request
+```
+
+Repository, test, scope and other structured interpretation records are model/process proposals:
+
+```text
 source: MODEL
 ```
 
-A model inference may appear in the draft and may be reviewed by the user. It is not rewritten as a user fact.
+This prevents a caller from laundering model inference into apparent user intent by merely labelling it `USER`.
 
 ## Out-of-scope discovery rule
 
@@ -112,44 +137,52 @@ AUTHORITY:
 new contract required
 ```
 
-## MODIFY semantics
+## Human authorization request
 
-`MODIFY` does not edit an already authorized contract.
-
-It creates a new draft snapshot and a new `draft_sha256`, resets critique state, and requires a fresh critique plus a new decision.
-
-Therefore:
+For a clean critiqued draft, phase 1 emits a non-executable request containing:
 
 ```text
-REVIEW OF DRAFT A
-      !=
-AUTHORITY FOR DRAFT B
+draft_sha256
+formation_profile_sha256
+canonical_task_sha256
+allowed_decisions: ACCEPT / MODIFY / REJECT
+required_authority: VERIFIED_EXTERNAL_HUMAN_AUTHORITY
+status: AWAITING_VERIFIED_HUMAN_AUTHORIZATION
 ```
 
-## Explicit trust-boundary limitation
+These bindings are material for a later trusted authority boundary. They are not themselves proof of human authorization.
 
-This slice does **not** authenticate a human identity.
+## Adversarial finding retained
 
-The formation kernel accepts a `HumanDecisionReceipt` from a superior human-authority boundary and validates:
+```text
+F-4 — SELF-DECLARED FORMATION AUTHORITY
 
-- decision kind;
-- authority source classification;
-- evidence reference presence;
-- exact current draft SHA-256 binding.
+initial design:
+caller-created HumanDecisionReceipt("HUMAN_AUTHORITY")
+        -> AUTHORIZED_AND_FROZEN
 
-It does not independently prove that the external evidence reference was genuinely created by a human. That identity/authentication boundary must remain outside this kernel and must not be claimed as solved by this PR.
+verdict:
+REJECTED
+
+phase-1 correction:
+no caller decision API
+no freeze API
+no executable contract
+clean draft stops at AWAITING_VERIFIED_HUMAN_AUTHORIZATION
+```
 
 ## Non-goals
 
-This slice does not implement:
+This phase does not implement:
 
 - a language model;
 - prompt templates;
 - general natural-language understanding;
 - arbitrary task generation;
 - automatic authorization;
-- human identity authentication;
-- execution of the frozen contract;
+- verified human identity / decision evidence;
+- `AUTHORIZED_AND_FROZEN` transition;
+- execution of the draft;
 - GP002;
 - separate proposer/critic agents;
 - multi-agent orchestration.
@@ -158,6 +191,10 @@ This slice does not implement:
 
 This PR answers only:
 
-> Can Executor preserve the distinction between user request, model interpretation, draft authority and authorized frozen contract for the known GP001 task?
+> Can Executor preserve user/model provenance, construct and critique one known GP001 draft, prevent silent scope expansion, and stop safely at the verified-human-authority boundary?
 
-It does not claim that Executor can yet infer the correct GP001 contract from arbitrary natural language without an external interpretation proposal.
+It does not yet answer:
+
+> Can an authenticated human decision freeze that draft for execution?
+
+That becomes the next explicit blocker rather than an implied capability.
