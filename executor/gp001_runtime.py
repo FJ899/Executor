@@ -99,6 +99,19 @@ def _file_sha256(path: Path) -> str:
     return _sha256(path.read_bytes())
 
 
+def _canonical_task_json(task: dict[str, Any]) -> str:
+    try:
+        return json.dumps(
+            task,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (TypeError, ValueError) as exc:
+        raise GP001Blocked(f"GP001 task cannot be canonically frozen: {exc}") from exc
+
+
 def _fixture_identity(task: dict[str, Any]) -> tuple[str, str, str]:
     repositories = task.get("repositories")
     target = repositories.get("target") if isinstance(repositories, dict) else None
@@ -398,6 +411,7 @@ class GP001Runtime:
         self.policy_snapshot = snapshot
         self.task_path = task_path
         self.task = task
+        self._frozen_task_json = _canonical_task_json(task)
         self.task_sha256 = _sha256(task_bytes)
         self.test_sha256 = _sha256(test_bytes)
         self.project_contract_sha256 = _sha256(project_bytes)
@@ -431,6 +445,64 @@ class GP001Runtime:
             docker_binary=docker_binary,
         )
         self._consumed_packet_ids: set[str] = set()
+
+    def _assert_authoritative_runtime_state(self) -> None:
+        frozen_json = getattr(self, "_frozen_task_json", None)
+        if frozen_json is None:
+            # Internal unit harnesses constructed without the public constructor
+            # do not cross the production authority boundary.
+            return
+        if _canonical_task_json(self.task) != frozen_json:
+            raise GP001Blocked(
+                "runtime task state changed outside the frozen GP001 contract"
+            )
+        frozen_task = json.loads(frozen_json)
+        task_id, repository, commit = _fixture_identity(frozen_task)
+        if (
+            self.task["id"] != task_id
+            or self.repository != repository
+            or self.input_commit != commit
+        ):
+            raise GP001Blocked(
+                "Controlled External Fixture authority state diverged from frozen GP001 contract"
+            )
+        expected_allowed = tuple(
+            canonical_repository_path(path)
+            for path in frozen_task["golden_path"]["scope"]["allowed_paths"]
+        )
+        expected_protected = tuple(
+            validate_scope_pattern(path)
+            for path in frozen_task["golden_path"]["scope"]["protected_paths"]
+        )
+        if self.allowed != expected_allowed or self.protected != expected_protected:
+            raise GP001Blocked(
+                "runtime scope changed outside the frozen GP001 contract"
+            )
+        commands = frozen_task["golden_path"]["commands"]
+        expected_target = list(commands["target_test_argv"])
+        expected_regressions = [list(value) for value in commands["regression_argv"]]
+        if (
+            self.target_command != expected_target
+            or self.regression_commands != expected_regressions
+        ):
+            raise GP001Blocked(
+                "runtime execution state changed outside the frozen GP001 contract"
+            )
+        if not isinstance(self.backend, GP001DockerSandboxBackend):
+            raise GP001Blocked(
+                "runtime backend changed outside the frozen GP001 contract"
+            )
+        if (
+            self.backend.policy_snapshot != self.policy_snapshot
+            or self.backend.task_id != task_id
+            or self.backend.repository != repository
+            or self.backend.input_commit != commit
+            or self.backend.allowed != expected_allowed
+            or self.backend.protected != expected_protected
+        ):
+            raise GP001Blocked(
+                "runtime backend authority state changed outside the frozen GP001 contract"
+            )
 
     def _verify_clean_input(self, workspace: str | Path) -> Path:
         try:
@@ -485,6 +557,7 @@ class GP001Runtime:
         mutation: AuthorizedFileMutation,
         now: datetime | None,
     ) -> dict[str, Any]:
+        self._assert_authoritative_runtime_state()
         mutation.validate()
         if mutation.canonical_path() != self.allowed[0]:
             raise GP001Blocked(
@@ -605,6 +678,7 @@ class GP001Runtime:
         purpose: str,
         label: str,
     ) -> SandboxResult:
+        self._assert_authoritative_runtime_state()
         return self.backend.run(
             spec=self.spec,
             context=SandboxExecutionContext(
@@ -623,6 +697,7 @@ class GP001Runtime:
         root: Path,
         mutation: AuthorizedFileMutation,
     ) -> None:
+        self._assert_authoritative_runtime_state()
         path = mutation.canonical_path()
         if path != self.allowed[0] or any(
             fnmatch(path, pattern) for pattern in self.protected
@@ -703,6 +778,7 @@ class GP001Runtime:
             "human_decision_required": True,
         }
         try:
+            self._assert_authoritative_runtime_state()
             root = self._verify_clean_input(workspace)
             report["evidence"]["input_identity"] = "MATCH"
             try:
