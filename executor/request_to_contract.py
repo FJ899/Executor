@@ -9,10 +9,13 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from executor.gp001_contract import validate_gp001_task_contract
+from executor.repository_identity import RepositoryIdentityError, verify_repository_checkout
+from executor.repository_snapshot import RepositorySnapshotError, verify_worktree_file
 
 
 _PROFILE_SCHEMA = "executor-contract-formation-profile/1.0"
-_PROFILE_PATH = Path("formation_profiles/REQUEST_TO_CONTRACT_001.json")
+_PROFILE_PATH = "formation_profiles/REQUEST_TO_CONTRACT_001.json"
+_EXECUTOR_REPOSITORY = "litrgratis-pixel/Executor"
 
 
 class FormationError(RuntimeError):
@@ -83,34 +86,34 @@ def _sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
-def _load_json_bytes(path: Path) -> tuple[dict[str, Any], bytes]:
+def _decode_object(raw: bytes, *, label: str) -> dict[str, Any]:
     try:
-        raw = path.read_bytes()
         payload = json.loads(raw.decode("utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise FormationError(f"cannot load formation input {path}: {exc}") from exc
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise FormationError(f"cannot decode {label}: {exc}") from exc
     if not isinstance(payload, dict):
-        raise FormationError(f"formation input must be an object: {path}")
-    return payload, raw
+        raise FormationError(f"{label} must be an object")
+    return payload
 
 
 class RequestToContract001:
     """Govern one known GP001 request up to a verified human authority boundary.
 
-    Phase 1 deliberately stops before authorization/freeze. The only direct USER
-    provenance is the verbatim request. Structured extraction is MODEL provenance.
-    A later superior boundary must provide verified external human evidence bound
-    to the exact draft before executable authority can exist.
+    Phase 1 deliberately stops before authorization/freeze. Canonical formation
+    inputs are read from a verified exact Executor checkout. The only direct USER
+    provenance is the verbatim request; structured extraction remains MODEL
+    provenance. A later superior boundary must provide verified external human
+    evidence bound to this exact draft before executable authority can exist.
     """
 
     def __init__(
         self,
         *,
         executor_root: Path,
+        executor_commit: str,
         request_id: str,
         user_request: str,
     ) -> None:
-        self.executor_root = executor_root.resolve()
         self.request_id = request_id.strip()
         self.user_request = user_request.strip()
         if not self.request_id:
@@ -118,12 +121,24 @@ class RequestToContract001:
         if not self.user_request:
             raise FormationError("user_request is required")
 
-        profile_file = (self.executor_root / _PROFILE_PATH).resolve()
         try:
-            profile_file.relative_to(self.executor_root)
-        except ValueError as exc:
-            raise FormationError("canonical formation profile escaped executor root") from exc
-        self._profile, profile_raw = _load_json_bytes(profile_file)
+            root = verify_repository_checkout(
+                executor_root,
+                repository=_EXECUTOR_REPOSITORY,
+                commit=executor_commit,
+                require_head=True,
+            )
+            profile_raw = verify_worktree_file(
+                root,
+                commit=executor_commit,
+                path=_PROFILE_PATH,
+            )
+        except (RepositoryIdentityError, RepositorySnapshotError) as exc:
+            raise FormationError(f"unverified Executor formation source: {exc}") from exc
+
+        self.executor_root = root
+        self.executor_commit = executor_commit.lower()
+        self._profile = _decode_object(profile_raw, label="formation profile")
         self._profile_sha256 = _sha256_bytes(profile_raw)
         if self._profile.get("schema_version") != _PROFILE_SCHEMA:
             raise FormationError("invalid request-to-contract formation profile schema")
@@ -133,13 +148,16 @@ class RequestToContract001:
         target_path = str(self._profile.get("target_task_path", "")).strip()
         if not target_path:
             raise FormationError("formation profile target_task_path is required")
-        target_file = (self.executor_root / target_path).resolve()
         try:
-            target_file.relative_to(self.executor_root)
-        except ValueError as exc:
-            raise FormationError("formation profile target task escaped executor root") from exc
+            task_raw = verify_worktree_file(
+                root,
+                commit=executor_commit,
+                path=target_path,
+            )
+        except RepositorySnapshotError as exc:
+            raise FormationError(f"unverified canonical task source: {exc}") from exc
 
-        self._canonical_task, task_raw = _load_json_bytes(target_file)
+        self._canonical_task = _decode_object(task_raw, label="canonical GP001 task")
         self._canonical_task_sha256 = _sha256_bytes(task_raw)
         if self._canonical_task.get("id") != self._profile.get("expected_task_id"):
             raise FormationError("canonical task id does not match formation profile")
@@ -161,7 +179,6 @@ class RequestToContract001:
         self._out_of_scope_discoveries: list[str] = []
         self._open_questions: list[str] = []
         self._draft_sha256: str | None = None
-        self._draft_snapshot: str | None = None
         self._critique: list[CritiqueFinding] = []
 
     @property
@@ -209,6 +226,8 @@ class RequestToContract001:
             raise FormationError("no proposed task contract")
         payload = {
             "schema_version": "executor-contract-formation-draft/1.0",
+            "executor_repository": _EXECUTOR_REPOSITORY,
+            "executor_commit": self.executor_commit,
             "profile_id": self._profile["id"],
             "profile_sha256": self._profile_sha256,
             "canonical_task_sha256": self._canonical_task_sha256,
@@ -220,8 +239,7 @@ class RequestToContract001:
             "out_of_scope_discoveries": self._out_of_scope_discoveries,
             "open_questions": self._open_questions,
         }
-        self._draft_snapshot = _canonical_json(payload)
-        self._draft_sha256 = _sha256_text(self._draft_snapshot)
+        self._draft_sha256 = _sha256_text(_canonical_json(payload))
         self._critique = []
         self.status = FormationStatus.DRAFT_CONTRACT_CREATED
         return self.decision_surface()
@@ -311,6 +329,8 @@ class RequestToContract001:
         return {
             "schema_version": "executor-human-formation-authorization-request/1.0",
             "request_id": self.request_id,
+            "executor_repository": _EXECUTOR_REPOSITORY,
+            "executor_commit": self.executor_commit,
             "formation_profile": self._profile["id"],
             "formation_profile_sha256": self._profile_sha256,
             "canonical_task_sha256": self._canonical_task_sha256,
