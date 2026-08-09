@@ -18,6 +18,7 @@ from executor.gp001_runtime import (
     build_gp001_sandbox_spec,
 )
 from executor.repository_access import canonical_repository_path, validate_scope_pattern
+from executor.sandbox.docker import DockerSandboxBackend, SandboxExecutionError
 from executor.sandbox.spec import SandboxExecutionContext, SandboxResult
 
 
@@ -302,6 +303,22 @@ class GP001SandboxBoundaryTest(unittest.TestCase):
             source_dir=self.fixture.root,
             purpose=purpose,
         )
+
+    def test_backend_constructor_rejects_any_noncanonical_fixture_identity(self):
+        cases = (
+            ("name", "litrgratis-pixel/not-the-controlled-fixture"),
+            ("commit", "1" * 40),
+        )
+        for key, value in cases:
+            with self.subTest(key=key):
+                task = copy.deepcopy(load_contract(CANONICAL_TASK))
+                task["repositories"]["target"][key] = value
+                with patch.object(DockerSandboxBackend, "__init__", return_value=None):
+                    with self.assertRaisesRegex(SandboxExecutionError, "canonical controlled"):
+                        GP001DockerSandboxBackend(
+                            policy_snapshot=SimpleNamespace(),
+                            task=task,
+                        )
 
     def test_clean_prechange_and_exact_one_file_postchange_are_allowed(self):
         with patch.object(GP001DockerSandboxBackend, "_authoritative_policy", return_value=self.policy()):
