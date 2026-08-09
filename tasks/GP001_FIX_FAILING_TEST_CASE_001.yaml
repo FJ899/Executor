@@ -11,7 +11,7 @@
   },
   "test_contract": {
     "path": "test_contracts/GP001_FIX_FAILING_TEST_CASE_001.yaml",
-    "sha256": "da5f6c3ba12a4be0e90431fa7575656c3024e3a1fe4dc0c33785128eace56e57"
+    "sha256": "95b7ce1234240503ab0fb4b6c91031a51ea1c4910a92a67086fc46400da0ea6e"
   },
   "capabilities": {
     "network": false,
