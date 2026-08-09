@@ -48,9 +48,6 @@ from executor.sandbox.spec import CommandRule, SandboxExecutionContext, SandboxR
 _CANONICAL_TASK_PATH = "tasks/GP001_FIX_FAILING_TEST_CASE_001.yaml"
 _PROJECT_CONTRACT_PATH = "project_contracts/executor-self.yaml"
 _POLICY_ISSUER_ID = "executor-policy"
-_CONTROLLED_TASK_ID = "GP001-FIX-FAILING-TEST-CASE-001"
-_CONTROLLED_FIXTURE_REPOSITORY = "litrgratis-pixel/executor-pilot-target"
-_CONTROLLED_FIXTURE_COMMIT = "3934a94a5eebf750079200589d6dc40e024d44a0"
 _RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
@@ -102,14 +99,28 @@ def _file_sha256(path: Path) -> str:
     return _sha256(path.read_bytes())
 
 
-def _is_controlled_gp001_task(task: dict[str, Any]) -> bool:
+def _fixture_identity(task: dict[str, Any]) -> tuple[str, str, str]:
     repositories = task.get("repositories")
     target = repositories.get("target") if isinstance(repositories, dict) else None
-    return (
-        task.get("id") == _CONTROLLED_TASK_ID
-        and isinstance(target, dict)
-        and target.get("name") == _CONTROLLED_FIXTURE_REPOSITORY
-        and target.get("commit") == _CONTROLLED_FIXTURE_COMMIT
+    if not isinstance(target, dict):
+        raise GP001Blocked("GP001 task has no target repository binding")
+    task_id = task.get("id")
+    repository = target.get("name")
+    commit = target.get("commit")
+    if not all(isinstance(value, str) and value for value in (task_id, repository, commit)):
+        raise GP001Blocked("GP001 controlled fixture identity is incomplete")
+    return task_id, repository, commit
+
+
+def _policy_authorizes_task(
+    policy: ExecutionPolicySnapshot,
+    task: dict[str, Any],
+) -> bool:
+    task_id, repository, commit = _fixture_identity(task)
+    return policy.authorizes_controlled_external_fixture(
+        task=task_id,
+        repository=repository,
+        commit=commit,
     )
 
 
@@ -124,10 +135,15 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     try:
         result = subprocess.run(
             [
-                "git", "-C", str(root),
-                "-c", "core.hooksPath=/dev/null",
-                "-c", "core.fsmonitor=false",
-                "-c", "core.attributesFile=/dev/null",
+                "git",
+                "-C",
+                str(root),
+                "-c",
+                "core.hooksPath=/dev/null",
+                "-c",
+                "core.fsmonitor=false",
+                "-c",
+                "core.attributesFile=/dev/null",
                 *args,
             ],
             stdin=subprocess.DEVNULL,
@@ -185,7 +201,10 @@ def _result_payload(result: SandboxResult) -> dict[str, Any]:
 def _write_report(path: Path, report: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    tmp.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     os.replace(tmp, path)
 
 
@@ -200,7 +219,10 @@ def build_gp001_sandbox_spec(task: dict[str, Any], image: str) -> SandboxSpec:
         command_rules=tuple(
             CommandRule(argv[0], tuple(argv[1:])) for argv in all_commands
         ),
-        timeout_seconds=min(int(task["budgets"]["max_wall_time_minutes"]) * 60, 300),
+        timeout_seconds=min(
+            int(task["budgets"]["max_wall_time_minutes"]) * 60,
+            300,
+        ),
         network=False,
         secrets=(),
         home_access=False,
@@ -209,18 +231,30 @@ def build_gp001_sandbox_spec(task: dict[str, Any], image: str) -> SandboxSpec:
 
 
 class GP001DockerSandboxBackend(DockerSandboxBackend):
-    """Exact controlled GP001 fixture; generic external-project execution stays disabled."""
+    """Sandbox for a policy-authorized Controlled External Fixture."""
 
-    def __init__(self, *, policy_snapshot: ExecutionPolicySnapshot, task: dict[str, Any], docker_binary: str = "docker"):
-        super().__init__(policy_snapshot=policy_snapshot, docker_binary=docker_binary)
+    def __init__(
+        self,
+        *,
+        policy_snapshot: ExecutionPolicySnapshot,
+        task: dict[str, Any],
+        docker_binary: str = "docker",
+    ) -> None:
+        super().__init__(
+            policy_snapshot=policy_snapshot,
+            docker_binary=docker_binary,
+        )
         if validate_gp001_task_contract(task).status != ValidationStatus.VALID:
             raise SandboxExecutionError("GP001 sandbox requires a valid task contract")
-        if not _is_controlled_gp001_task(task):
+        if policy_snapshot.external_projects:
             raise SandboxExecutionError(
-                "GP001 sandbox accepts only the canonical controlled executor-pilot-target fixture"
+                "Controlled External Fixture requires generic external_projects=false"
             )
-        self.repository = task["repositories"]["target"]["name"]
-        self.input_commit = task["repositories"]["target"]["commit"]
+        if not _policy_authorizes_task(policy_snapshot, task):
+            raise SandboxExecutionError(
+                "GP001 task/repository/commit is not authorized as a Controlled External Fixture"
+            )
+        self.task_id, self.repository, self.input_commit = _fixture_identity(task)
         self.allowed = tuple(
             canonical_repository_path(p)
             for p in task["golden_path"]["scope"]["allowed_paths"]
@@ -234,7 +268,15 @@ class GP001DockerSandboxBackend(DockerSandboxBackend):
         policy = self._authoritative_policy()
         if policy.external_projects or policy.auto_merge:
             raise SandboxExecutionError(
-                "GP001 controlled-fixture path requires generic external execution and auto-merge disabled"
+                "Controlled External Fixture requires generic external execution and auto-merge disabled"
+            )
+        if not policy.authorizes_controlled_external_fixture(
+            task=self.task_id,
+            repository=self.repository,
+            commit=self.input_commit,
+        ):
+            raise SandboxExecutionError(
+                "Controlled External Fixture authority is absent or no longer matches task/repository/commit"
             )
         if policy.default_network or policy.default_secrets:
             raise SandboxExecutionError("GP001 requires network=false and no secrets")
@@ -252,20 +294,32 @@ class GP001DockerSandboxBackend(DockerSandboxBackend):
         except RepositoryIdentityError as exc:
             raise SandboxExecutionError(f"unverified GP001 checkout: {exc}") from exc
         if Path(context.source_dir).resolve(strict=True) != root:
-            raise SandboxExecutionError("GP001 sandbox source must be the verified checkout root")
+            raise SandboxExecutionError(
+                "GP001 sandbox source must be the verified checkout root"
+            )
 
         changed = _changed_paths(root)
         if context.purpose == "GP001_PRECHANGE":
             if changed:
-                raise SandboxExecutionError(f"pre-change checkout is dirty: {list(changed)}")
+                raise SandboxExecutionError(
+                    f"pre-change checkout is dirty: {list(changed)}"
+                )
             try:
                 verify_source_tree(root, commit=self.input_commit, source_dir=root)
             except RepositorySnapshotError as exc:
-                raise SandboxExecutionError(f"pre-change checkout mismatch: {exc}") from exc
+                raise SandboxExecutionError(
+                    f"pre-change checkout mismatch: {exc}"
+                ) from exc
         else:
             if changed != self.allowed:
-                raise SandboxExecutionError(f"post-change scope mismatch: {list(changed)}")
-            if any(fnmatch(path, pattern) for path in changed for pattern in self.protected):
+                raise SandboxExecutionError(
+                    f"post-change scope mismatch: {list(changed)}"
+                )
+            if any(
+                fnmatch(path, pattern)
+                for path in changed
+                for pattern in self.protected
+            ):
                 raise SandboxExecutionError("protected material changed")
         return root
 
@@ -275,8 +329,10 @@ class GP001DockerSandboxBackend(DockerSandboxBackend):
         command[command.index("--workdir") + 1] = spec.source_mount
         image_index = command.index(spec.image)
         command[image_index:image_index] = [
-            "--env", "PYTHONDONTWRITEBYTECODE=1",
-            "--env", f"PYTHONPYCACHEPREFIX={spec.workspace_mount}/pycache",
+            "--env",
+            "PYTHONDONTWRITEBYTECODE=1",
+            "--env",
+            f"PYTHONPYCACHEPREFIX={spec.workspace_mount}/pycache",
         ]
         return command
 
@@ -294,26 +350,50 @@ class GP001Runtime:
         docker_binary: str = "docker",
     ) -> None:
         try:
-            snapshot = load_execution_policy_snapshot(executor_root, commit=executor_commit)
+            snapshot = load_execution_policy_snapshot(
+                executor_root,
+                commit=executor_commit,
+            )
             root = snapshot.repository_root
-            task_bytes = verify_worktree_file(root, commit=executor_commit, path=_CANONICAL_TASK_PATH)
+            task_bytes = verify_worktree_file(
+                root,
+                commit=executor_commit,
+                path=_CANONICAL_TASK_PATH,
+            )
             task_path = root / _CANONICAL_TASK_PATH
             task = load_contract(task_path)
             validation = validate_gp001_task_contract(task)
             if validation.status != ValidationStatus.VALID:
-                raise GP001Blocked(f"invalid canonical GP001 task: {validation.to_dict()}")
-            if not _is_controlled_gp001_task(task):
-                raise GP001Blocked("canonical GP001 task no longer binds the controlled fixture identity")
+                raise GP001Blocked(
+                    f"invalid canonical GP001 task: {validation.to_dict()}"
+                )
+            if not _policy_authorizes_task(snapshot, task):
+                raise GP001Blocked(
+                    "canonical GP001 task is not bound by Controlled External Fixture authority"
+                )
             test_relative = canonical_repository_path(task["test_contract"]["path"])
-            test_bytes = verify_worktree_file(root, commit=executor_commit, path=test_relative)
-            project_bytes = verify_worktree_file(root, commit=executor_commit, path=_PROJECT_CONTRACT_PATH)
+            test_bytes = verify_worktree_file(
+                root,
+                commit=executor_commit,
+                path=test_relative,
+            )
+            project_bytes = verify_worktree_file(
+                root,
+                commit=executor_commit,
+                path=_PROJECT_CONTRACT_PATH,
+            )
         except (
             ExecutionPolicyError,
             RepositorySnapshotError,
             RepositoryPathError,
+            GP001Blocked,
             OSError,
         ) as exc:
-            raise GP001Blocked(f"cannot load authoritative GP001 runtime inputs: {exc}") from exc
+            if isinstance(exc, GP001Blocked):
+                raise
+            raise GP001Blocked(
+                f"cannot load authoritative GP001 runtime inputs: {exc}"
+            ) from exc
 
         self.policy_snapshot = snapshot
         self.task_path = task_path
@@ -331,14 +411,18 @@ class GP001Runtime:
             for p in task["golden_path"]["scope"]["allowed_paths"]
         )
         if len(self.allowed) != 1:
-            raise GP001Blocked("first GP001 runtime requires exactly one writable path")
+            raise GP001Blocked(
+                "first GP001 runtime requires exactly one writable path"
+            )
         self.protected = tuple(
             validate_scope_pattern(p)
             for p in task["golden_path"]["scope"]["protected_paths"]
         )
         commands = task["golden_path"]["commands"]
         self.target_command = list(commands["target_test_argv"])
-        self.regression_commands = [list(v) for v in commands["regression_argv"]]
+        self.regression_commands = [
+            list(value) for value in commands["regression_argv"]
+        ]
         self.runs_root = Path(runs_root).expanduser().resolve(strict=False)
         self.spec = build_gp001_sandbox_spec(task, image)
         self.backend = GP001DockerSandboxBackend(
@@ -360,10 +444,16 @@ class GP001Runtime:
                 raise GP001Blocked("GP001 workspace must start clean")
             verify_source_tree(root, commit=self.input_commit, source_dir=root)
             return root
-        except (RepositoryIdentityError, RepositorySnapshotError, GP001RuntimeError) as exc:
+        except (
+            RepositoryIdentityError,
+            RepositorySnapshotError,
+            GP001RuntimeError,
+        ) as exc:
             if isinstance(exc, GP001Blocked):
                 raise
-            raise GP001Blocked(f"input identity verification failed: {exc}") from exc
+            raise GP001Blocked(
+                f"input identity verification failed: {exc}"
+            ) from exc
 
     def _authorization_context(self, run_id: str) -> AuthorizationContext:
         evidence_ref = f"policy-snapshot:{self.policy_snapshot.source_sha256}"
@@ -397,13 +487,25 @@ class GP001Runtime:
     ) -> dict[str, Any]:
         mutation.validate()
         if mutation.canonical_path() != self.allowed[0]:
-            raise GP001Blocked("mutation path is outside the frozen GP001 contract")
+            raise GP001Blocked(
+                "mutation path is outside the frozen GP001 contract"
+            )
         if self.policy_snapshot.external_projects or self.policy_snapshot.auto_merge:
             raise GP001Blocked(
-                "GP001 controlled-fixture path requires generic external execution and auto-merge disabled"
+                "Controlled External Fixture requires generic external execution and auto-merge disabled"
+            )
+        if not self.policy_snapshot.authorizes_controlled_external_fixture(
+            task=self.task["id"],
+            repository=self.repository,
+            commit=self.input_commit,
+        ):
+            raise GP001Blocked(
+                "Controlled External Fixture authority does not match task/repository/commit"
             )
         if self.policy_snapshot.default_network or self.policy_snapshot.default_secrets:
-            raise GP001Blocked("GP001 canonical policy must keep network and secrets disabled")
+            raise GP001Blocked(
+                "GP001 canonical policy must keep network and secrets disabled"
+            )
 
         current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
         context = self._authorization_context(run_id)
@@ -446,6 +548,7 @@ class GP001Runtime:
             "decision": {
                 "status": "AUTHORIZED",
                 "reasons": [
+                    "EXECUTOR_POLICY binds this exact task/repository/commit as a Controlled External Fixture",
                     "Mutation stays inside the canonical user-approved GP001 task contract",
                     "Mutation is bound to exact before/after file hashes",
                 ],
@@ -455,7 +558,10 @@ class GP001Runtime:
                 "max_duration_seconds": 600,
                 "manual_confirmation_required": False,
             },
-            "integrity": {"algorithm": "SHA-256", "payload_sha256": ""},
+            "integrity": {
+                "algorithm": "SHA-256",
+                "payload_sha256": "",
+            },
         }
         packet["integrity"]["payload_sha256"] = packet_payload_sha256(packet)
         result, decision = validate_action_authorization_packet(
@@ -465,9 +571,16 @@ class GP001Runtime:
             consumed_packet_ids=self._consumed_packet_ids,
         )
         if result.status != ValidationStatus.VALID or decision is None:
-            raise GP001Blocked(f"policy authorization rejected: {result.to_dict()}")
-        if decision.action_kind != "WRITE_REPOSITORY" or decision.issuer_role != "POLICY_VERIFIER":
-            raise GP001Blocked("GP001 requires POLICY_VERIFIER WRITE_REPOSITORY authorization")
+            raise GP001Blocked(
+                f"policy authorization rejected: {result.to_dict()}"
+            )
+        if (
+            decision.action_kind != "WRITE_REPOSITORY"
+            or decision.issuer_role != "POLICY_VERIFIER"
+        ):
+            raise GP001Blocked(
+                "GP001 requires POLICY_VERIFIER WRITE_REPOSITORY authorization"
+            )
         self._consumed_packet_ids.add(decision.packet_id)
         return {
             "packet_id": decision.packet_id,
@@ -475,10 +588,23 @@ class GP001Runtime:
             "issuer_role": decision.issuer_role,
             "issuer_id": decision.issuer_id,
             "issuer_evidence_ref": decision.issuer_evidence_ref,
+            "authority_class": "CONTROLLED_EXTERNAL_FIXTURE",
+            "fixture_binding": {
+                "task": self.task["id"],
+                "repository": self.repository,
+                "commit": self.input_commit,
+            },
             "action_argv": mutation.authorization_argv(),
         }
 
-    def _run(self, root: Path, run_dir: Path, argv: list[str], purpose: str, label: str) -> SandboxResult:
+    def _run(
+        self,
+        root: Path,
+        run_dir: Path,
+        argv: list[str],
+        purpose: str,
+        label: str,
+    ) -> SandboxResult:
         return self.backend.run(
             spec=self.spec,
             context=SandboxExecutionContext(
@@ -492,17 +618,35 @@ class GP001Runtime:
             argv=argv,
         )
 
-    def _mutate(self, root: Path, mutation: AuthorizedFileMutation) -> None:
+    def _mutate(
+        self,
+        root: Path,
+        mutation: AuthorizedFileMutation,
+    ) -> None:
         path = mutation.canonical_path()
-        if path != self.allowed[0] or any(fnmatch(path, p) for p in self.protected):
-            raise GP001Blocked("mutation path is not writable under GP001 contract")
+        if path != self.allowed[0] or any(
+            fnmatch(path, pattern) for pattern in self.protected
+        ):
+            raise GP001Blocked(
+                "mutation path is not writable under GP001 contract"
+            )
         target = root / path
         meta = target.lstat()
-        if target.is_symlink() or not stat.S_ISREG(meta.st_mode) or meta.st_nlink != 1:
-            raise GP001Blocked("mutation target must be one regular non-linked file")
+        if (
+            target.is_symlink()
+            or not stat.S_ISREG(meta.st_mode)
+            or meta.st_nlink != 1
+        ):
+            raise GP001Blocked(
+                "mutation target must be one regular non-linked file"
+            )
         if _file_sha256(target) != mutation.expected_before_sha256:
-            raise GP001Blocked("authorized before-hash does not match workspace")
-        tmp = target.with_name(f".{target.name}.gp001-{uuid.uuid4().hex}")
+            raise GP001Blocked(
+                "authorized before-hash does not match workspace"
+            )
+        tmp = target.with_name(
+            f".{target.name}.gp001-{uuid.uuid4().hex}"
+        )
         try:
             tmp.write_bytes(mutation.replacement_text.encode("utf-8"))
             os.chmod(tmp, stat.S_IMODE(meta.st_mode))
@@ -510,9 +654,13 @@ class GP001Runtime:
         finally:
             tmp.unlink(missing_ok=True)
         if _file_sha256(target) != mutation.expected_after_sha256:
-            raise GP001RuntimeError("authorized after-hash does not match mutation result")
+            raise GP001RuntimeError(
+                "authorized after-hash does not match mutation result"
+            )
         if _changed_paths(root) != (path,):
-            raise GP001RuntimeError("mutation changed more than the authorized file")
+            raise GP001RuntimeError(
+                "mutation changed more than the authorized file"
+            )
 
     def execute(
         self,
@@ -536,12 +684,13 @@ class GP001Runtime:
             "status": "FAILED",
             "error": None,
             "authorization": None,
-            "authorization_model": "CANONICAL_USER_APPROVED_TASK_PLUS_POLICY_VERIFIER_ACTION_GATE",
+            "authorization_model": "CONTROLLED_EXTERNAL_FIXTURE_POLICY_BINDING_PLUS_POLICY_VERIFIER_ACTION_GATE",
             "authorization_consumption": "RUN_LOCAL_REPLAY_GUARD_ONLY",
             "changed_paths": [],
             "diff_path": None,
             "commands": [],
             "evidence": {
+                "fixture_authority": "BOUND",
                 "input_identity": "UNKNOWN",
                 "pre_change_target_test": "UNKNOWN",
                 "post_change_target_test": "UNKNOWN",
@@ -561,19 +710,33 @@ class GP001Runtime:
             except ValueError:
                 pass
             else:
-                raise GP001Blocked("runs_root must be outside the GP001 workspace")
+                raise GP001Blocked(
+                    "runs_root must be outside the GP001 workspace"
+                )
             self.runs_root.mkdir(parents=True, exist_ok=True)
             try:
                 run_dir.mkdir(mode=0o700)
             except FileExistsError as exc:
-                raise GP001Blocked(f"run directory already exists: {actual_run_id}") from exc
+                raise GP001Blocked(
+                    f"run directory already exists: {actual_run_id}"
+                ) from exc
 
-            pre = self._run(root, run_dir, self.target_command, "GP001_PRECHANGE", "pre-target")
+            pre = self._run(
+                root,
+                run_dir,
+                self.target_command,
+                "GP001_PRECHANGE",
+                "pre-target",
+            )
             report["commands"].append(_result_payload(pre))
             if pre.timed_out or not pre.cleanup_verified:
-                raise GP001RuntimeError("pre-change target execution is not trustworthy")
+                raise GP001RuntimeError(
+                    "pre-change target execution is not trustworthy"
+                )
             if pre.exit_code == 0:
-                raise GP001Blocked("target test does not fail on pinned input")
+                raise GP001Blocked(
+                    "target test does not fail on pinned input"
+                )
             report["evidence"]["pre_change_target_test"] = "FAIL"
 
             report["authorization"] = self._authorize(
@@ -583,38 +746,76 @@ class GP001Runtime:
             )
             self._mutate(root, mutation)
 
-            post = self._run(root, run_dir, self.target_command, "GP001_POSTCHANGE", "post-target")
+            post = self._run(
+                root,
+                run_dir,
+                self.target_command,
+                "GP001_POSTCHANGE",
+                "post-target",
+            )
             report["commands"].append(_result_payload(post))
             if not post.ok:
-                raise GP001RuntimeError("target test did not pass after mutation")
+                raise GP001RuntimeError(
+                    "target test did not pass after mutation"
+                )
             report["evidence"]["post_change_target_test"] = "PASS"
 
             for index, argv in enumerate(self.regression_commands, 1):
-                result = self._run(root, run_dir, argv, "GP001_POSTCHANGE", f"regression-{index}")
+                result = self._run(
+                    root,
+                    run_dir,
+                    argv,
+                    "GP001_POSTCHANGE",
+                    f"regression-{index}",
+                )
                 report["commands"].append(_result_payload(result))
                 if not result.ok:
-                    raise GP001RuntimeError(f"regression command {index} failed")
+                    raise GP001RuntimeError(
+                        f"regression command {index} failed"
+                    )
             report["evidence"]["regression_checks"] = "PASS"
 
             changed = _changed_paths(root)
             if changed != self.allowed:
-                raise GP001RuntimeError(f"final diff scope mismatch: {list(changed)}")
+                raise GP001RuntimeError(
+                    f"final diff scope mismatch: {list(changed)}"
+                )
             report["changed_paths"] = list(changed)
             report["evidence"]["diff_scope"] = "ALLOWED"
-            if any(fnmatch(path, p) for path in changed for p in self.protected):
-                raise GP001RuntimeError("protected material appears in diff")
+            if any(
+                fnmatch(path, pattern)
+                for path in changed
+                for pattern in self.protected
+            ):
+                raise GP001RuntimeError(
+                    "protected material appears in diff"
+                )
             report["evidence"]["protected_material"] = "UNCHANGED"
 
-            patch = _git(root, "diff", "--no-ext-diff", "--no-textconv", "--binary", self.input_commit).stdout
+            patch = _git(
+                root,
+                "diff",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--binary",
+                self.input_commit,
+            ).stdout
             patch_lines = len(patch.splitlines())
             if patch_lines > int(self.task["budgets"]["max_patch_lines"]):
-                raise GP001Blocked("final patch exceeds max_patch_lines")
+                raise GP001Blocked(
+                    "final patch exceeds max_patch_lines"
+                )
             diff_path = run_dir / "change.patch"
             diff_path.write_text(patch, encoding="utf-8")
             report["diff_path"] = str(diff_path)
 
-            if time.monotonic() - started > int(self.task["budgets"]["max_wall_time_minutes"]) * 60:
-                raise GP001RuntimeError("GP001 wall-time budget exceeded")
+            if (
+                time.monotonic() - started
+                > int(self.task["budgets"]["max_wall_time_minutes"]) * 60
+            ):
+                raise GP001RuntimeError(
+                    "GP001 wall-time budget exceeded"
+                )
             report["evidence"]["execution_limits"] = "RESPECTED"
             report["status"] = "ACTION_COMPLETED_REVIEW_REQUIRED"
         except GP001Blocked as exc:
