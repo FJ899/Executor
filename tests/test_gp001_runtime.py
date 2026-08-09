@@ -1,6 +1,6 @@
 import copy
 import hashlib
-import json
+import inspect
 import subprocess
 import tempfile
 import unittest
@@ -9,20 +9,20 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from executor.action_authorization import AuthorizationContext, packet_payload_sha256
 from executor.contracts import load_contract
 from executor.gp001_runtime import (
     AuthorizedFileMutation,
+    GP001Blocked,
     GP001DockerSandboxBackend,
     GP001Runtime,
     build_gp001_sandbox_spec,
 )
+from executor.repository_access import canonical_repository_path, validate_scope_pattern
 from executor.sandbox.spec import SandboxExecutionContext, SandboxResult
 
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_TASK = ROOT / "tasks/GP001_FIX_FAILING_TEST_CASE_001.yaml"
-CANONICAL_TEST = ROOT / "test_contracts/GP001_FIX_FAILING_TEST_CASE_001.yaml"
 NOW = datetime(2026, 8, 9, 6, 30, tzinfo=timezone.utc)
 
 
@@ -38,7 +38,7 @@ class SequenceBackend:
         return SandboxResult(
             container_name="fake",
             execution_id=f"{len(self.calls):032x}",
-            policy_sha256="a" * 64,
+            policy_sha256="b" * 64,
             argv=tuple(argv),
             exit_code=exit_code,
             stdout="ok\n" if exit_code == 0 else "",
@@ -89,24 +89,9 @@ class FixtureRepository:
 class GP001RuntimeTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        base = Path(self.temp.name)
-        self.fixture = FixtureRepository(base / "workspace")
-        self.contract_root = base / "contract"
-        (self.contract_root / "tasks").mkdir(parents=True)
-        (self.contract_root / "test_contracts").mkdir()
-        test_bytes = CANONICAL_TEST.read_bytes()
-        test_path = self.contract_root / "test_contracts/gp001-test.json"
-        test_path.write_bytes(test_bytes)
-
-        task = copy.deepcopy(load_contract(CANONICAL_TASK))
-        task["repositories"]["target"]["commit"] = self.fixture.commit
-        task["test_contract"] = {
-            "path": "test_contracts/gp001-test.json",
-            "sha256": hashlib.sha256(test_bytes).hexdigest(),
-        }
-        self.task_path = self.contract_root / "tasks/gp001-task.json"
-        self.task_path.write_text(json.dumps(task, indent=2) + "\n", encoding="utf-8")
-        self.task = task
+        self.fixture = FixtureRepository(Path(self.temp.name) / "workspace")
+        self.task = copy.deepcopy(load_contract(CANONICAL_TASK))
+        self.task["repositories"]["target"]["commit"] = self.fixture.commit
         self.before = (self.fixture.root / "project_registry/registry.py").read_bytes()
         self.after_text = "VALUE = 2\n"
         self.mutation = AuthorizedFileMutation(
@@ -120,88 +105,67 @@ class GP001RuntimeTest(unittest.TestCase):
         self.temp.cleanup()
 
     def runtime(self, backend):
-        spec = build_gp001_sandbox_spec(self.task, "sha256:" + "1" * 64)
-        return GP001Runtime(
-            task_path=self.task_path,
-            runs_root=Path(self.temp.name) / "runs",
-            sandbox_backend=backend,
-            sandbox_spec=spec,
-        )
-
-    def auth(self, runtime, packet_id="packet-1"):
-        context = AuthorizationContext(
-            run_id="gp001-test-run",
-            task_id=self.task["id"],
-            risk_class=self.task["risk_class"],
-            mode=self.task["mode"],
-            executor_commit="a" * 40,
-            policy_sha256="b" * 64,
-            project_contract_sha256="c" * 64,
-            task_contract_sha256=runtime.task_sha256,
-            test_contract_sha256=runtime.test_sha256,
-            repository_commits={runtime.repository: runtime.input_commit},
-            allowed_paths=runtime.allowed,
+        runtime = object.__new__(GP001Runtime)
+        runtime.policy_snapshot = SimpleNamespace(
+            commit="a" * 40,
+            source_sha256="b" * 64,
             external_projects=False,
             auto_merge=False,
             default_network=False,
             default_secrets=(),
-            verified_issuer_evidence={"user-proof": ("USER", "test-user")},
         )
-        packet = {
-            "schema_version": "executor-action-authorization/1.0",
-            "packet_id": packet_id,
-            "run_id": context.run_id,
-            "issued_at": "2026-08-09T06:00:00Z",
-            "expires_at": "2026-08-09T07:00:00Z",
-            "issuer": {"role": "USER", "id": "test-user", "evidence_ref": "user-proof"},
-            "bindings": {
-                "task_id": context.task_id,
-                "risk_class": context.risk_class,
-                "mode": context.mode,
-                "executor_commit": context.executor_commit,
-                "policy_sha256": context.policy_sha256,
-                "project_contract_sha256": context.project_contract_sha256,
-                "task_contract_sha256": context.task_contract_sha256,
-                "test_contract_sha256": context.test_contract_sha256,
-                "repository_commits": context.repository_commits,
-            },
-            "action": {
-                "kind": "WRITE_REPOSITORY",
-                "argv": self.mutation.authorization_argv(),
-                "paths": [self.mutation.canonical_path()],
-                "network": False,
-                "secrets": [],
-                "external_project": False,
-            },
-            "decision": {"status": "AUTHORIZED", "reasons": ["GP001 fixture mutation"]},
-            "constraints": {
-                "max_uses": 1,
-                "max_duration_seconds": 3600,
-                "manual_confirmation_required": False,
-            },
-            "integrity": {"algorithm": "SHA-256", "payload_sha256": ""},
-        }
-        packet["integrity"]["payload_sha256"] = packet_payload_sha256(packet)
-        return context, packet
+        runtime.task_path = CANONICAL_TASK
+        runtime.task = self.task
+        runtime.task_sha256 = hashlib.sha256(CANONICAL_TASK.read_bytes()).hexdigest()
+        runtime.test_sha256 = self.task["test_contract"]["sha256"]
+        runtime.project_contract_sha256 = "c" * 64
+        runtime.repository = self.task["repositories"]["target"]["name"]
+        runtime.input_commit = self.fixture.commit
+        runtime.allowed = tuple(
+            canonical_repository_path(p)
+            for p in self.task["golden_path"]["scope"]["allowed_paths"]
+        )
+        runtime.protected = tuple(
+            validate_scope_pattern(p)
+            for p in self.task["golden_path"]["scope"]["protected_paths"]
+        )
+        commands = self.task["golden_path"]["commands"]
+        runtime.target_command = list(commands["target_test_argv"])
+        runtime.regression_commands = [list(v) for v in commands["regression_argv"]]
+        runtime.runs_root = Path(self.temp.name) / "runs"
+        runtime.backend = backend
+        runtime.spec = build_gp001_sandbox_spec(self.task, "sha256:" + "1" * 64)
+        runtime._consumed_packet_ids = set()
+        return runtime
 
-    def test_happy_path_executes_one_authorized_mutation_and_reports_review_required(self):
-        backend = SequenceBackend([1, 0, 0, 0])
-        runtime = self.runtime(backend)
-        context, packet = self.auth(runtime)
-
-        report = runtime.execute(
+    def execute(self, runtime, mutation=None, run_id="gp001-test-run"):
+        return runtime.execute(
             workspace=self.fixture.root,
-            authorization_packet=packet,
-            authorization_context=context,
-            mutation=self.mutation,
+            mutation=mutation or self.mutation,
+            run_id=run_id,
             now=NOW,
         )
+
+    def test_happy_path_executes_one_policy_authorized_mutation_and_reports_review_required(self):
+        backend = SequenceBackend([1, 0, 0, 0])
+        runtime = self.runtime(backend)
+
+        report = self.execute(runtime)
 
         self.assertEqual(report["status"], "ACTION_COMPLETED_REVIEW_REQUIRED")
         self.assertNotEqual(report["status"], "PASS")
         self.assertTrue(report["human_decision_required"])
         self.assertEqual(report["changed_paths"], ["project_registry/registry.py"])
         self.assertEqual(len(report["commands"]), 4)
+        self.assertEqual(report["authorization"]["issuer_role"], "POLICY_VERIFIER")
+        self.assertEqual(
+            report["authorization_model"],
+            "CANONICAL_USER_APPROVED_TASK_PLUS_POLICY_VERIFIER_ACTION_GATE",
+        )
+        self.assertEqual(
+            report["authorization"]["action_argv"],
+            self.mutation.authorization_argv(),
+        )
         self.assertEqual(
             (self.fixture.root / "project_registry/registry.py").read_text(),
             self.after_text,
@@ -211,50 +175,41 @@ class GP001RuntimeTest(unittest.TestCase):
         self.assertEqual(report["authorization_consumption"], "RUN_LOCAL_REPLAY_GUARD_ONLY")
 
     def test_green_precondition_blocks_before_authorization_or_mutation(self):
-        backend = SequenceBackend([0])
-        runtime = self.runtime(backend)
-        context, packet = self.auth(runtime)
+        runtime = self.runtime(SequenceBackend([0]))
 
-        report = runtime.execute(
-            workspace=self.fixture.root,
-            authorization_packet=packet,
-            authorization_context=context,
-            mutation=self.mutation,
-            now=NOW,
-        )
+        report = self.execute(runtime)
 
         self.assertEqual(report["status"], "BLOCKED")
         self.assertIn("does not fail", report["error"])
+        self.assertIsNone(report["authorization"])
         self.assertEqual(
             (self.fixture.root / "project_registry/registry.py").read_bytes(),
             self.before,
         )
 
-    def test_aap_cannot_authorize_a_protected_or_out_of_scope_path(self):
-        backend = SequenceBackend([1])
-        runtime = self.runtime(backend)
-        context, packet = self.auth(runtime)
-        packet["action"]["paths"] = ["tests/test_registry.py"]
-        packet["integrity"]["payload_sha256"] = packet_payload_sha256(packet)
-
-        report = runtime.execute(
-            workspace=self.fixture.root,
-            authorization_packet=packet,
-            authorization_context=context,
-            mutation=self.mutation,
-            now=NOW,
+    def test_protected_or_out_of_scope_mutation_is_blocked(self):
+        runtime = self.runtime(SequenceBackend([1]))
+        before = (self.fixture.root / "tests/test_registry.py").read_bytes()
+        after = b"# changed acceptance\n"
+        mutation = AuthorizedFileMutation(
+            path="tests/test_registry.py",
+            expected_before_sha256=hashlib.sha256(before).hexdigest(),
+            replacement_text=after.decode(),
+            expected_after_sha256=hashlib.sha256(after).hexdigest(),
         )
 
+        report = self.execute(runtime, mutation=mutation)
+
         self.assertEqual(report["status"], "BLOCKED")
+        self.assertIn("outside the frozen GP001 contract", report["error"])
+        self.assertEqual((self.fixture.root / "tests/test_registry.py").read_bytes(), before)
         self.assertEqual(
             (self.fixture.root / "project_registry/registry.py").read_bytes(),
             self.before,
         )
 
     def test_authorization_binds_mutation_payload_hash(self):
-        backend = SequenceBackend([1])
-        runtime = self.runtime(backend)
-        context, packet = self.auth(runtime)
+        runtime = self.runtime(SequenceBackend([1]))
         mutation = AuthorizedFileMutation(
             path=self.mutation.path,
             expected_before_sha256=self.mutation.expected_before_sha256,
@@ -262,13 +217,7 @@ class GP001RuntimeTest(unittest.TestCase):
             expected_after_sha256=self.mutation.expected_after_sha256,
         )
 
-        report = runtime.execute(
-            workspace=self.fixture.root,
-            authorization_packet=packet,
-            authorization_context=context,
-            mutation=mutation,
-            now=NOW,
-        )
+        report = self.execute(runtime, mutation=mutation)
 
         self.assertEqual(report["status"], "BLOCKED")
         self.assertIn("after hash", report["error"])
@@ -278,29 +227,39 @@ class GP001RuntimeTest(unittest.TestCase):
         )
 
     def test_regression_failure_never_claims_success(self):
-        backend = SequenceBackend([1, 0, 1])
-        runtime = self.runtime(backend)
-        context, packet = self.auth(runtime)
+        runtime = self.runtime(SequenceBackend([1, 0, 1]))
 
-        report = runtime.execute(
-            workspace=self.fixture.root,
-            authorization_packet=packet,
-            authorization_context=context,
-            mutation=self.mutation,
-            now=NOW,
-        )
+        report = self.execute(runtime)
 
         self.assertEqual(report["status"], "FAILED")
         self.assertNotEqual(report["status"], "ACTION_COMPLETED_REVIEW_REQUIRED")
         self.assertIn("regression command 1", report["error"])
 
-    def test_same_packet_is_rejected_by_run_local_replay_guard(self):
-        runtime = self.runtime(SequenceBackend([1]))
-        context, packet = self.auth(runtime)
-        first = runtime._authorize(packet, context, self.mutation, NOW)
-        self.assertEqual(first["packet_id"], "packet-1")
-        with self.assertRaisesRegex(Exception, "AUTHORIZATION_REPLAY"):
-            runtime._authorize(packet, context, self.mutation, NOW)
+    def test_same_policy_packet_identity_is_rejected_by_run_local_replay_guard(self):
+        runtime = self.runtime(SequenceBackend([]))
+        first = runtime._authorize(run_id="same-run", mutation=self.mutation, now=NOW)
+        self.assertEqual(first["issuer_role"], "POLICY_VERIFIER")
+        with self.assertRaisesRegex(GP001Blocked, "AUTHORIZATION_REPLAY"):
+            runtime._authorize(run_id="same-run", mutation=self.mutation, now=NOW)
+
+    def test_public_runtime_interface_does_not_accept_caller_supplied_aap_context_or_backend(self):
+        execute_parameters = inspect.signature(GP001Runtime.execute).parameters
+        init_parameters = inspect.signature(GP001Runtime.__init__).parameters
+        self.assertNotIn("authorization_packet", execute_parameters)
+        self.assertNotIn("authorization_context", execute_parameters)
+        self.assertNotIn("sandbox_backend", init_parameters)
+        self.assertNotIn("task_path", init_parameters)
+
+    def test_public_constructor_rejects_non_authoritative_executor_root(self):
+        empty = Path(self.temp.name) / "not-executor"
+        empty.mkdir()
+        with self.assertRaisesRegex(GP001Blocked, "authoritative GP001 runtime inputs"):
+            GP001Runtime(
+                executor_root=empty,
+                executor_commit="a" * 40,
+                runs_root=Path(self.temp.name) / "runs-public",
+                image="sha256:" + "1" * 64,
+            )
 
 
 class GP001SandboxBoundaryTest(unittest.TestCase):
@@ -313,7 +272,13 @@ class GP001SandboxBoundaryTest(unittest.TestCase):
         backend.repository = task["repositories"]["target"]["name"]
         backend.input_commit = self.fixture.commit
         backend.allowed = ("project_registry/registry.py",)
-        backend.protected = ("tests/**", "cases/**", "PILOT_CONTRACT.md", ".github/**", "pyproject.toml")
+        backend.protected = (
+            "tests/**",
+            "cases/**",
+            "PILOT_CONTRACT.md",
+            ".github/**",
+            "pyproject.toml",
+        )
         backend.docker_binary = "docker"
         backend.policy_snapshot = SimpleNamespace(source_sha256="a" * 64)
         self.backend = backend
