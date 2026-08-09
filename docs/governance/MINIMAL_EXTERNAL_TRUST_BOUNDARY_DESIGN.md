@@ -1,7 +1,7 @@
 ---
 document: "Minimal External Trust Boundary Design"
-version: "0.1"
-status: "DRAFT / TECHNOLOGY-AGNOSTIC DESIGN / IMPLEMENTATION BLOCKED"
+version: "0.2"
+status: "DRAFT / ADVERSARIAL TECHNOLOGY-AGNOSTIC DESIGN / IMPLEMENTATION BLOCKED"
 date: "2026-08-09"
 scope: "minimum external trust facts required to establish REQUEST_INTENT human authority for REQUEST_TO_CONTRACT_001"
 repository: "litrgratis-pixel/Executor"
@@ -11,7 +11,7 @@ depends_on:
   - "docs/governance/MINIMAL_VERIFIED_HUMAN_AUTHORITY_CONTRACT.md"
 ---
 
-# Minimal External Trust Boundary Design v0.1
+# Minimal External Trust Boundary Design v0.2
 
 ## 1. Purpose
 
@@ -107,13 +107,15 @@ An Executor-local component may retrieve, normalize, cache or verify externally 
 
 It may not become the sole source of the identity/event fact that it later verifies.
 
+The Executor/service identity used for verification must also not possess a capability that can silently manufacture a human-origin or human-ACCEPT event that the same verifier would later treat as direct human action.
+
 ## 4. First-slice minimal facts
 
-The first slice requires only three facts plus exact identity binding.
+The first slice requires three externally rooted facts plus exact identity/context binding.
 
 ### FACT A — Request Origin Event
 
-The trust mechanism must establish that one verified principal originated the governed request event.
+The trust mechanism must establish that one verified principal directly originated the governed request event.
 
 Minimum semantics:
 
@@ -124,7 +126,9 @@ subject_namespace
 subject_id
 request_event_id
 request_event_type
-canonical user-request identity / digest
+request_event_payload_commitment / immutable revision identity
+canonical governed user-request identity / digest
+human-action provenance required by the trust profile
 occurred_at or equivalent event ordering/freshness fact
 status/validity required by the trust profile
 ```
@@ -133,7 +137,8 @@ Conceptual meaning:
 
 ```text
 principal P
-created request event R
+personally originated request event R
+whose committed payload/revision is E
 whose exact governed request identity is H
 inside trust domain T
 ```
@@ -146,9 +151,11 @@ originator = USER
 
 is not evidence.
 
+A stable event ID without a stable payload/revision commitment is not sufficient.
+
 ### FACT B — Decision Event
 
-The trust mechanism must establish that one verified principal explicitly made the bounded decision for the exact formation decision request.
+The trust mechanism must establish that one verified principal directly made the bounded decision for the exact formation decision request.
 
 Minimum semantics:
 
@@ -158,8 +165,10 @@ issuer_identity
 subject_namespace
 subject_id
 decision_event_id
+decision_event_payload_commitment / immutable revision identity
 decision = ACCEPT
 exact decision_request_sha256 or equivalent immutable binding
+human-action provenance required by the trust profile
 occurred_at or equivalent event ordering/freshness fact
 status/validity required by the trust profile
 ```
@@ -168,7 +177,8 @@ Conceptual meaning:
 
 ```text
 principal P
-performed ACCEPT event D
+personally performed ACCEPT event D
+whose committed payload/revision is E2
 for exact decision request Q
 inside trust domain T
 ```
@@ -179,7 +189,7 @@ A generic event such as:
 button_clicked = true
 ```
 
-is insufficient unless the external mechanism binds that event to the exact decision request identity.
+is insufficient unless the external mechanism binds that event to the exact decision request identity and proves the required principal-action provenance.
 
 ### FACT C — Same Principal Binding
 
@@ -212,7 +222,33 @@ The first slice deliberately requires both facts to be comparable inside one can
 
 Cross-provider account linking and federation are out of scope.
 
-## 5. Exact decision context binding
+## 5. Event identity and event content are different bindings
+
+A provider-local event ID may remain stable while the record displayed or returned for that event changes.
+
+Therefore:
+
+```text
+EVENT IDENTITY != EVENT CONTENT IDENTITY
+```
+
+The trust mechanism must let Executor verify the event payload/revision that existed for the authoritative event being relied upon.
+
+Acceptable technology-agnostic properties include any mechanism that establishes an immutable or tamper-evident commitment to the event contents relevant to authority, for example:
+
+```text
+immutable event record
+version/revision identity
+provider-authenticated payload digest
+tamper-evident audit entry
+another independently verifiable event-content commitment
+```
+
+The design does not choose which.
+
+A verifier must never silently reinterpret the current mutable representation of event `R` as proof of the original authority event if the original bound content cannot be established.
+
+## 6. Exact decision context binding
 
 The external mechanism does not need to understand the full Executor contract.
 
@@ -245,13 +281,37 @@ This keeps responsibility separated:
 
 ```text
 EXTERNAL TRUST MECHANISM
-    proves WHO acted + WHICH external event + WHICH exact Q
+    proves WHO acted + WHICH authoritative event/revision + WHICH exact Q
 
 EXECUTOR
     proves WHAT Q means inside the canonical formation state
 ```
 
-## 6. Canonical trust profile owns trust selection
+## 7. Human-action provenance is a required external fact
+
+An external provider may support service accounts, delegated applications, automation or on-behalf-of actions.
+
+A provider-issued event is therefore not automatically proof that the human principal directly caused that event.
+
+For the first slice, the canonical trust profile must require an externally verifiable event provenance class equivalent in meaning to:
+
+```text
+DIRECT VERIFIED PRINCIPAL ACTION
+```
+
+The exact technology-specific label is intentionally not frozen.
+
+The required property is:
+
+> Executor/service credentials cannot manufacture an event that the verifier will accept as a direct request-origin or direct human `ACCEPT` action for the principal whose authority is being proved.
+
+If the provider cannot distinguish direct principal action from service/delegated/automated action with sufficient assurance:
+
+```text
+BLOCK
+```
+
+## 8. Canonical trust profile owns trust selection
 
 The external mechanism is not selected by evidence content or caller input.
 
@@ -264,6 +324,8 @@ accepted issuer identity / namespace
 verification_profile_id
 required claim classes
 required event/context bindings
+required human-action provenance class
+required event payload/revision commitment semantics
 freshness / status requirements
 canonical source bindings
 executor_commit
@@ -288,29 +350,37 @@ Core invariant:
 EVIDENCE REF != TRUST SELECTOR
 ```
 
-## 7. Technology-agnostic capability contract
+## 9. Technology-agnostic capability contract
 
 A future concrete external trust mechanism is acceptable for the first slice only if it can provide or support independent verification of all of the following properties.
 
-### 7.1 Stable trust-domain identity
+### 9.1 Stable trust-domain identity
 
 The verifier can establish which canonical trust domain / issuer namespace produced the evidence.
 
-### 7.2 Stable subject binding
+### 9.2 Stable subject binding
 
 The verifier can establish the principal identity inside that canonical namespace.
 
-### 7.3 Immutable or unambiguous event identity
+### 9.3 Immutable or unambiguous event identity
 
 Request creation and decision actions have event identities that cannot be silently rebound to another event during verification.
 
-### 7.4 Exact payload/context binding
+### 9.4 Immutable or verifiable event-content commitment
+
+The verifier can establish which exact event payload/revision is being relied upon, rather than trusting only the provider's current mutable rendering of an old event ID.
+
+### 9.5 Exact payload/context binding
 
 The request-origin evidence binds to the exact governed request identity.
 
 The decision evidence binds to the exact decision-request identity.
 
-### 7.5 Independent evidence integrity
+### 9.6 Direct-principal action provenance
+
+The verifier can distinguish the required direct human action from service/delegated/automated actions that must not satisfy `REQUEST_INTENT_OWNER` in this slice.
+
+### 9.7 Independent evidence integrity
 
 The evidence can be validated without trusting a caller-generated claim that says it is valid.
 
@@ -318,11 +388,11 @@ The technology may achieve this through a signed assertion, trusted API lookup, 
 
 The design does not select which.
 
-### 7.6 Freshness / validity semantics
+### 9.8 Freshness / validity semantics
 
 The verifier can determine whether the required evidence is still valid for the current freeze attempt under the canonical trust profile.
 
-### 7.7 No runtime provider shopping
+### 9.9 No runtime provider shopping
 
 If the canonical trust mechanism is unavailable or returns an unresolved result:
 
@@ -336,7 +406,7 @@ not:
 try another provider until one says YES
 ```
 
-## 8. Evidence references remain locators only
+## 10. Evidence references remain locators only
 
 A Human Decision Receipt or formation artifact may contain references to external evidence.
 
@@ -357,13 +427,14 @@ which verifier runs
 which endpoint is trusted
 which trust root is valid
 which subject namespace is authoritative
+which human-action provenance is acceptable
 ```
 
 If a future mechanism retrieves evidence remotely, arbitrary caller-controlled URLs are not acceptable trust selection.
 
 The canonical trust profile must constrain the retrieval and verification origin.
 
-## 9. Decision Event Evidence and Request Origin Evidence remain distinct claims
+## 11. Decision Event Evidence and Request Origin Evidence remain distinct claims
 
 The same external system may prove both claims.
 
@@ -373,19 +444,19 @@ But the verifier must keep their meanings separate:
 
 ```text
 REQUEST ORIGIN CLAIM
-  principal P originated request R
+  principal P directly originated request R with exact committed event content
 
 DECISION EVENT CLAIM
-  principal P performed ACCEPT for decision request Q
+  principal P directly performed ACCEPT for decision request Q with exact committed event content
 ```
 
 A valid decision event does not imply request ownership.
 
 A valid request-origin event does not imply later ACCEPT.
 
-Only their verified conjunction plus exact identity binding can satisfy the first-slice authority requirement.
+Only their verified conjunction plus exact identity/context binding can satisfy the first-slice authority requirement.
 
-## 10. Responsibility split
+## 12. Responsibility split
 
 ### Superior Executor governance owns
 
@@ -393,6 +464,7 @@ Only their verified conjunction plus exact identity binding can satisfy the firs
 which authority class is required
 which trust profile is canonical
 which evidence claim classes are required
+which human-action provenance class is required
 which verification semantics are acceptable
 ```
 
@@ -402,6 +474,8 @@ which verification semantics are acceptable
 mutable identity truth
 request-origin event truth
 decision-event truth
+authoritative event/revision history or equivalent content commitment
+provider-side action provenance truth
 provider-side validity/status truth
 ```
 
@@ -411,6 +485,7 @@ provider-side validity/status truth
 canonical trust-profile resolution
 external evidence verification
 subject-binding comparison
+event/revision commitment comparison
 exact decision/request identity comparison
 fail-closed result
 ```
@@ -425,7 +500,7 @@ creating the later AUTHORIZED_AND_FROZEN transition
 
 None of these components may silently absorb the responsibilities of all the others.
 
-## 11. F-19 — Trust Boundary Collapse
+## 13. F-19 — Trust Boundary Collapse
 
 Failure:
 
@@ -463,11 +538,75 @@ trust selection must remain canonically governed
 Executor may verify but may not self-create the human-authority root
 ```
 
-## 12. Relationship to F-10 through F-18
+## 14. F-20 — Event Payload Rebinding / Mutable Event Drift
 
-F-19 does not replace the earlier failure modes.
+Failure:
 
-It closes a broader architectural collapse in which the nominally external boundary becomes internal authority ownership.
+```text
+real external event R exists
+        ↓
+R originally bound to payload A
+        ↓
+provider record / editable object / lookup view changes to B
+        ↓
+R keeps the same event/reference identity
+        ↓
+verifier reads current B and treats it as historical authority for R
+        ↓
+wrong request or decision context accepted
+```
+
+Invariant:
+
+```text
+EVENT IDENTITY != EVENT CONTENT IDENTITY
+AUTHORITY EVIDENCE MUST BIND THE AUTHORITATIVE EVENT PAYLOAD / REVISION
+```
+
+Expected behavior:
+
+```text
+missing immutable/tamper-evident event-content commitment = BLOCK
+```
+
+## 15. F-21 — Service-Induced Human Event / Action-Provenance Confusion
+
+Failure:
+
+```text
+canonical external provider is real
+subject identity is real
+provider event is real
+        ↓
+Executor/service credential can create or trigger event on behalf of subject
+        ↓
+event is labelled/treated as human-origin or human-ACCEPT
+        ↓
+verifier accepts it as direct principal action
+        ↓
+freeze without the human having performed the decision
+```
+
+Invariant:
+
+```text
+PROVIDER-VALID EVENT != DIRECT HUMAN ACTION
+SERVICE ACTION FOR SUBJECT != SUBJECT ACTION
+```
+
+Required behavior:
+
+```text
+canonical trust profile must require verifiable human-action provenance
+Executor/service identity must not be able to manufacture that provenance
+ambiguous provenance = BLOCK
+```
+
+## 16. Relationship to F-10 through F-21
+
+F-19 through F-21 do not replace the earlier failure modes.
+
+They harden the root and event semantics of the external boundary.
 
 ```text
 F-10  evidence self-issuance
@@ -480,9 +619,11 @@ F-16  verified-result self-minting
 F-17  formation-state/request forgery
 F-18  cross-issuer subject false equivalence
 F-19  trust boundary collapse
+F-20  event payload rebinding / mutable event drift
+F-21  service-induced human event / action-provenance confusion
 ```
 
-## 13. Mandatory adversarial questions before technology selection
+## 17. Mandatory adversarial questions before technology selection
 
 A concrete mechanism must be rejected if any answer below is unresolved.
 
@@ -490,17 +631,22 @@ A concrete mechanism must be rejected if any answer below is unresolved.
 2. Can Executor mint the sole evidence that it later verifies?
 3. Can the external system prove only identity but not exact request/decision event binding?
 4. Can two different principals collide because only bare `subject_id` is compared?
-5. Can the same event reference be rebound to another payload?
-6. Can evidence for another request or decision be replayed here?
-7. Can a stale or revoked identity/event assertion still pass?
-8. Can provider unavailability trigger permissive fallback?
-9. Can a local session label be treated as external identity authority?
-10. Can the verifier silently create or reinterpret organization/role semantics?
-11. Can decision evidence prove `ACCEPT` without binding exact `decision_request_sha256`?
-12. Can request-origin evidence bind only request text but not the actual request event?
-13. Can a caller-created positive verification result be accepted by Freeze Gate?
-14. Can formation-state JSON be accepted as proof of current formation state?
-15. Can a successful REQUEST_INTENT verification be reused as WRITE/MERGE/DEPLOY authority?
+5. Can the same event reference be rebound to another payload or revision?
+6. Can an event record be edited while retaining the same authority reference?
+7. Can evidence for another request or decision be replayed here?
+8. Can a stale or revoked identity/event assertion still pass?
+9. Can provider unavailability trigger permissive fallback?
+10. Can a local session label be treated as external identity authority?
+11. Can the verifier silently create or reinterpret organization/role semantics?
+12. Can decision evidence prove `ACCEPT` without binding exact `decision_request_sha256`?
+13. Can request-origin evidence bind only request text but not the actual request event/revision?
+14. Can a caller-created positive verification result be accepted by Freeze Gate?
+15. Can formation-state JSON be accepted as proof of current formation state?
+16. Can a successful REQUEST_INTENT verification be reused as WRITE/MERGE/DEPLOY authority?
+17. Can Executor/service credentials create an event that is accepted as direct human request origin?
+18. Can Executor/service credentials create an event that is accepted as direct human `ACCEPT`?
+19. Can provider metadata distinguish direct principal action from delegated/service/automated action?
+20. Does the verifier fail closed when action provenance is unknown?
 
 Expected whenever any required fact is absent, ambiguous, stale or mismatched:
 
@@ -511,7 +657,7 @@ NO FROZEN CONTRACT
 NO EXECUTION AUTHORITY
 ```
 
-## 14. First-slice non-goals
+## 18. First-slice non-goals
 
 The design deliberately excludes:
 
@@ -531,7 +677,7 @@ The design deliberately excludes:
 - one-time global receipt ledger;
 - downstream resource/action authorization.
 
-## 15. Technology selection gate
+## 19. Technology selection gate
 
 A concrete technology may be considered only after this design is adversarially accepted.
 
@@ -539,14 +685,17 @@ The chosen mechanism must demonstrate the smallest useful fact set:
 
 ```text
 FACT 1
-externally verified principal P originated exact request event R
+externally verified principal P directly originated exact request event R
+with verifiable authoritative event-content/revision binding
 
 FACT 2
-same externally verified principal P performed ACCEPT event D
+same externally verified principal P directly performed ACCEPT event D
 for exact decision request Q
+with verifiable authoritative event-content/revision binding
 
 FACT 3
 R and D are verified inside one canonical trust domain / subject namespace
+and satisfy the canonical direct-principal action provenance requirement
 
 FACT 4
 Q is independently bound by Executor to the exact current review + draft identity
@@ -560,7 +709,7 @@ The acceptance question is not:
 
 It is:
 
-> **Can Executor independently establish, without owning the identity authority itself, that the same externally verified principal originated one exact governed request and explicitly ACCEPTED the one exact decision request bound to the current reviewed draft?**
+> **Can Executor independently establish, without owning the identity authority or being able to manufacture the trusted human events itself, that the same externally verified principal directly originated one exact governed request and directly ACCEPTED the one exact decision request bound to the current reviewed draft?**
 
 Until that property is demonstrable:
 
