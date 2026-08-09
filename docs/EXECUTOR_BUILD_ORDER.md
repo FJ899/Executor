@@ -51,7 +51,25 @@ First golden path:
 
 > `GP001 — Fix a failing test.`
 
-## 3. Ordered work
+## 3. Non-goals
+
+Executor v1 does not attempt to:
+
+- autonomously redefine user goals;
+- replace project authority;
+- expand task scope without authorization;
+- certify its own correctness;
+- become a general autonomous agent.
+
+These non-goals preserve the core boundaries:
+
+```text
+CONTRACT != RECOMMENDATION
+CAPABILITY != AUTHORITY
+EXECUTION != PROOF
+```
+
+## 4. Ordered work
 
 ### PHASE A — Freeze the product/build baseline
 
@@ -184,7 +202,7 @@ Only after the product run:
 - declare `ACCEPT`, `REWORK`, `STOP`, or the exact existing ladder status supported by evidence;
 - do not invent a new maturity level to reward implementation effort.
 
-## 4. Work explicitly deferred
+## 5. Work explicitly deferred
 
 Until GP001 needs them to remove a measured blocker:
 
@@ -198,7 +216,7 @@ Until GP001 needs them to remove a measured blocker:
 - broad task-class support;
 - cosmetic UI expansion.
 
-## 5. Decision rule for every next PR
+## 6. Decision rule for every next PR
 
 A PR enters the critical path only if all three are answerable:
 
@@ -208,7 +226,7 @@ A PR enters the critical path only if all three are answerable:
 
 If those answers are missing, the work is deferred or moved outside the critical path.
 
-## 6. Immediate next PR after this baseline
+## 7. Immediate next PR after this baseline
 
 Recommended next change:
 
