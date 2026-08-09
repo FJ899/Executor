@@ -1,0 +1,113 @@
+{
+  "schema_version": "executor-task/1.0",
+  "id": "GP001-FIX-FAILING-TEST-CASE-001",
+  "risk_class": "LOW_RISK",
+  "mode": "BUILD_AND_TEST",
+  "repositories": {
+    "target": {
+      "name": "litrgratis-pixel/executor-pilot-target",
+      "commit": "3934a94a5eebf750079200589d6dc40e024d44a0"
+    }
+  },
+  "test_contract": {
+    "path": "test_contracts/GP001_FIX_FAILING_TEST_CASE_001.yaml",
+    "sha256": "da5f6c3ba12a4be0e90431fa7575656c3024e3a1fe4dc0c33785128eace56e57"
+  },
+  "capabilities": {
+    "network": false,
+    "secrets": [],
+    "commands": [
+      "python",
+      "git"
+    ]
+  },
+  "budgets": {
+    "max_model_calls": 2,
+    "max_execution_iterations": 2,
+    "max_wall_time_minutes": 10,
+    "max_patch_lines": 80
+  },
+  "decision_policy": {
+    "max_decision_rounds": 1
+  },
+  "merge_policy": {
+    "mode": "PR_ONLY"
+  },
+  "golden_path": {
+    "schema_version": "executor-golden-path-task/1.0",
+    "kind": "FIX_FAILING_TEST",
+    "problem": {
+      "statement": "Fix the atomic batch regression in ProjectRegistry.add_many without changing acceptance tests.",
+      "target_test": "tests.test_registry.ProjectRegistryTests.test_duplicate_batch_does_not_partially_mutate_registry",
+      "target_test_file": "tests/test_registry.py",
+      "expected_pre_change": "FAIL"
+    },
+    "scope": {
+      "allowed_paths": [
+        "project_registry/registry.py"
+      ],
+      "protected_paths": [
+        "tests/**",
+        "cases/**",
+        "PILOT_CONTRACT.md",
+        ".github/**",
+        "pyproject.toml"
+      ],
+      "scope_expansion": "REPORT_ONLY_NEW_CONTRACT_REQUIRED"
+    },
+    "authorization": {
+      "mutation_requires_authorization": true,
+      "scope_expansion_requires_new_contract": true
+    },
+    "discovery": {
+      "out_of_scope_findings": "REPORT_ONLY",
+      "may_expand_contract": false
+    },
+    "commands": {
+      "target_test_argv": [
+        "python",
+        "-m",
+        "unittest",
+        "tests.test_registry.ProjectRegistryTests.test_duplicate_batch_does_not_partially_mutate_registry",
+        "-v"
+      ],
+      "regression_argv": [
+        [
+          "python",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests",
+          "-v"
+        ],
+        [
+          "python",
+          "-m",
+          "compileall",
+          "-q",
+          "project_registry",
+          "tests"
+        ]
+      ]
+    },
+    "success": {
+      "input_identity": "MATCH",
+      "pre_change_target_test": "FAIL",
+      "post_change_target_test": "PASS",
+      "regression_checks": "PASS",
+      "diff_scope": "ALLOWED",
+      "protected_material": "UNCHANGED",
+      "execution_limits": "RESPECTED",
+      "result_artifact": "PRESENT"
+    },
+    "result_policy": {
+      "success_status": "ACTION_COMPLETED_REVIEW_REQUIRED",
+      "allowed_terminal_statuses": [
+        "ACTION_COMPLETED_REVIEW_REQUIRED",
+        "BLOCKED",
+        "FAILED"
+      ]
+    }
+  }
+}
