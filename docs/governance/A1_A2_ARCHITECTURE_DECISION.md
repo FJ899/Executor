@@ -1,6 +1,6 @@
 ---
 document: "A1 vs A2 Architecture Decision"
-version: "0.1"
+version: "0.2"
 status: "DRAFT / ADVERSARIAL ARCHITECTURE REVIEW / NO SELECTION"
 date: "2026-08-09"
 scope: "placement of trusted request-origin evidence relative to the Executor user front door"
@@ -14,7 +14,7 @@ depends_on:
   - "docs/governance/PATTERN_A_TECHNOLOGY_EVALUATION.md"
 ---
 
-# A1 vs A2 Architecture Decision v0.1
+# A1 vs A2 Architecture Decision v0.2
 
 ## 1. Purpose
 
@@ -270,6 +270,7 @@ The architecture intentionally changes the current product boundary rather than 
 | Cross-provider identity federation required | NO if one domain owns both events | NO if first slice uses same canonical domain for origin + decision |
 | Trust-boundary composition complexity | LOWER | HIGHER — two external ceremonies around one Executor-centered flow |
 | Natural fit with current USER -> EXECUTOR -> CONTRACT product model | LOW | HIGH |
+| Change required before existing phase-1 formation begins | LOW — verified external request can be imported before constructor use | HIGH — request-origin attestation must become a pre-formation boundary or verified input envelope |
 
 ## 7. Critical clarification — front door ownership != goal ownership
 
@@ -330,7 +331,91 @@ external domain proves WHO acted + WHICH exact transaction
 Executor proves WHAT that transaction means in canonical state
 ```
 
-## 9. A1 attack — the cleanest security model can still be the wrong product model
+## 9. Strengthened A2 requires a pre-formation trust boundary
+
+The current phase-1 kernel on `main` constructs `RequestToContract001` from:
+
+```text
+request_id
+user_request
+executor repository / commit
+```
+
+and immediately enters:
+
+```text
+REQUEST_RECEIVED
+```
+
+with the verbatim request recorded as `USER` provenance.
+
+That current provenance means:
+
+```text
+this content was supplied as the user request
+```
+
+It does **not** mean:
+
+```text
+an external trust domain independently proved
+that principal P originated this exact request event
+```
+
+Therefore:
+
+```text
+USER PROVENANCE
+        !=
+VERIFIED REQUEST-ORIGIN EVIDENCE
+```
+
+This is not a defect in phase 1; phase 1 intentionally stopped before verified-human-authority implementation.
+
+But it has an architectural consequence for A2:
+
+> **A2 cannot be implemented only after formation reaches `AWAITING_VERIFIED_HUMAN_AUTHORIZATION`.**
+
+The request-origin trust event must exist at intake, before the request is accepted as the externally verified origin fact used by the later human-authority proof.
+
+A future A2 implementation therefore needs one of two equivalent semantic shapes:
+
+```text
+RAW REQUEST CAPTURE
+  -> AWAITING EXTERNAL ORIGIN ATTESTATION
+  -> VERIFIED REQUEST ORIGIN
+  -> REQUEST_TO_CONTRACT FORMATION
+```
+
+or:
+
+```text
+Executor UI captures raw request
+  -> external trust mechanism creates verified origin event
+  -> non-caller-constructable Verified Request Envelope
+  -> RequestToContract001 consumes that verified envelope
+```
+
+Exact class/state names are **not selected** by this design.
+
+The invariant is selected:
+
+```text
+FORMATION MAY NOT RETROACTIVELY CREATE
+THE REQUEST-ORIGIN TRUST FACT IT LATER DEPENDS ON
+```
+
+This is a direct implementation consequence of F-22, not a new provider requirement.
+
+### A1 comparison
+
+A1 naturally creates the request-origin event outside Executor before formation begins.
+
+Executor can then import a verified request event/envelope as upstream material.
+
+This gives A1 a simpler fit with the existing phase boundary, even though A1 has the larger product-front-door cost.
+
+## 10. A1 attack — the cleanest security model can still be the wrong product model
 
 A1 has fewer trust-composition edges.
 
@@ -348,7 +433,7 @@ If A1 is ever selected, the product must explicitly accept that the governed req
 
 Otherwise F-24 remains open even if all cryptographic/evidence checks pass.
 
-## 10. A2 attack — preserving the front door has a real cost
+## 11. A2 attack — preserving the front door has a real cost
 
 A2 preserves:
 
@@ -376,7 +461,9 @@ This is more complex than A1.
 
 The complexity is acceptable only if preserving Executor as product front door is an explicit product requirement.
 
-## 11. Current adversarial result
+It also means the current phase-1 constructor boundary cannot remain the first trusted request state unchanged; a pre-formation origin-verification boundary or verified request envelope is required.
+
+## 12. Current adversarial result
 
 Both A1 and strengthened A2 can, in principle, satisfy the accepted human-authority trust invariants.
 
@@ -387,10 +474,12 @@ It is architecture placement:
 ```text
 A1
 simpler trust topology
+simpler fit before current formation kernel
 but external trust domain owns governed request entry
 
 A2
 more trust choreography
+requires a new pre-formation origin-verification boundary
 but Executor remains the product front door
 ```
 
@@ -403,12 +492,14 @@ EXECUTOR FRONT DOOR
 +
 DIRECT EXTERNAL ORIGIN ATTESTATION OF EXACT REQUEST
 +
+VERIFIED ORIGIN BEFORE GOVERNED FORMATION DEPENDS ON IT
++
 SAME EXTERNAL TRUST DOMAIN FOR LATER EXACT DECISION
 ```
 
 No provider is selected by this conclusion.
 
-## 12. Current recommendation for the next decision
+## 13. Current recommendation for the next decision
 
 Do not choose a provider yet.
 
@@ -422,9 +513,9 @@ If **YES**, A2 becomes the architecture to pursue, but only in the strengthened 
 
 This is not a convenience preference.
 
-It determines the system boundary.
+It determines the system boundary and where the first trusted human-intent event must exist.
 
-## 13. Gate
+## 14. Gate
 
 ```text
 A1/A2 SELECTION: NOT MADE
@@ -434,6 +525,7 @@ FRONT DOOR OWNERSHIP: EXPLICIT DECISION REQUIRED
 F-24: DEFINED
 NAIVE A2: REJECTED
 STRENGTHENED A2: SURVIVES CURRENT DESIGN ATTACK
+A2 PRE-FORMATION ORIGIN BOUNDARY: REQUIRED
 A1: SURVIVES CURRENT DESIGN ATTACK WITH EXPLICIT PRODUCT-BOUNDARY COST
 MATURITY CLAIM: NONE
 PRODUCT CLAIM: NONE
