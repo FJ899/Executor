@@ -91,7 +91,11 @@ class GP001ContractTest(unittest.TestCase):
 
     def test_gp001_test_contract_is_valid_but_waits_for_run_evidence(self):
         result = validate_test_contract(load_contract(TEST_PATH), base_dir=ROOT)
-        self.assertEqual(result.status, ValidationStatus.INSUFFICIENT_EVIDENCE)
+        self.assertEqual(
+            result.status,
+            ValidationStatus.INSUFFICIENT_EVIDENCE,
+            result.to_dict(),
+        )
         self.assertNotIn(
             "CONTRADICTORY_ACCEPTANCE",
             {issue.code for issue in result.issues},
