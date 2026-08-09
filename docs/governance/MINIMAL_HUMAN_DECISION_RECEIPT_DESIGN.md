@@ -1,13 +1,15 @@
 ---
 document: "Minimal Human Decision Receipt Design"
-version: "0.6"
+version: "0.7"
 status: "EXTERNAL AUTHORITY EVIDENCE TRUST REVIEW / IMPLEMENTATION BLOCKED"
 date: "2026-08-09"
-scope: "human decision record, canonical authority requirements, canonical evidence trust, external evidence and exact freeze verification"
+scope: "human decision record, canonical authority requirements, canonical evidence trust, intent ownership and exact freeze verification"
 repository: "litrgratis-pixel/Executor"
 ---
 
-# Minimal Human Decision Receipt Design v0.6
+# Minimal Human Decision Receipt Design v0.7
+
+## 1. Governing invariants
 
 ```text
 HUMAN DECISION RECEIPT != VERIFIED AUTHORITY EVIDENCE
@@ -18,9 +20,14 @@ AUTHORITY REQUIREMENT != AUTHORITY EVIDENCE SOURCE
 VALID POLICY CONTENT != CANONICAL POLICY AUTHORITY
 EVIDENCE REF != TRUST SELECTOR
 LOWER TRUST MAY NOT WEAKEN HIGHER TRUST
+INTENT AUTHORITY != RESOURCE / ACTION AUTHORITY
 ```
 
-## 1. End-to-end authority boundary
+The purpose of this design is not to build an IAM system.
+
+It is to define why one exact human decision may allow one exact draft contract to become frozen while every ambiguous or substituted path fails closed.
+
+## 2. End-to-end boundary
 
 ```text
 USER REQUEST
@@ -29,31 +36,28 @@ FORMATION KERNEL
     exact draft + review + decision request
     ↓
 CANONICAL AUTHORITY REQUIREMENT RESOLUTION
-    derives non-bypassable requirements from verified superior sources
     ↓
 CANONICAL EVIDENCE TRUST RESOLUTION
-    derives which external trust profile may prove those requirements
     ↓
 HUMAN DECISION ADAPTER
     presents exact material and records an observed action
-    DOES NOT prove authority or choose the trusted issuer/verifier
+    DOES NOT prove authority or choose issuer/verifier
     ↓
 HUMAN DECISION RECEIPT
-    local record of WHO / WHAT / exact bound identities / evidence refs
-    IS NOT PROOF
+    local bound record; IS NOT PROOF
     ↓
 EXTERNAL EVIDENCE
-    collectively proves decision event + authority entitlement
+    proves decision event + required authority fact
     ↓
 FREEZE GATE
-    re-verifies canonical sources, trust profile, evidence and exact identities
+    re-verifies canonical sources, trust profile, claims and exact identities
     ↓
 AUTHORIZED_AND_FROZEN
 ```
 
 No component may silently combine contract interpretation, authority-policy ownership, trust-provider selection, human-action capture, evidence issuance, evidence verification and freeze.
 
-## 2. Existing Executor trust hierarchy remains the policy root
+## 3. Existing Executor trust hierarchy remains the policy root
 
 `EXECUTOR_POLICY.yaml` already defines:
 
@@ -66,13 +70,13 @@ executor_policy
 > generated_data
 ```
 
-The human-authority design reuses that hierarchy.
+The human-authority design reuses this hierarchy.
 
 It does not introduce `ExecutorIAM`, `AuthorityPolicyStore`, an authority database or a second policy root.
 
 For current GP001, the verified Executor repository identity, exact Executor commit, project bundle and tracked `EXECUTOR_POLICY.yaml` remain the canonical source boundary.
 
-## 3. Requirement, ownership and evidence source are different things
+## 4. Requirement, ownership and evidence source are separate
 
 ```text
 AUTHORITY REQUIREMENT
@@ -85,28 +89,32 @@ AUTHORITY EVIDENCE SOURCE
   says WHICH independently verifiable source may prove the required facts
 ```
 
-Executor may know the first and the accepted proof mechanism without owning the mutable human/organization membership truth.
-
 Core invariant:
 
-> **AUTHORITY REQUIREMENT != AUTHORITY OWNERSHIP != AUTHORITY EVIDENCE SOURCE.**
+```text
+AUTHORITY REQUIREMENT
+!= AUTHORITY OWNERSHIP
+!= AUTHORITY EVIDENCE SOURCE
+```
 
-## 4. Requirement ownership by trust layer
+Executor may know requirements and proof rules without owning mutable user/organization role truth.
+
+## 5. Requirement ownership by trust layer
 
 ```text
 EXECUTOR_POLICY
-  system-wide trust hierarchy and non-bypassable minima
+  system-wide non-bypassable minima
         ↓
 PROJECT_CONTRACT / superior project governance
-  project/domain authority requirements
+  project/domain requirements
         ↓
 TASK CONTRACT
   may add narrower constraints
-  may not remove or replace superior constraints
+  may not remove superior constraints
         ↓
 FORMATION PROFILE
   process configuration/reference only
-  not an authority-policy owner
+  NOT an authority-policy owner
 ```
 
 Effective requirements compose conjunctively:
@@ -117,11 +125,11 @@ AND PROJECT REQUIREMENTS
 AND VALID ADDITIONAL TASK REQUIREMENTS
 ```
 
-No `last-write-wins` or caller-selected downgrade semantics are allowed.
+No `last-write-wins` authority semantics are allowed.
 
-## 5. Canonical authority requirement identity
+## 6. Canonical authority requirement identity
 
-The resolved requirement is immutable verification material, not an IAM database.
+A resolved authority requirement is immutable verification material, not an IAM database.
 
 Minimum semantics:
 
@@ -147,15 +155,15 @@ Canonical serialization yields:
 authority_requirement_sha256
 ```
 
-It is bound into review material and the decision request.
+This hash is part of review/decision identity.
 
-## 6. Evidence Trust Profile
+## 7. Canonical Evidence Trust Profile
 
 An Evidence Trust Profile answers:
 
-> Which external source and verification rules are allowed to prove this authority requirement?
+> Which external source and verification rules are allowed to prove the required authority facts?
 
-It is policy material, not mutable IAM membership.
+It is policy material, not mutable membership data.
 
 Conceptual minimum semantics:
 
@@ -165,8 +173,8 @@ allowed_issuer_identity / issuer namespace
 verification_profile_id
 required_claim_classes[]
 required_context_bindings[]
-freshness_policy
-revocation/status policy if the chosen mechanism supports it
+freshness policy
+revocation/status policy when supported
 source_bindings[]
 executor_commit
 ```
@@ -177,27 +185,23 @@ Canonical serialization yields:
 evidence_trust_profile_sha256
 ```
 
-The trust profile itself must be resolved from canonical superior sources under the existing Executor trust hierarchy.
+The profile must come from canonical superior sources under the existing Executor trust hierarchy.
 
-It may live directly in a superior policy/project contract or in an authoritative source referenced by that verified bundle.
+Caller, model, formation profile or receipt may not create/select a new trust profile at runtime.
 
-A caller, model, formation profile or Human Decision Receipt may not create or select a new trust profile at runtime.
+For the first implementation slice, one exact canonical external trust profile is preferred. No provider shopping or fallback.
 
-For the first implementation slice, one exact canonical external trust profile is preferred over multi-provider fallback logic.
+## 8. Trust snapshot is not caller-constructable
 
-## 7. Trust snapshot is not caller-constructable
-
-The design follows the existing `ExecutionPolicySnapshot` principle:
+The design follows the existing `ExecutionPolicySnapshot` pattern:
 
 ```text
-CALLER INPUT
-    !=
-VERIFIED TRUST SNAPSHOT
+CALLER INPUT != VERIFIED TRUST SNAPSHOT
 ```
 
-A future evidence-trust snapshot must be derivable only after verifying canonical repository/project/policy source identity.
+A future trust snapshot must exist only after verifying canonical repository/project/policy source identity.
 
-Public execution/formation APIs must not accept runtime parameters such as:
+Public APIs must not accept caller-controlled trust-selection parameters such as:
 
 ```text
 issuer=
@@ -208,37 +212,31 @@ keyset_url=
 allowed_issuers=
 ```
 
-that could replace the canonical trust decision.
+## 9. `authority_evidence_ref` is only a locator
 
-## 8. `authority_evidence_ref` is only a locator
-
-The receipt may contain:
-
-```text
-authority_evidence_refs[]
-```
-
-but an evidence ref is not allowed to decide:
+The receipt may contain evidence references, but a reference may not decide:
 
 ```text
 which issuer is trusted
-which verifier implementation runs
+which verifier runs
 which network origin is trusted
-which key set or trust root is used
+which key set/trust root is used
 which authority class is required
 ```
 
 Core invariant:
 
-> **EVIDENCE REF != TRUST SELECTOR.**
+```text
+EVIDENCE REF != TRUST SELECTOR
+```
 
-If a future implementation uses remote evidence retrieval, the canonical trust profile must constrain the provider/origin. A caller-supplied arbitrary URL is not an acceptable trust boundary.
+If evidence contains an issuer identifier, it is checked against the canonical trust profile. It is not used to discover a new trusted provider.
 
-If evidence contains an `issuer` or similar field, that value is checked against the canonical trust profile; it is not used to discover a new trusted provider.
+An arbitrary caller-provided URL is not a trust boundary.
 
-## 9. Human Decision Receipt
+## 10. Human Decision Receipt
 
-The receipt remains a bounded local record, not proof and not a permission system.
+The receipt is a local bound record, not proof and not a permission system.
 
 Minimum semantics:
 
@@ -262,254 +260,274 @@ observed_at
 freshness_id
 ```
 
-Receipt fields do not become trusted merely because the schema is valid.
+Schema validity never creates trust.
 
-## 10. External evidence proves two distinct claim classes
+## 11. External evidence proves two claim classes
 
-The receipt records an observed decision event, but the decision adapter is not the final authority root for that fact.
+The decision adapter is not the final root of truth even for the statement that a human action occurred.
 
-External evidence must collectively establish two claim classes.
+External evidence must collectively establish:
 
 ### A. Decision Event Evidence
 
-Proves that the verified actor actually performed the recorded decision for the bound review/decision request.
-
-Minimum semantic binding:
-
 ```text
-actor subject
-decision value
-decision event identity
-decision_request_sha256 or an equivalent exact bound identity
-time/freshness required by the canonical trust profile
+verified actor subject
+exact decision value
+exact decision-event identity
+exact decision_request_sha256 or equivalent bound identity
+freshness/validity required by the trust profile
 ```
 
-### B. Authority Entitlement Evidence
-
-Proves that the same actor held the required authority in the required context.
-
-Minimum semantic binding:
+### B. Authority Entitlement / Ownership Evidence
 
 ```text
-actor subject
-required authority class
-required project/organization/tenant context
+same verified actor subject
+required authority class/ownership relation
+required authority context
 validity/freshness status
-canonical issuer/trust profile identity
+canonical issuer/trust-profile identity
 ```
 
-These claim classes may be carried by one externally verifiable artifact or multiple artifacts.
+One artifact may prove both. Multiple artifacts may jointly prove them.
 
-The Freeze Gate cares about the verified claims, not the number of files/tokens/messages carrying them.
+The Freeze Gate verifies claims, not file count.
 
-## 11. Evidence context binding
+## 12. Critical product distinction: intent authority vs action authority
 
-External evidence must not be accepted merely because it proves:
+`REQUEST_TO_CONTRACT_001` governs interpretation of a human request.
+
+Its immediate authority question is:
+
+> Did the human who owns this request/goal authorize this exact interpretation as the task contract?
+
+That is not the same question as:
+
+> Does this actor have operational permission to mutate repository R, deploy production or use credential C?
+
+Therefore:
 
 ```text
-subject = Anna
-role = ProductionApprover
+INTENT AUTHORITY
+    !=
+RESOURCE / ACTION AUTHORITY
 ```
 
-It must satisfy the exact canonical context demanded by the decision request, including all applicable bindings such as:
+For the first GP001 formation slice, the minimal authority class SHOULD be the verified **request/goal owner**, not a new generalized organization role model.
+
+The contract-formation approval may authorize only:
 
 ```text
-project / repository / organization / tenant
-authority class
+this exact interpretation
+of this exact request
+into this exact frozen task contract
+```
+
+It does NOT by itself authorize:
+
+```text
+WRITE_REPOSITORY
+MERGE
+DEPLOY
+NETWORK
+SECRET USE
+OTHER CONSEQUENT ACTIONS
+```
+
+Those remain downstream policy/AAP/action-authority questions.
+
+## 13. Minimal first-slice authority requirement
+
+The first controlled `REQUEST_TO_CONTRACT_001` design therefore requires a future canonical superior source to establish an authority class equivalent to:
+
+```text
+REQUEST_INTENT_OWNER
+```
+
+Meaning:
+
+```text
+the actor authorized to approve formation
+must be the same externally verified principal
+that originated/owns the governed user request
+```
+
+The name above is a design label, not yet a frozen schema value.
+
+The requirement must be sourced from canonical superior policy/project governance before implementation. Formation profile alone is insufficient.
+
+Current `main` has `human_authorization_required: true` in the formation profile but does not yet define this exact canonical authority class in a superior source.
+
+Therefore implementation remains blocked until the superior model/policy defines the formation authority requirement explicitly.
+
+## 14. Minimal first-slice Evidence Trust Profile claims
+
+Without choosing OAuth, OIDC, passkeys, GitHub or another provider, the first profile must be able to prove at least:
+
+```text
+1. verified_request_originator_subject
+2. verified_decision_actor_subject
+3. originator_subject == decision_actor_subject
+4. exact decision == ACCEPT
+5. exact decision_request_sha256
+6. exact decision_event identity
+7. evidence comes from the canonical trust profile / issuer
+8. evidence is fresh/valid under canonical rules at freeze
+```
+
+Because `decision_request_sha256` binds the reviewed draft, review material, authority requirement and trust-profile identity, this is enough for the first formation slice without importing a generic enterprise role graph.
+
+If a future project requires a different authority owner than the request originator, that must be an explicit superior governance requirement and a separate product slice.
+
+## 15. Request-origin identity is also externally rooted
+
+The field:
+
+```text
+request_originator = "USER"
+```
+
+is not proof.
+
+The original request itself must carry or resolve to externally verified originator identity evidence under the same canonical trust boundary.
+
+Formation may preserve this identity binding.
+
+Formation may not manufacture or replace it.
+
+Therefore the first slice ultimately compares two externally rooted facts:
+
+```text
+VERIFIED REQUEST ORIGINATOR
+        ==
+VERIFIED DECISION ACTOR
+```
+
+plus the exact decision-request binding.
+
+## 16. Evidence context binding
+
+A true actor and a true role are insufficient if context differs.
+
+Evidence must satisfy all canonical context bindings applicable to the authority requirement, such as:
+
+```text
+request owner identity
+project/repository context when required
+organization/tenant when required by a future slice
 decision request identity
 decision event identity
-relevant validity interval
+validity interval
 ```
 
-For current REQUEST_TO_CONTRACT_001, exact decision-request binding is the preferred context root because the request already binds contract, review material, requirement and Executor formation identity.
+Cross-context evidence is invalid.
 
-## 12. Evidence freshness and revocation semantics
+## 17. Freshness and revocation semantics
 
-`observed_at` or a self-declared timestamp in a receipt is not proof of freshness.
+Receipt timestamps are not proof of freshness.
 
-The canonical Evidence Trust Profile defines what `valid now` means for the selected mechanism.
+The canonical trust profile defines what `valid now` means.
 
-For the first slice, fail closed unless the Freeze Gate can establish that:
+For the first slice, Freeze Gate must fail closed unless it can establish:
 
 ```text
-the decision event occurred inside the accepted validity window
+decision event occurred in the accepted validity window
 AND
-required authority evidence is valid under the canonical trust profile at freeze time
+required evidence remains valid under the canonical trust profile at freeze
 ```
 
-If the chosen external mechanism exposes revocation/status and the trust profile requires checking it, `UNKNOWN`, unavailable or stale status blocks freeze.
+If required status is `UNKNOWN`, unavailable or stale, freeze is blocked.
 
-No silent fallback to older cached authority is allowed.
+No silent cached or weaker fallback is allowed.
 
-## 13. F-7 — Authority Substitution
+## 18. Failure modes retained
+
+### F-4 — Self-Declared Decision Authority
+
+Caller-created `human approved` claims are not evidence.
+
+### F-5 — Approval Drift
+
+Approval of draft A cannot authorize later draft B.
+
+### F-6 — Authorization Generalization / Delegation Drift
+
+Approval of one contract cannot become standing trust.
+
+### F-7 — Authority Substitution
+
+Wrong actor/account/authority context cannot substitute for the required authority.
+
+### F-8 — Authority Requirement Injection / Downgrade
+
+Lower-trust input cannot replace the true required authority with a weaker one.
+
+### F-9 — Authority Policy Source Substitution
+
+Valid-looking policy content from the wrong repository/commit/path/source role is not canonical authority.
+
+### F-10 — Evidence Self-Issuance
+
+Executor/Formation/Decision Adapter/Freeze Gate cannot be the sole issuer/root of the human-authority evidence it later accepts.
+
+### F-11 — Issuer Substitution / Provider Shopping
+
+Caller/adapter cannot choose another provider or try providers until one returns YES.
+
+### F-12 — Evidence Scope Drift
+
+Valid evidence for another request/project/org/tenant/time is invalid here.
+
+### F-13 — Verifier / Trust Profile Substitution
+
+Evidence cannot choose its own verifier, endpoint, trust root, discovery source or permissive verification mode.
+
+### F-14 — Evidence Freshness / Revocation Drift
+
+Evidence that was once valid is not automatically valid for the current freeze.
+
+## 19. F-15 — Authority Dimension Conflation
+
+New failure class from this review.
+
+Failure A:
 
 ```text
-correct requirement
-+ wrong actor/account/organization/context accepted as equivalent
-```
-
-Invariant:
-
-```text
-"SOME HUMAN APPROVED" != "THE REQUIRED AUTHORITY APPROVED"
-AUTHORITY IDENTITY MUST BIND TO EXACT DECISION CONTEXT
-```
-
-## 14. F-8 — Authority Requirement Injection / Downgrade
-
-```text
-superior policy requires A
-→ lower layer injects weaker B
-→ real actor valid for B approves
-→ valid evidence for B
-→ wrong freeze
-```
-
-Invariant:
-
-```text
-AUTHORITY REQUIREMENT MUST COME FROM CANONICAL SUPERIOR SOURCES
-LOWER TRUST MAY ADD BUT NOT REMOVE SUPERIOR REQUIREMENTS
-```
-
-## 15. F-9 — Authority Policy Source Substitution
-
-```text
-structurally valid alternate policy/project source S2
-is accepted instead of canonical S
-```
-
-Canonical source identity binds:
-
-```text
-repository + commit + path + content identity + source role + trust layer
-```
-
-Valid-looking content from the wrong source is not authority.
-
-## 16. F-10 — Evidence Self-Issuance
-
-Failure:
-
-```text
-Executor / Formation / Decision Adapter / Freeze component
-creates an authority-like evidence artifact
+request owner approves contract meaning
         ↓
-Executor verifies its own artifact
-        ↓
-freeze
+system treats that approval as permission to WRITE / MERGE / DEPLOY
 ```
 
-Invariant:
-
-> **EXECUTOR CANNOT BE ITS OWN HUMAN-AUTHORITY ROOT.**
-
-An Executor-local component may transform, cache or verify externally rooted evidence according to canonical rules.
-
-It may not be the sole issuer/trust root of the evidence that establishes human authority.
-
-## 17. F-11 — Issuer Substitution / Provider Shopping
-
-Failure:
+Failure B:
 
 ```text
-canonical requirement expects trusted issuer/profile A
+resource admin has permission to deploy/write
         ↓
-caller / adapter selects B
-or tries providers until one returns YES
+system treats resource authority as ownership of the user's intent
         ↓
-valid evidence from B
-        ↓
-freeze
+admin silently changes/approves what the request means
 ```
+
+Both are wrong.
 
 Invariant:
 
 ```text
-ISSUER / TRUST PROFILE SELECTION MUST COME FROM CANONICAL SUPERIOR POLICY
-NO RUNTIME PROVIDER SHOPPING
-NO PERMISSIVE FALLBACK WHEN THE CANONICAL PROVIDER IS UNAVAILABLE
+CONTRACT-FORMATION AUTHORITY != CONSEQUENT ACTION AUTHORITY
+RESOURCE AUTHORITY != OWNERSHIP OF USER INTENT
 ```
 
-Unavailable required evidence means BLOCK, not select another source.
+Each transition must be authorized by the authority dimension that owns that transition.
 
-## 18. F-12 — Evidence Scope Drift
-
-Failure:
-
-```text
-real evidence
-+ correct actor
-+ correct authority class
-BUT
-wrong project / organization / tenant / decision / request / validity interval
-        ↓
-freeze
-```
-
-Invariant:
-
-```text
-AUTHORITY EVIDENCE MUST SATISFY THE EXACT DECISION CONTEXT
-CROSS-CONTEXT EVIDENCE IS INVALID EVEN WHEN THE ACTOR AND ROLE ARE REAL
-```
-
-## 19. F-13 — Verifier / Trust Profile Substitution
-
-This is distinct from F-11.
-
-F-11 substitutes the issuer/provider.
-
-F-13 keeps a plausible issuer identity but substitutes how that issuer is verified.
-
-Examples:
-
-```text
-caller-selected permissive verifier
-alternate discovery endpoint
-caller-selected key set / trust root
-"skip signature" verification mode
-issuer string used to dynamically select an untrusted verifier
-```
-
-Invariant:
-
-```text
-VERIFIER SELECTION AND TRUST ROOTS MUST COME FROM THE CANONICAL TRUST PROFILE
-EVIDENCE CONTENT MAY NOT SELECT ITS OWN VERIFIER
-CALLER MAY NOT OVERRIDE VERIFICATION SEMANTICS
-```
-
-The local verifier implementation is additionally pinned by the exact Executor commit used by formation/freeze.
-
-## 20. F-14 — Evidence Freshness / Revocation Drift
-
-Failure:
-
-```text
-actor once had authority
-→ evidence was once valid
-→ authority expires/revokes or evidence becomes stale
-→ old proof is reused at freeze
-```
-
-Invariant:
-
-```text
-VALID ONCE != VALID FOR CURRENT FREEZE
-FRESHNESS / STATUS SEMANTICS COME FROM CANONICAL TRUST PROFILE
-UNKNOWN REQUIRED STATUS = BLOCK
-```
-
-## 21. Trust and requirement drift after human review
+## 20. Trust and requirement drift after review
 
 Any change to:
 
 ```text
-canonical requirement sources
+canonical authority requirement sources
 authority_requirement_sha256
-canonical evidence trust source
+canonical evidence trust profile
 evidence_trust_profile_sha256
+request-origin identity binding
 review material
 draft contract
 Executor formation identity
@@ -517,17 +535,17 @@ Executor formation identity
 
 invalidates the previous decision for freeze.
 
-Correct transition:
+Correct behavior:
 
 ```text
 change
-→ new canonical hashes
-→ new review material / decision request
-→ previous receipt stale
+→ new canonical identity
+→ new review/decision request
+→ previous decision stale
 → new human review required
 ```
 
-## 22. Exact Freeze Gate algorithm — design semantics
+## 21. Exact Freeze Gate semantics
 
 Only `ACCEPT` may be freeze-eligible.
 
@@ -535,20 +553,20 @@ Freeze Gate must independently:
 
 ```text
 1. re-verify exact Executor/project canonical source identities;
-2. resolve system + project + valid task authority requirements;
-3. compose requirements conjunctively;
-4. recompute authority_requirement_sha256;
-5. resolve the canonical Evidence Trust Profile from superior sources;
-6. recompute evidence_trust_profile_sha256;
+2. resolve and conjunctively compose authority requirements;
+3. recompute authority_requirement_sha256;
+4. resolve canonical Evidence Trust Profile;
+5. recompute evidence_trust_profile_sha256;
+6. verify exact request-origin identity evidence;
 7. verify receipt hashes against current review/request/contract state;
-8. resolve evidence refs only inside the canonical trust profile;
-9. verify external issuer identity using canonical verification semantics;
+8. resolve evidence refs only inside canonical trust rules;
+9. verify external issuer using canonical verification semantics;
 10. verify Decision Event Evidence;
-11. verify Authority Entitlement Evidence;
-12. verify actor identity equality across receipt and evidence;
-13. verify exact authority/context bindings;
-14. verify freshness/status required by the canonical trust profile;
-15. verify current draft hash == contract hash to be frozen.
+11. verify Authority Entitlement/Ownership Evidence;
+12. require verified request originator == verified decision actor for first slice;
+13. verify exact decision/context bindings;
+14. verify freshness/status;
+15. verify current draft hash == contract hash to freeze.
 ```
 
 Any missing, unknown, stale or mismatched required fact:
@@ -557,14 +575,14 @@ Any missing, unknown, stale or mismatched required fact:
 AUTHORIZED_AND_FROZEN = FORBIDDEN
 ```
 
-## 23. Freeze Gate remains a verifier, not IAM
+## 22. Freeze Gate remains verifier, not IAM
 
 Freeze Gate may know:
 
 ```text
 canonical source identities
-required authority class identifiers
-canonical evidence trust profile identity
+required authority-class identifiers
+canonical trust-profile identity
 verification rules
 expected exact context bindings
 ```
@@ -574,60 +592,61 @@ It must not own:
 ```text
 users
 organization membership
-role assignment
+role assignments
 standing delegation
-provider fallback policy invented at runtime
+provider fallback invented at runtime
 ```
 
-It also may not mint the evidence it accepts as the sole proof of human authority.
+It also may not mint the sole evidence it accepts as human-authority proof.
 
-## 24. Replay semantics
+## 23. Replay semantics
 
 No global one-time human-decision receipt ledger is introduced.
 
 ```text
-same receipt + different requirement/trust/request/contract/review context = INVALID
-same receipt + same immutable identities + still-valid external evidence = same authorization fact
+same receipt + different requirement/trust/request/contract/review/origin context = INVALID
+same receipt + same immutable identities + still-valid evidence = same authorization fact
 ```
 
-Same-identity revalidation is idempotent verification, not new or broader authority.
+Exactly-once consequential action remains a separate action-consumption property.
 
-Exactly-once consequential side effects remain a separate action-consumption property.
+## 24. Required adversarial cases before implementation
 
-## 25. Required adversarial cases before implementation
-
-At minimum the future boundary must reject:
+The future boundary must reject at least:
 
 1. caller-forged Human Decision Receipt;
 2. fabricated evidence reference;
-3. valid login without required authority;
-4. Human A receipt paired with Human B evidence;
-5. correct actor in wrong organization/tenant/context;
-6. caller/model injects weaker authority requirement;
-7. task or formation removes superior requirement;
-8. missing requirement source defaults permissively;
-9. wrong policy/project repository or commit;
-10. copied/dirty/untracked canonical authority file;
-11. caller-selected alternative trust profile;
-12. receipt-selected issuer/provider;
-13. arbitrary evidence URL selects network origin;
-14. Executor/Decision Adapter self-issues the sole authority evidence;
-15. correct issuer string with attacker-selected permissive verifier;
-16. token/evidence selects its own discovery endpoint or trust root;
-17. valid authority evidence for wrong decision request;
-18. valid authority evidence for wrong project/org/tenant;
-19. valid evidence from expired/revoked/stale authority;
-20. required status is unavailable/unknown;
-21. provider unavailable and runtime falls back to a weaker provider;
-22. review/trust profile changes after human decision;
-23. wrong authority-requirement or trust-profile hash in receipt;
-24. `REJECT` substituted as `ACCEPT`;
-25. `MODIFY` executed without a new review cycle;
-26. old approval generalized as standing trust;
-27. decision adapter claims an action occurred without externally verifiable decision-event evidence;
-28. Freeze Gate authors/selects a weaker policy, issuer or verifier.
+3. caller-forged request-originator identity;
+4. decision actor differs from verified request originator in first slice;
+5. valid login without exact decision binding;
+6. Human A receipt paired with Human B evidence;
+7. caller/model injects weaker authority requirement;
+8. formation profile invents required authority;
+9. task removes superior requirement;
+10. missing superior authority source defaults permissively;
+11. wrong policy/project repository or commit;
+12. dirty/untracked/copied authority policy;
+13. caller-selected alternative trust profile;
+14. receipt-selected issuer/provider;
+15. arbitrary evidence URL selects origin;
+16. Executor/adapter self-issues sole evidence;
+17. correct issuer string with attacker-selected permissive verifier;
+18. evidence selects its own discovery endpoint/trust root;
+19. valid evidence for wrong decision request/context;
+20. expired/revoked/stale authority evidence;
+21. required status unavailable/unknown;
+22. provider unavailable and runtime falls back to weaker provider;
+23. trust profile changes after review;
+24. wrong requirement/trust-profile hash in receipt;
+25. `REJECT` substituted as `ACCEPT`;
+26. `MODIFY` executed without new review;
+27. old approval generalized as standing trust;
+28. decision adapter claims human action without external event proof;
+29. intent-owner approval reused as `WRITE_REPOSITORY` authority;
+30. resource/admin authority reused as permission to redefine user intent;
+31. Freeze Gate authors/selects weaker requirement, provider or verifier.
 
-Expected for every unauthorized or unresolved case:
+Expected:
 
 ```text
 FAIL CLOSED
@@ -635,97 +654,97 @@ NO FROZEN CONTRACT
 NO EXECUTION AUTHORITY
 ```
 
-## 26. Current adversarial-review findings
+## 25. Current design findings
 
 ```text
-R-1 Authorization Receipt too strong
- -> Human Decision Receipt
-
-R-2 decision adapter too broad
- -> decision capture separated from authority evidence
-
-R-3 receipt self-described bounded authority
- -> boundedness moved to exact verifier semantics
-
+R-1 Authorization Receipt -> Human Decision Receipt
+R-2 decision capture separated from authority evidence
+R-3 boundedness moved from receipt claims to verifier semantics
 R-4 F-7 Authority Substitution explicit
-
-R-5 authority requirement separated from authority ownership
-
-R-6 F-8 Authority Requirement Injection / Downgrade explicit
-
-R-7 authority requirement drift bound into decision identity
-
+R-5 requirement separated from external authority ownership
+R-6 F-8 Authority Requirement Injection/Downgrade explicit
+R-7 requirement drift bound into decision identity
 R-8 formation profile rejected as authority owner
-
-R-9 requirements compose conjunctively
-
+R-9 requirement composition made conjunctive
 R-10 F-9 Authority Policy Source Substitution explicit
-
-R-11 existing verified project/policy source machinery reused
- -> no second authority policy root
-
+R-11 existing project/policy verification reused; no second policy root
 R-12 authority requirement separated from evidence source
-
 R-13 evidence ref reduced to locator only
- -> cannot select provider/verifier/trust root
-
-R-14 decision fact split from proof of decision event
- -> external evidence must collectively prove event + entitlement
-
-R-15 F-10 Evidence Self-Issuance explicit
-
+R-14 external evidence must prove event + entitlement/ownership
+R-15 F-10 Self-Issuance explicit
 R-16 F-11 Issuer Substitution / Provider Shopping explicit
-
 R-17 F-12 Evidence Scope Drift explicit
-
 R-18 F-13 Verifier / Trust Profile Substitution explicit
-
-R-19 F-14 Evidence Freshness / Revocation Drift explicit
-
-R-20 trust-profile identity bound into full review/decision/freeze chain
+R-19 F-14 Freshness / Revocation Drift explicit
+R-20 trust-profile identity bound through review/decision/freeze
+R-21 contract-formation authority separated from resource/action authority
+R-22 minimal first-slice authority reduced to verified request/goal owner
+R-23 original request identity itself must be externally rooted
+R-24 F-15 Authority Dimension Conflation explicit
 ```
 
-F-7 through F-14 must be reconciled into the superior human-authority model before that model is ever merged.
+F-7 through F-15 must be reconciled into the superior human-authority model before that model is merged.
+
+## 26. Current design gap discovered on `main`
+
+Current formation profile states:
+
+```text
+human_authorization_required: true
+```
+
+but no superior canonical source currently defines the exact formation authority class/trust-profile identity required for `REQUEST_TO_CONTRACT_001`.
+
+Because formation profile is not an authority owner, implementation MUST NOT infer a default such as `USER` or accept caller-selected authority.
+
+This is a deliberate fail-closed design blocker, not an invitation to hard-code an identity technology.
 
 ## 27. External Authority Evidence Trust Review — current result
 
-Provisional ownership is now:
+The evidence trust problem is substantially resolved at the design level:
 
 ```text
-EXECUTOR_POLICY / PROJECT GOVERNANCE
-  own canonical authority requirement + evidence trust requirements
+SUPERIOR POLICY / PROJECT GOVERNANCE
+  owns requirement + accepted evidence trust profile
 
-EXTERNAL AUTHORITY SYSTEM
-  owns mutable identity/role/authority truth
-  produces externally rooted evidence
+EXTERNAL TRUST SOURCE
+  roots request-origin + decision-event + authority facts
 
 HUMAN DECISION ADAPTER
-  presents exact material and records a local event
-  owns no authority truth and selects no trust provider
+  presents material / records local event
+  owns no trust-provider selection
 
 HUMAN DECISION RECEIPT
-  records exact decision bindings and evidence refs
+  records exact bindings and refs
   is not proof
 
 FREEZE GATE
-  resolves canonical trust snapshot
-  verifies external decision-event + entitlement claims
-  owns neither IAM membership nor the evidence trust policy
+  verifies canonical trust snapshot + external claims
+  owns neither IAM nor policy
 ```
 
-The design deliberately does not choose OAuth, OIDC, passkeys, GitHub approvals, signatures, PKI, HMAC, a provider API, or a UI.
+For the first GP001 formation slice, the narrowest defensible human-authority requirement is:
+
+```text
+VERIFIED REQUEST / GOAL OWNER
+must explicitly ACCEPT
+this exact decision request
+```
+
+not a generic organization IAM role.
 
 ## 28. Gate
 
 ```text
 AUTHORITY CONTEXT OWNERSHIP: SUBSTANTIALLY RESOLVED
-EXTERNAL AUTHORITY EVIDENCE TRUST: SUBSTANTIALLY RESOLVED AT DESIGN LEVEL
+EXTERNAL AUTHORITY EVIDENCE TRUST: SUBSTANTIALLY RESOLVED
+FIRST-SLICE AUTHORITY DIMENSION: IDENTIFIED
 IMPLEMENTATION: BLOCKED
 MERGE: NO
 ```
 
-One design question remains before accepting PR #52:
+One final design action remains before PR #52 can be considered for acceptance:
 
-> What is the minimum canonical Evidence Trust Profile for the first GP001 human-decision slice — specifically which claims must be externally provable, without yet selecting a concrete identity technology or provider?
+> Reconcile the superior model (#51) so it explicitly distinguishes intent authority from action authority and defines that the first REQUEST_TO_CONTRACT_001 slice requires externally verified request/goal-owner approval, while leaving provider technology unresolved.
 
-The answer must be small enough to test adversarially and must not become a generic IAM schema.
+Only after that model alignment should PR #52 be reconsidered for ACCEPT. No boundary implementation should begin before then.
