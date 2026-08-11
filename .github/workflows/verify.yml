@@ -32,7 +32,7 @@ jobs:
         run: python -m executor.cli validate-project project_contracts/executor-self.yaml --policy EXECUTOR_POLICY.yaml --base-dir .
 
       - name: Validate locked task fixture
-        run: python -m executor.cli validate-task tasks/examples/EXECUTOR_TASK_FIXTURE-001.yaml --policy EXECUTOR_POLICY.yaml --base-dir . --repository-root litrgratis-pixel/Executor=.
+        run: python -m executor.cli validate-task tasks/examples/EXECUTOR_TASK_FIXTURE-001.yaml --policy EXECUTOR_POLICY.yaml --base-dir . --repository-root JTJ07/Executor=.
 
       - name: Prove GINSENG placeholder task is blocked
         run: |
@@ -56,7 +56,7 @@ jobs:
 
       - name: Read untrusted repository data through wrapper
         run: |
-          output=$(python -m executor.cli repository-read --project project_contracts/executor-self.yaml --policy EXECUTOR_POLICY.yaml --base-dir . --repository litrgratis-pixel/Executor --commit "$GITHUB_SHA" --root . --path tests/fixtures/untrusted_prompt.md)
+          output=$(python -m executor.cli repository-read --project project_contracts/executor-self.yaml --policy EXECUTOR_POLICY.yaml --base-dir . --repository JTJ07/Executor --commit "$GITHUB_SHA" --root . --path tests/fixtures/untrusted_prompt.md)
           printf '%s' "$output" | grep '"trust": "untrusted_data"'
           printf '%s' "$output" | grep '"can_instruct_executor": false'
 
