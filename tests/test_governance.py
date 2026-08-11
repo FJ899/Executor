@@ -13,7 +13,8 @@ POLICY_PATH = ROOT / "EXECUTOR_POLICY.yaml"
 PROJECT_PATH = ROOT / "project_contracts/executor-self.yaml"
 TASK_FIXTURE_PATH = ROOT / "tasks/examples/EXECUTOR_TASK_FIXTURE-001.yaml"
 GINSENG_TASK_PATH = ROOT / "tasks/examples/GINSENG_TEST-003.yaml"
-REPOSITORY_ROOTS = {"litrgratis-pixel/Executor": ROOT}
+CURRENT_EXECUTOR_REPOSITORY = "JTJ07/Executor"
+REPOSITORY_ROOTS = {CURRENT_EXECUTOR_REPOSITORY: ROOT}
 
 
 class GovernanceTest(unittest.TestCase):
@@ -130,7 +131,7 @@ class GovernanceTest(unittest.TestCase):
                 "--base-dir",
                 str(ROOT),
                 "--repository-root",
-                f"litrgratis-pixel/Executor={ROOT}",
+                f"{CURRENT_EXECUTOR_REPOSITORY}={ROOT}",
             ])
         self.assertEqual(code, 0)
         self.assertIn("READY_FOR_MODEL", out.getvalue())
