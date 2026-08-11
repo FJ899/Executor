@@ -15,7 +15,7 @@ from executor.repository_snapshot import RepositorySnapshotError, verify_worktre
 
 _PROFILE_SCHEMA = "executor-contract-formation-profile/1.0"
 _PROFILE_PATH = "formation_profiles/REQUEST_TO_CONTRACT_001.json"
-_EXECUTOR_REPOSITORY = "litrgratis-pixel/Executor"
+_EXECUTOR_REPOSITORY = "JTJ07/Executor"
 
 
 class FormationError(RuntimeError):

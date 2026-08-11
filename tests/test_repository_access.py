@@ -17,6 +17,7 @@ from executor.repository_reader import read_wrapped_repository_file
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_PATH = ROOT / "project_contracts/executor-self.yaml"
 POLICY_PATH = ROOT / "EXECUTOR_POLICY.yaml"
+CURRENT_EXECUTOR_REPOSITORY = "JTJ07/Executor"
 
 
 def git_head() -> str:
@@ -90,14 +91,14 @@ class RepositoryAccessTest(unittest.TestCase):
     def test_reader_marks_authoritative_and_untrusted_files(self):
         commit = git_head()
         authoritative = read_wrapped_repository_file(
-            repository="litrgratis-pixel/Executor",
+            repository=CURRENT_EXECUTOR_REPOSITORY,
             commit=commit,
             root=ROOT,
             path="EXECUTOR_POLICY.yaml",
             project_contract=self.project(),
         )
         untrusted = read_wrapped_repository_file(
-            repository="litrgratis-pixel/Executor",
+            repository=CURRENT_EXECUTOR_REPOSITORY,
             commit=commit,
             root=ROOT,
             path="tests/fixtures/untrusted_prompt.md",
@@ -119,7 +120,7 @@ class RepositoryAccessTest(unittest.TestCase):
             )
         with self.assertRaises(RepositoryIdentityError):
             read_wrapped_repository_file(
-                repository="litrgratis-pixel/Executor",
+                repository=CURRENT_EXECUTOR_REPOSITORY,
                 commit="1" * 40,
                 root=ROOT,
                 path="README.md",
@@ -138,7 +139,7 @@ class RepositoryAccessTest(unittest.TestCase):
                 "--project", str(PROJECT_PATH),
                 "--policy", str(POLICY_PATH),
                 "--base-dir", str(ROOT),
-                "--repository", "litrgratis-pixel/Executor",
+                "--repository", CURRENT_EXECUTOR_REPOSITORY,
                 "--commit", git_head(),
                 "--root", str(ROOT),
                 "--path", "tests/fixtures/untrusted_prompt.md",

@@ -1,6 +1,6 @@
 # Creative OS Executor
 
-Repozytorium: `litrgratis-pixel/Executor`.
+Repozytorium: `JTJ07/Executor`.
 
 Robocza nazwa systemu i pakietu Python: `creative-os-executor`. Nie oznacza ona osobnego repozytorium.
 

@@ -14,6 +14,7 @@ POLICY = ROOT / "EXECUTOR_POLICY.yaml"
 PROJECT = ROOT / "project_contracts/executor-self.yaml"
 TASK_FIXTURE = ROOT / "tasks/examples/EXECUTOR_TASK_FIXTURE-001.yaml"
 GINSENG_TASK = ROOT / "tasks/examples/GINSENG_TEST-003.yaml"
+CURRENT_EXECUTOR_REPOSITORY = "JTJ07/Executor"
 
 
 class ValidationTruthTest(unittest.TestCase):
@@ -42,7 +43,7 @@ class ValidationTruthTest(unittest.TestCase):
             load_contract(TASK_FIXTURE),
             executor_policy=self.policy(),
             base_dir=ROOT,
-            repository_roots={"litrgratis-pixel/Executor": ROOT},
+            repository_roots={CURRENT_EXECUTOR_REPOSITORY: ROOT},
         )
         for result in (project, task):
             self.assertEqual(result.status, ValidationStatus.VALID)
@@ -189,7 +190,7 @@ class ValidationTruthTest(unittest.TestCase):
                 task,
                 executor_policy=self.policy(),
                 base_dir=base,
-                repository_roots={"litrgratis-pixel/Executor": ROOT},
+                repository_roots={CURRENT_EXECUTOR_REPOSITORY: ROOT},
             )
             self.assertEqual(result.status, ValidationStatus.INVALID)
             self.assertIn("UNSAFE_TEST_CONTRACT_PATH", {issue.code for issue in result.issues})

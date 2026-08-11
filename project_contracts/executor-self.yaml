@@ -2,7 +2,7 @@
   "schema_version": "executor-project/1.0",
   "project": {
     "name": "Creative OS Executor",
-    "repository": "litrgratis-pixel/Executor",
+    "repository": "JTJ07/Executor",
     "entrypoint": "README.md"
   },
   "authoritative_sources": [

@@ -13,6 +13,7 @@ from executor.sandbox.spec import CommandRule, SandboxExecutionContext, SandboxS
 ROOT = Path(__file__).resolve().parents[1]
 IMAGE_ID = "sha256:" + "1" * 64
 EXECUTION_ID = "a" * 32
+CURRENT_EXECUTOR_REPOSITORY = "JTJ07/Executor"
 
 
 def run_git(root: Path, *args: str) -> str:
@@ -43,7 +44,7 @@ class SandboxUnitTest(unittest.TestCase):
         values.update(changes)
         return SandboxSpec(**values)
 
-    def context(self, root=ROOT, source=None, *, repository="litrgratis-pixel/Executor", purpose="EXECUTOR_FIXTURE", commit=None):
+    def context(self, root=ROOT, source=None, *, repository=CURRENT_EXECUTOR_REPOSITORY, purpose="EXECUTOR_FIXTURE", commit=None):
         return SandboxExecutionContext(
             repository=repository,
             commit=commit or self.commit,

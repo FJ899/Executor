@@ -236,7 +236,7 @@ class RequestToContract001Tests(unittest.TestCase):
         surface = prepare_clean_authorization_surface(current)
         request = current.export_human_authorization_request()
 
-        self.assertEqual(request["executor_repository"], "litrgratis-pixel/Executor")
+        self.assertEqual(request["executor_repository"], "JTJ07/Executor")
         self.assertEqual(request["executor_commit"], git_head())
         self.assertEqual(request["draft_sha256"], surface["draft_sha256"])
         self.assertEqual(request["formation_profile_sha256"], sha256_file(PROFILE_PATH))
