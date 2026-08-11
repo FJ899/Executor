@@ -40,7 +40,7 @@ class DockerSandboxBackend:
         *,
         policy_snapshot: ExecutionPolicySnapshot,
         docker_binary: str = "docker",
-        control_repository: str = "litrgratis-pixel/Executor",
+        control_repository: str = "JTJ07/Executor",
     ):
         if not isinstance(policy_snapshot, ExecutionPolicySnapshot):
             raise SandboxExecutionError(
