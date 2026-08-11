@@ -5,7 +5,7 @@
   "mode": "AUDIT",
   "repositories": {
     "target": {
-      "name": "litrgratis-pixel/Executor",
+      "name": "JTJ07/Executor",
       "commit": "757e78a06f08fbfd050f765ea65113c3b995cd04"
     }
   },
