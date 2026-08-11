@@ -13,6 +13,9 @@ from executor.sandbox.policy_snapshot import ExecutionPolicyError, load_executio
 from executor.sandbox.spec import SandboxExecutionContext
 
 
+CURRENT_EXECUTOR_REPOSITORY = "JTJ07/Executor"
+
+
 def run_git(root: Path, *args: str) -> str:
     result = subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, text=True)
     return result.stdout.strip()
@@ -40,7 +43,7 @@ def create_repository(root: Path, *, external_projects=False) -> str:
     (source / "data.txt").write_text("committed\n", encoding="utf-8")
     run_git(root, "add", "EXECUTOR_POLICY.yaml", ".gitignore", "source")
     run_git(root, "commit", "-m", "fixture")
-    run_git(root, "remote", "add", "origin", "https://github.com/litrgratis-pixel/Executor.git")
+    run_git(root, "remote", "add", "origin", f"https://github.com/{CURRENT_EXECUTOR_REPOSITORY}.git")
     return run_git(root, "rev-parse", "HEAD")
 
 
@@ -100,7 +103,7 @@ class RepositorySnapshotTest(unittest.TestCase):
                 ]
             }
             clean = read_wrapped_repository_file(
-                repository="litrgratis-pixel/Executor",
+                repository=CURRENT_EXECUTOR_REPOSITORY,
                 commit=commit,
                 root=root,
                 path="source/data.txt",
@@ -110,7 +113,7 @@ class RepositorySnapshotTest(unittest.TestCase):
             (root / "source/data.txt").write_text("dirty\n", encoding="utf-8")
             with self.assertRaisesRegex(RepositorySnapshotError, "differs from committed blob"):
                 read_wrapped_repository_file(
-                    repository="litrgratis-pixel/Executor",
+                    repository=CURRENT_EXECUTOR_REPOSITORY,
                     commit=commit,
                     root=root,
                     path="source/data.txt",
