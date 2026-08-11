@@ -11,11 +11,15 @@ from executor.sandbox.policy_snapshot import (
 )
 
 
+CURRENT_EXECUTOR_REPOSITORY = "JTJ07/Executor"
+PREVIOUS_EXECUTOR_REPOSITORY = "litrgratis-pixel/Executor"
+
+
 class PolicySnapshotGuardTest(unittest.TestCase):
     def test_snapshot_cannot_be_constructed_by_caller(self):
         with self.assertRaisesRegex(ExecutionPolicyError, "verified policy file"):
             ExecutionPolicySnapshot(
-                repository="litrgratis-pixel/Executor",
+                repository=CURRENT_EXECUTOR_REPOSITORY,
                 commit="1" * 40,
                 repository_root=Path("."),
                 source_path="EXECUTOR_POLICY.yaml",
@@ -27,7 +31,7 @@ class PolicySnapshotGuardTest(unittest.TestCase):
                 _proof=object(),
             )
 
-    def make_policy_repo(self, execution):
+    def make_policy_repo(self, execution, repository=CURRENT_EXECUTOR_REPOSITORY):
         temp = tempfile.TemporaryDirectory()
         root = Path(temp.name)
         subprocess.run(["git", "-C", str(root), "init", "-q"], check=True)
@@ -54,7 +58,7 @@ class PolicySnapshotGuardTest(unittest.TestCase):
                 "remote",
                 "add",
                 "origin",
-                "https://github.com/litrgratis-pixel/Executor.git",
+                f"https://github.com/{repository}.git",
             ],
             check=True,
         )
@@ -78,6 +82,41 @@ class PolicySnapshotGuardTest(unittest.TestCase):
             check=True,
         ).stdout.strip()
         return temp, root, commit
+
+    def test_default_self_identity_is_current_repository(self):
+        execution = {
+            "external_projects": False,
+            "controlled_external_fixtures": [],
+            "auto_merge": False,
+            "default_network": False,
+            "default_secrets": [],
+        }
+        temp, root, commit = self.make_policy_repo(execution)
+        self.addCleanup(temp.cleanup)
+
+        snapshot = load_execution_policy_snapshot(root, commit=commit)
+
+        self.assertEqual(snapshot.repository, CURRENT_EXECUTOR_REPOSITORY)
+
+    def test_previous_owner_is_rejected_by_current_self_identity(self):
+        execution = {
+            "external_projects": False,
+            "controlled_external_fixtures": [],
+            "auto_merge": False,
+            "default_network": False,
+            "default_secrets": [],
+        }
+        temp, root, commit = self.make_policy_repo(
+            execution,
+            repository=PREVIOUS_EXECUTOR_REPOSITORY,
+        )
+        self.addCleanup(temp.cleanup)
+
+        with self.assertRaisesRegex(
+            ExecutionPolicyError,
+            "expected JTJ07/Executor",
+        ):
+            load_execution_policy_snapshot(root, commit=commit)
 
     def test_controlled_external_fixture_is_exact_policy_authority(self):
         execution = {
