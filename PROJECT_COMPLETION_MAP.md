@@ -37,6 +37,33 @@ AI RECOMMENDATION != HUMAN DECISION
 
 No `HUMAN_REQUIRED` option is selected by this map. `DONE` is deliberately conditional on the human choosing the completion endpoint and the semantic forks in section 7.
 
+### 0.1 Adaptive completion control
+
+`DECISION`, supplied by the human during review of this map:
+
+`PROJECT_COMPLETION_MAP.md` is not a rigid workflow or a fixed queue of tasks. It freezes `GOAL`, the selected `DONE`, authority boundaries, known dependencies and evidence gates. It does not freeze the route taken between them.
+
+After every material state change, the executing agent must reassess the whole project against the unchanged approved `GOAL` and `DONE`, then answer:
+
+> What currently blocks the approved DONE most, and which available capability can remove that constraint best and most safely?
+
+The operating loop is:
+
+```text
+MATERIAL STATE CHANGE
+  -> RECONSTRUCT CURRENT WHOLE-PROJECT STATE
+  -> COMPARE CURRENT STATE WITH UNCHANGED GOAL + DONE
+  -> IDENTIFY THE HIGHEST-LEVERAGE CURRENT CONSTRAINT
+  -> SELECT THE BEST-FIT AVAILABLE CAPABILITY
+  -> EXECUTE THE SMALLEST SUFFICIENT SAFE ACTION
+  -> RECORD EVIDENCE AND THE NEW STATE
+  -> REASSESS THE WHOLE PROJECT AGAIN
+```
+
+The agent must not ask “which map item is next?” or execute a workstream merely because it appears earlier in this document. It must respect hard dependencies and authority gates, but may reorder, combine, replace or abandon implementation steps when current evidence shows a better route to the same approved DONE.
+
+No specialized project, component, framework, agent or tool receives priority merely because it exists. Selection is capability-based: use the mechanism that removes the current constraint most effectively, safely and economically. If the base intelligence can do that better than a specialized project, use the base intelligence.
+
 ## 1. Evidence baseline
 
 ### 1.1 Canonical baseline
@@ -267,7 +294,9 @@ Consequence: best matches a repeatable “whole product 1.0” claim, but requir
 | GAP-15 | Release/operator documentation and packaging evidence are incomplete | GAP-09–12 | `AI_DELEGABLE`; public release is human-authorized | setup/use/error/report docs match reality; wheel/CLI smoke passes; support/version policy matches endpoint |
 | GAP-16 | Final independent completion fact and human acceptance do not exist | GAP-01–15 | independent verifier + `HUMAN_REQUIRED` acceptance | Phase C returns PASS and final human decision is recorded |
 
-## 6. Dependency order and critical path
+## 6. Dependency constraints and provisional completion path
+
+The arrows below express hard prerequisites and currently known constraint relationships. They are not a fixed execution schedule. Subject to those prerequisites, each next action is selected by the adaptive completion-control rule in section 0.1.
 
 ```text
 CURRENT STATE: main@728d23e / P0 + bounded GP001 + formation phase 1
@@ -309,7 +338,7 @@ CURRENT STATE: main@728d23e / P0 + bounded GP001 + formation phase 1
                 FINAL HUMAN ACCEPTANCE
 ```
 
-Parallel work is permitted only where the arrows allow it. In particular, solver-interface work and the atomic ledger may proceed in parallel after their semantic contracts are fixed; no real effect may run before verified freeze and atomic effect authority exist.
+Parallel work is permitted only where the arrows allow it. In particular, solver-interface work and the atomic ledger may proceed in parallel after their semantic contracts are fixed; no real effect may run before verified freeze and atomic effect authority exist. After either path changes project state materially, the whole project is reassessed before more work is selected.
 
 ## 7. Decision forks
 
@@ -470,7 +499,7 @@ The executing agent's own DONE statement is observational evidence only and cann
 
 The approved Phase-B agent should begin from fresh `main`, not by merging a historical stack. It may mine old drafts for requirements and tests, but every adopted change must be reconciled with the current code and selected HR decisions.
 
-Required workstreams:
+Coverage obligations, not a fixed workflow:
 
 1. canonical state/docs and CI hygiene;
 2. current request surface;
@@ -483,7 +512,7 @@ Required workstreams:
 9. full evidence/replay, metrics and documentation;
 10. independent Phase-C handoff.
 
-Phase B ends only at G-01–G-18 PASS or an objective external blocker.
+The agent may reorder, combine, replace or eliminate workstreams when evidence shows that another available capability reaches the unchanged DONE more directly. After every material state change it must rerun the whole-project constraint assessment from section 0.1. Phase B ends only at G-01–G-18 PASS or an objective external blocker.
 
 ## 12. Human semantic approval template
 
