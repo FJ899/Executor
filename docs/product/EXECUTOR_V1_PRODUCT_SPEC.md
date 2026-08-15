@@ -1,10 +1,10 @@
 ---
 document: "Executor v1 Product Spec"
 version: "1.1"
-status: "USER ACCEPTED DIRECTION / ACTIVE PRODUCT BASELINE CANDIDATE"
+status: "USER ACCEPTED DIRECTION / PHASE-1 FORMATION IMPLEMENTED"
 date: "2026-08-09"
 scope: "first user, request-to-contract front door, first product promise, first end-to-end workflow and explicit non-goals"
-repository: "litrgratis-pixel/Executor"
+repository: "JTJ07/Executor"
 ---
 
 # Executor v1 Product Spec
@@ -81,7 +81,7 @@ The first complete technical scenario remains:
 
 The accepted GP001 runtime has already demonstrated the bounded execution half of the product path.
 
-The next product gap is the front half:
+The phase-1 front door is implemented through the non-executable authorization request. The next product gap is the verified human-authority transition:
 
 ```text
 USER REQUEST

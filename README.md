@@ -19,7 +19,7 @@ Aktualny zakres implementacji fundamentów obejmuje:
 
 Sandbox używa backendu Docker bez fallbacku do wykonania na hoście. Profil wymusza: read-only root, read-only source, osobny tmpfs workspace, brak sieci, brak sekretów, niedostępny HOME, non-root, usunięte capabilities, limity CPU/RAM/dysku/procesów/czasu oraz cleanup po runie. Polityka, source, obraz i własność kontenera są wiązane z niezmiennymi identyfikatorami oraz weryfikowane fail-closed.
 
-M2B jest zweryfikowany wyłącznie na fixtures należących do repo Executora. Uruchamianie kodu z COS, ScriptOps, BPM:160 i innych repozytoriów nadal jest zabronione.
+M2B jest zweryfikowany na fixtures należących do repo Executora. GP001 dodatkowo posiada jedną dokładną klasę `CONTROLLED_EXTERNAL_FIXTURE`, związaną przez politykę z zadaniem, repozytorium i commitem pilota. Ogólne wykonywanie zewnętrznych projektów nadal jest zabronione.
 
 ## Start
 
@@ -28,7 +28,13 @@ python -m unittest discover -s tests -v
 python -m compileall -q executor
 python -m executor.cli validate-project project_contracts/executor-self.yaml --policy EXECUTOR_POLICY.yaml --base-dir .
 python -m executor.cli validate-test test_contracts/examples/valid_test.yaml --base-dir tests/fixtures --holdout-evidence tests/fixtures/holdout_evidence.json
+python -m executor.cli form-gp001-request \
+  --request-id request-001 \
+  --request "Napraw failing test dotyczący atomowości batcha." \
+  --understood-objective "Naprawić regresję atomowości ProjectRegistry.add_many."
 ```
+
+Ostatnia komenda tworzy wyłącznie nieegzekwowalny wniosek związany hashami z zaakceptowanym profilem i kontraktem GP001. Zatrzymuje się na `AWAITING_VERIFIED_HUMAN_AUTHORIZATION`; nie przyjmuje decyzji człowieka i nie wykonuje zmiany.
 
 Pliki `.yaml` używają składni JSON, która jest poprawnym podzbiorem YAML 1.2.
 
@@ -74,8 +80,9 @@ ARCHITECTURE / PRODUCT BUILD BASELINE: ACCEPTED
 PR #42 MATURITY ADVANCEMENT: NONE
 PR #42 RUNTIME IMPLEMENTATION CLAIM: NONE
 
-CURRENT BUILD TARGET: GP001 — FIX A FAILING TEST VERTICAL PATH
-NEXT BUILD ARTIFACT AFTER AUTHORITY RECONCILIATION: GP001 MACHINE-READABLE CONTRACT
+CURRENT BUILD TARGET: VERIFIED HUMAN AUTHORITY BOUNDARY FOR CONTRACT FORMATION
+COMPLETED BUILD SLICE: REQUEST_TO_CONTRACT_001 PHASE 1 / PR #50
+NEXT BUILD ARTIFACT: TRUST-PROVIDER SELECTION + EXACT DRAFT-BOUND DECISION EVIDENCE
 
 CURRENT PROVEN PRODUCT LEVEL: P0 — FOUNDATION / ACHIEVED IN DECLARED SCOPE
 P0 ACHIEVED SHA: b092a85e82eb81ec6dc7db4a7064409c6c383359
@@ -102,10 +109,13 @@ M2B: IMPLEMENTED / FIXTURES VERIFIED
 M3+: NOT CLAIMED ON MAIN
 PRODUCT PURPOSE: USER APPROVED / DOCUMENTED
 BUILD BASELINE: ACCEPTED THROUGH PR #42
-GP001 PRODUCT PATH: DEFINED / NOT YET END-TO-END IMPLEMENTED
+GP001 EXECUTION PATH: IMPLEMENTED / REAL E2E + REPLAY PROVEN IN BOUNDED SCOPE
+REQUEST_TO_CONTRACT_001 PHASE 1: IMPLEMENTED / CLI-ACCESSIBLE / NON-EXECUTABLE
+VERIFIED HUMAN AUTHORITY: NOT IMPLEMENTED / EXPLICIT NEXT BOUNDARY
 POTENTIAL AND DECISION PACKET: LOGICAL CONTRACT / NOT IMPLEMENTED
 ACTION AUTHORIZATION PACKET: CONTRACT FROZEN / VALIDATOR IMPLEMENTED / ATOMIC LEDGER NOT CLAIMED ON MAIN
 WORK AND AUDIT PROTOCOL: DOCUMENTED / RUNTIME ENFORCEMENT NOT CLAIMED
-EXTERNAL PROJECT EXECUTION: FORBIDDEN
+GENERAL EXTERNAL PROJECT EXECUTION: FORBIDDEN
+CONTROLLED EXTERNAL FIXTURE: GP001 ONLY / EXACT POLICY BINDING
 AUTO MERGE: DISABLED
 ```

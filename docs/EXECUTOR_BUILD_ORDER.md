@@ -1,10 +1,10 @@
 ---
 document: "Executor Build Order"
 version: "1.1"
-status: "USER ACCEPTED / ACTIVE ARCHITECTURE-PRODUCT BUILD ORDER CANDIDATE"
+status: "ACTIVE / CURRENT THROUGH REQUEST_TO_CONTRACT_001 PHASE 1"
 date: "2026-08-09"
 scope: "ordered path from first repeatable execution slice to governed request-to-contract product entry"
-repository: "litrgratis-pixel/Executor"
+repository: "JTJ07/Executor"
 ---
 
 # Executor Build Order v1.1
@@ -134,9 +134,9 @@ human_decision_required: true
 
 The above phases establish one bounded repeatable execution slice. They do not establish a maturity or product-readiness claim.
 
-## 5. Current phase — governed request-to-contract formation
+## 5. Completed phase — governed request-to-contract formation
 
-### PHASE H — REQUEST_TO_CONTRACT_001
+### PHASE H — REQUEST_TO_CONTRACT_001 / PHASE 1 ACCEPTED
 
 Purpose:
 
@@ -275,11 +275,33 @@ normal user request
   -> ACTION_COMPLETED_REVIEW_REQUIRED
 ```
 
-This will be the first product path that begins with a human request rather than an internal contract artifact.
+Phase 1 was accepted through PR #50. It preserves the verbatim request, separates model/process provenance, creates and critiques the exact canonical GP001 draft, and exports a hash-bound non-executable authorization request. It intentionally stops at `AWAITING_VERIFIED_HUMAN_AUTHORIZATION`.
 
-## 6. Work explicitly deferred
+## 6. Current phase — verified human authority boundary
 
-Until `REQUEST_TO_CONTRACT_001` needs them to remove a measured blocker:
+Purpose:
+
+> Allow an authenticated human decision bound to the exact current draft to create `AUTHORIZED_AND_FROZEN`, without accepting a caller-provided role string or self-declared identity as authority.
+
+Required inputs before implementation:
+
+- an explicitly selected request-origin / human-identity trust provider;
+- evidence semantics for `ACCEPT`, `MODIFY` and `REJECT` bound to `draft_sha256`;
+- freshness, replay and revocation rules;
+- a negative-test plan proving that process-local or model-generated claims cannot cross the boundary.
+
+Until those inputs are selected, the correct terminal result is:
+
+```text
+AWAITING_VERIFIED_HUMAN_AUTHORIZATION
+executable: false
+```
+
+This is an authority/design decision, not a missing convenience method. The repository must not fabricate a generic identity provider to make the state transition green.
+
+## 7. Work explicitly deferred
+
+Until the verified-human-authority boundary needs them to remove a measured blocker:
 
 - separate proposer/critic/researcher agent services;
 - multi-agent orchestration;
@@ -294,7 +316,7 @@ Until `REQUEST_TO_CONTRACT_001` needs them to remove a measured blocker:
 - automatic contract authorization;
 - cosmetic UI expansion.
 
-## 7. Decision rule for every next PR
+## 8. Decision rule for every next PR
 
 A PR enters the critical path only if all three are answerable:
 
@@ -308,10 +330,10 @@ For formation work add a fourth question:
 
 If these answers are missing, the work is deferred or moved outside the critical path.
 
-## 8. Immediate next artifact
+## 9. Immediate next artifact
 
-After the contract-formation governance baseline is accepted, the next critical-path artifact is:
+The next critical-path artifact is:
 
-> **REQUEST_TO_CONTRACT_001 machine-readable formation contract/state model and adversarial tests.**
+> **A provider-specific verified-human-authority contract and adversarial evidence plan, selected explicitly before runtime implementation.**
 
-Do not begin GP002, a generalized CLI, multi-agent roles or broader capabilities before this boundary is demonstrated.
+Do not begin GP002, generalized task generation, multi-agent roles or broader capabilities before this boundary is demonstrated.

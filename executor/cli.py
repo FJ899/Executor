@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+from pathlib import Path
 
 from executor.checkpoints import build_snapshot
 from executor.contracts import validate_test_contract
@@ -9,6 +11,7 @@ from executor.governance import validate_project_bundle, validate_task_bundle
 from executor.policy import PolicyEngine
 from executor.repository_reader import read_wrapped_repository_file
 from executor.repository_roots import parse_repository_roots
+from executor.request_to_contract import FormationError, RequestToContract001
 from executor.state_machine import InvalidTransition, RunIntegrityError, RunState, RunStore
 from executor.strict_json import load_json_object
 
@@ -50,6 +53,20 @@ def _add_governance_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--base-dir", default=".")
 
 
+def _git_head(root: str) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "-C", root, "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise FormationError(f"cannot resolve Executor commit: {exc}") from exc
+    return result.stdout.strip()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="creative-os-executor")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -88,6 +105,18 @@ def main(argv: list[str] | None = None) -> int:
     p_read.add_argument("--commit", required=True)
     p_read.add_argument("--root", required=True)
     p_read.add_argument("--path", required=True)
+
+    p_form = sub.add_parser(
+        "form-gp001-request",
+        help="form a non-executable canonical GP001 authorization request",
+    )
+    p_form.add_argument("--request-id", required=True)
+    p_form.add_argument("--request", required=True)
+    p_form.add_argument("--understood-objective", required=True)
+    p_form.add_argument("--executor-root", default=".")
+    p_form.add_argument("--executor-commit", default=None)
+    p_form.add_argument("--out-of-scope", action="append", default=[])
+    p_form.add_argument("--open-question", action="append", default=[])
 
     p_create = sub.add_parser("run-create")
     p_create.add_argument("--runs-root", default="runs")
@@ -162,6 +191,27 @@ def main(argv: list[str] | None = None) -> int:
             )
             _print(wrapped)
             return 0
+        if args.command == "form-gp001-request":
+            commit = args.executor_commit or _git_head(args.executor_root)
+            formation = RequestToContract001(
+                executor_root=Path(args.executor_root),
+                executor_commit=commit,
+                request_id=args.request_id,
+                user_request=args.request,
+            )
+            formation.propose_canonical_gp001(
+                understood_objective=args.understood_objective,
+                out_of_scope_discoveries=args.out_of_scope,
+                open_questions=args.open_question,
+            )
+            formation.create_draft()
+            formation.critique()
+            surface = formation.present_for_authorization()
+            if surface["status"] != "AWAITING_VERIFIED_HUMAN_AUTHORIZATION":
+                _print(surface)
+                return 2
+            _print(formation.export_human_authorization_request())
+            return 0
         if args.command == "run-create":
             store = RunStore(args.runs_root)
             run_id = store.create(_snapshot_from_args(args), run_id=args.run_id)
@@ -178,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
             result = RunStore(args.runs_root).revalidate(args.run_id, _snapshot_from_args(args))
             _print(result.to_dict())
             return 0 if result.unchanged else 3
-    except (InvalidTransition, RunIntegrityError, OSError, ValueError) as exc:
+    except (FormationError, InvalidTransition, RunIntegrityError, OSError, ValueError) as exc:
         _print({"status": "BLOCKED", "error": str(exc)})
         return 2
     return 2

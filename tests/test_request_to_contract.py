@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import inspect
+import io
 import json
 import subprocess
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+
+from executor.cli import main
 
 from executor.request_to_contract import (
     FormationError,
@@ -144,6 +148,68 @@ class RequestToContract001Tests(unittest.TestCase):
         self.assertEqual(user_records[0]["path"], "$.user_request")
         self.assertEqual(user_records[0]["value"], USER_REQUEST)
         self.assertGreaterEqual(len(model_records), 2)
+        objective = [
+            item for item in model_records if item["path"] == "$.understood_objective"
+        ]
+        self.assertEqual(len(objective), 1)
+        self.assertIn("not authoritative user intent", objective[0]["note"])
+
+    def test_canonical_cli_exports_non_executable_authorization_request(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = main(
+                [
+                    "form-gp001-request",
+                    "--request-id",
+                    "request-cli-001",
+                    "--request",
+                    USER_REQUEST,
+                    "--understood-objective",
+                    "Naprawić regresję atomowości ProjectRegistry.add_many.",
+                    "--executor-root",
+                    str(ROOT),
+                    "--executor-commit",
+                    git_head(),
+                ]
+            )
+        payload = json.loads(output.getvalue())
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["status"], "AWAITING_VERIFIED_HUMAN_AUTHORIZATION")
+        self.assertEqual(payload["required_authority"], "VERIFIED_EXTERNAL_HUMAN_AUTHORITY")
+        self.assertFalse(payload["decision_surface"]["executable"])
+        self.assertEqual(
+            payload["decision_surface"]["proposed_write_scope"],
+            ["project_registry/registry.py"],
+        )
+
+    def test_canonical_cli_open_question_fails_closed(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = main(
+                [
+                    "form-gp001-request",
+                    "--request-id",
+                    "request-cli-blocked",
+                    "--request",
+                    USER_REQUEST,
+                    "--understood-objective",
+                    "Naprawić regresję atomowości ProjectRegistry.add_many.",
+                    "--executor-root",
+                    str(ROOT),
+                    "--executor-commit",
+                    git_head(),
+                    "--open-question",
+                    "Czy wolno rozszerzyć zakres?",
+                ]
+            )
+        payload = json.loads(output.getvalue())
+        self.assertEqual(code, 2)
+        self.assertEqual(payload["status"], "NEEDS_CLARIFICATION")
+        self.assertFalse(payload["executable"])
+        self.assertIn(
+            "OPEN_QUESTIONS_REQUIRE_CLARIFICATION",
+            {item["code"] for item in payload["critique"]},
+        )
 
     def test_scope_expansion_is_blocked_by_critique(self) -> None:
         widened = canonical_task()

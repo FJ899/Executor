@@ -1,10 +1,10 @@
 ---
 document: "REQUEST_TO_CONTRACT_001"
 version: "0.2"
-status: "FORMATION PHASE 1 CANDIDATE / VERIFIED HUMAN AUTHORITY PENDING"
+status: "FORMATION PHASE 1 ACCEPTED ON MAIN / VERIFIED HUMAN AUTHORITY PENDING"
 date: "2026-08-09"
 scope: "first governed request-to-contract formation slice for existing GP001"
-repository: "litrgratis-pixel/Executor"
+repository: "JTJ07/Executor"
 ---
 
 # REQUEST_TO_CONTRACT_001
@@ -52,6 +52,8 @@ VERIFIED HUMAN AUTHORITY
 Therefore the formation kernel is fail-closed until a superior boundary can provide independently verified evidence bound to the exact current draft.
 
 ## What phase 1 implements
+
+Phase 1 was accepted through PR #50 and is available through the bounded `form-gp001-request` CLI command.
 
 `executor/request_to_contract.py`:
 

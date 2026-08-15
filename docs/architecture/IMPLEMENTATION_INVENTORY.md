@@ -1,11 +1,11 @@
 ---
 document: "Executor Implementation Inventory"
 version: "0.2"
-status: "OBSERVATIONAL BASELINE / CURRENT THROUGH GP001 REPLAY"
+status: "OBSERVATIONAL BASELINE / CURRENT THROUGH REQUEST_TO_CONTRACT_001 PHASE 1"
 date: "2026-08-09"
 scope: "current implementation mapped to Executor Build Map and next product slice"
-repository: "litrgratis-pixel/Executor"
-baseline: "main after accepted GP001 real E2E and replay repeatability work"
+repository: "JTJ07/Executor"
+baseline: "main after accepted REQUEST_TO_CONTRACT_001 phase 1 and self-identity reconciliation"
 ---
 
 # Executor Implementation Inventory v0.2
@@ -31,26 +31,26 @@ It is not a maturity claim and does not promote any P-level.
 
 | Build Map element | Status | Current evidence | Product implication |
 |---|---|---|---|
-| F0 Request-to-Contract Boundary | MISSING | no accepted runtime yet converts a user request into a governed draft contract and human-authorized frozen contract | **Primary next product gap** |
+| F0 Request-to-Contract Boundary | PARTIAL | PR #50 accepts the phase-1 request, provenance, exact GP001 draft, critique and hash-bound authorization-request flow; verified human decision and freeze remain absent | **Primary next product gap is the trust boundary, not draft formation** |
 | F1 Contract Interpretation Boundary | EXISTS (bounded) | GP001 machine-readable contract, contract validation and action-boundary revalidation are accepted on `main` | Kernel can execute a frozen bounded contract; it does not yet form one from user language |
 | F2 Source & Workspace Access | EXISTS (bounded) | Controlled External Fixture authority pins exact repository + commit; real GP001 E2E acquired and checked exact source identity | Proven for one controlled fixture, not arbitrary repositories |
-| F3 Execution State Model | PARTIAL | explicit execution lifecycle, action-boundary state revalidation and replay evidence exist; contract-formation lifecycle is not implemented | Formation states must be added without collapsing them into execution state |
+| F3 Execution State Model | PARTIAL | execution lifecycle plus non-executable formation states through `AWAITING_VERIFIED_HUMAN_AUTHORIZATION` exist; authorized freeze remains absent | Keep formation and execution authority separate |
 | F4 Evidence Boundary | EXISTS (bounded) | GP001 real E2E records input identity, authority binding, pre/post test state, regression state, scope and review-required status | Evidence is usable for the bounded vertical slice; still not a general product/maturity claim |
-| S0 Contract Formation Flow | MISSING | no accepted `INTERPRET -> PROPOSE -> CRITIQUE -> HUMAN AUTHORIZATION -> FREEZE` implementation | `REQUEST_TO_CONTRACT_001` owns this gap |
+| S0 Contract Formation Flow | PARTIAL | accepted phase 1 implements `REQUEST -> PROPOSE -> DRAFT -> CRITIQUE -> AUTHORIZATION REQUEST`; verified decision and freeze remain unimplemented | Next work requires a selected external human-authority provider |
 | S1 Runtime Engine | EXISTS (GP001 bounded) | accepted GP001 runtime performs pinned failure reproduction, authorized mutation, verification and report | First execution vertical slice exists |
 | S2 Planning Layer | PARTIAL | GP001 E2E produces a deterministic bounded plan, but no general AI planning layer is claimed | Enough for GP001 execution; formation/planning must stay separate |
 | S3 Action Execution Layer | EXISTS (GP001 bounded) | one exact `WRITE_REPOSITORY` mutation is policy/AAP bound and executed in sandbox | Proven only for the accepted fixture/action class |
 | S4 Verification Loop | EXISTS (GP001 bounded) | target FAIL before, target PASS after, 13-test regression PASS, compileall PASS, exact scope and protected-material checks | First real verification loop exists |
 | I1 Execution State & Working Memory | EXISTS (bounded) | run state, checkpoints, execution artifacts and replay observations exist | Do not add strategic/user-goal memory to Executor |
-| I2 Context Management | PARTIAL | execution context is pinned and bounded; formation context does not yet distinguish user facts from AI inference in a runtime artifact | Request-to-contract must introduce provenance/assumption separation |
+| I2 Context Management | EXISTS (bounded) | phase 1 preserves the verbatim request as the sole direct `USER` provenance and labels interpreted objective/target data as `MODEL`; questions and discoveries remain separate | Proven only for canonical GP001 formation |
 | I3 Tool Management | EXISTS (bounded) | policy, action authorization, exact fixture binding, no generic external-project capability | Preserve capability/authority separation during formation work |
 | I4 Sandbox & Isolation | EXISTS (GP001 bounded) | real hosted-runner Docker execution, immutable image identity and cleanup checks passed | Proven for one bounded fixture |
 | C1 Software Engineering Capability | PARTIAL / FIRST SLICE WORKS | GP001 real E2E and repeatability prove one failing-test repair path | Capability is real but still narrow and not user-accessible from natural language |
 | C2 Analysis Capability | LOCKED / LATER | not required for current slice | Do not build now |
 | C3 Research Capability | LOCKED / LATER | not required for `REQUEST_TO_CONTRACT_001` | Do not build unless a measured formation blocker requires it |
 | C4 Operational Capability | LOCKED / LATER | not required for current slice | Defer |
-| UX1 Request Surface | MISSING | accepted product path still begins from a prepared contract/harness rather than a normal user request | **Primary user-facing gap** |
-| UX2 Contract Decision Surface | MISSING | no accepted draft-contract review surface with accept/modify/reject | Build in `REQUEST_TO_CONTRACT_001` |
+| UX1 Request Surface | EXISTS (bounded CLI) | `form-gp001-request` accepts a normal request and emits the canonical non-executable formation result | Limited intentionally to GP001 |
+| UX2 Contract Decision Surface | PARTIAL | decision surface and allowed decisions `ACCEPT/MODIFY/REJECT` are exported, but no verified decision is consumed | Trust-provider boundary is required before freeze |
 | UX3 Execution Interaction Model | PARTIAL | GP001 report is concise and review-oriented, but user does not yet enter through request formation | Reuse after contract authorization |
 | UX4 Result Report | EXISTS (GP001 bounded) | real GP001 ends in `ACTION_COMPLETED_REVIEW_REQUIRED` with evidence and human decision required | Preserve terminal semantics |
 | LEVEL 6 Extensions | LOCKED / LATER | multi-agent, marketplace, broad integrations not required | Explicitly defer |
@@ -108,17 +108,13 @@ Formation work must preserve the same discipline:
 
 ## 6. Current primary product gap
 
-The largest gap is no longer the execution vertical slice.
-
-It is the missing front door:
+The largest gap is no longer execution or draft formation. It is the missing verified authority transition:
 
 ```text
-USER REQUEST
-  -> INTERPRETATION
-  -> DRAFT TASK CONTRACT
-  -> CONTRACT CRITIQUE
-  -> HUMAN AUTHORIZATION
-  -> FROZEN TASK CONTRACT
+HASH-BOUND AUTHORIZATION REQUEST
+  -> VERIFIED EXTERNAL HUMAN DECISION
+  -> REPLAY / FRESHNESS / IDENTITY VALIDATION
+  -> AUTHORIZED_AND_FROZEN
   -> EXISTING GP001 RUNTIME
 ```
 
@@ -126,9 +122,9 @@ This is the boundary between ordinary AI assistance and governed execution.
 
 ## 7. Immediate implementation targets
 
-### GAP-008 — Governed contract formation
+### GAP-008 — Governed contract formation / CLOSED IN PHASE 1
 
-Implement formation states that cannot directly execute:
+Implemented formation states that cannot directly execute:
 
 ```text
 REQUEST_RECEIVED
@@ -140,18 +136,18 @@ AWAITING_HUMAN_AUTHORIZATION
 
 Only an explicit authorization transition may create `AUTHORIZED_AND_FROZEN`.
 
-### GAP-009 — User/AI provenance
+### GAP-009 — User/AI provenance / CLOSED IN PHASE 1
 
-The draft must distinguish at least:
+The draft distinguishes:
 
 - what the user actually supplied;
 - what the system inferred;
 - what remains unresolved;
 - what was discovered but remains out of scope.
 
-### GAP-010 — Contract critique
+### GAP-010 — Contract critique / CLOSED IN PHASE 1
 
-Before authorization, detect/report:
+Before authorization, it detects/reports:
 
 - silent scope expansion;
 - unsupported target/repository/commit inference;
@@ -160,9 +156,9 @@ Before authorization, detect/report:
 
 Critique cannot authorize its own correction.
 
-### GAP-011 — Human contract decision surface
+### GAP-011 — Verified human contract decision consumption / OPEN
 
-Expose:
+The phase-1 export exposes:
 
 ```text
 ACCEPT
@@ -170,9 +166,9 @@ MODIFY
 REJECT
 ```
 
-and ensure a draft remains non-executable until `ACCEPT` or an equivalent superior-authority action.
+The open work is to verify that a real human decision came through a selected superior-authority provider and is bound to the exact draft. A caller string labelled `HUMAN` is insufficient.
 
-### GAP-012 — GP001 semantic compatibility
+### GAP-012 — GP001 semantic compatibility / CLOSED IN PHASE 1
 
 The first authorized formation output must freeze into a task contract semantically compatible with the already accepted GP001 contract/runtime, without changing GP001's execution authority or success criteria.
 
