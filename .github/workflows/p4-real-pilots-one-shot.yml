@@ -1,22 +1,30 @@
-name: P4 exact-candidate real pilot replay
+name: P4 corrected real pilot series
 
 on:
   pull_request:
     types: [synchronize]
 
+# Intentionally disabled during Phase-C corrective rework.
+# The final enabling commit must replace all placeholder issue/comment IDs with
+# fresh direct-human authority for the corrected request set.
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   scriptops-pilot:
     if: ${{ false && github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
     runs-on: ubuntu-latest
+    env:
+      EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: JTJ07/Executor
+      EXECUTOR_GLOBAL_AUTHORITY_TOKEN: ${{ github.token }}
+      EXECUTOR_WORKFLOW_PATH: .github/workflows/p4-real-pilots-one-shot.yml
     steps:
       - name: Checkout exact Executor candidate head
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -50,14 +58,15 @@ jobs:
           python -m executor.cli github-pilot-decide \
             --profile trust_profiles/github-p4-pilots.json \
             --issue 62 \
-            --comment 5308343712 \
+            --comment 0 \
             --ledger .executor/scriptops-authority.sqlite3 \
             > scriptops-frozen.json
 
-      - name: Materialize authority-free ScriptOps proposal
+      - name: Materialize provenance-bound ScriptOps proposal
         run: |
           python -m executor.cli materialize-pilot-proposal \
             --candidate evidence/p4/candidates/scriptops-solution-candidate.json \
+            --provenance evidence/p4/provenance/scriptops-solution-provenance.json \
             --frozen scriptops-frozen.json \
             > scriptops-proposal.json
 
@@ -66,13 +75,13 @@ jobs:
           python -m executor.cli run-pilot \
             --profile trust_profiles/github-p4-pilots.json \
             --issue 62 \
-            --comment 5308343712 \
+            --comment 0 \
             --frozen scriptops-frozen.json \
             --proposal scriptops-proposal.json \
             --ledger .executor/scriptops-authority.sqlite3 \
             --workspace target \
             --runs-root pilot-evidence/scriptops/runs \
-            --run-id p4-scriptops-real-004 \
+            --run-id p4-scriptops-corrected-001 \
             --image "$EXECUTOR_SANDBOX_IMAGE" \
             --executor-root . \
             --executor-commit "${{ github.event.pull_request.head.sha }}" \
@@ -85,11 +94,11 @@ jobs:
         if: always()
         run: test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=p4-bounded-real-pilot)"
 
-      - name: Upload ScriptOps exact-head evidence
+      - name: Upload ScriptOps corrected evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: p4-scriptops-exact-head-evidence
+          name: p4-scriptops-corrected-evidence
           if-no-files-found: error
           include-hidden-files: true
           path: |
@@ -104,12 +113,17 @@ jobs:
   reconstructor-pilot:
     if: ${{ false && github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
     runs-on: ubuntu-latest
+    env:
+      EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: JTJ07/Executor
+      EXECUTOR_GLOBAL_AUTHORITY_TOKEN: ${{ github.token }}
+      EXECUTOR_WORKFLOW_PATH: .github/workflows/p4-real-pilots-one-shot.yml
     steps:
       - name: Checkout exact Executor candidate head
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -127,21 +141,23 @@ jobs:
           git clone https://github.com/JTJ07/creative-os-project-reconstructor.git target
           git -C target checkout defc7b029097284f94136fec54b75c313ac12f68
           test "$(git -C target rev-parse HEAD)" = "defc7b029097284f94136fec54b75c313ac12f68"
-          test "$(git -C target status --porcelain=v1 --untracked-files=all)"
+          test "$(git -C target rev-parse 'HEAD^{tree}')" = "5960d74773b19456863ac66084385b7619aa4285"
+          test -z "$(git -C target status --porcelain=v1 --untracked-files=all)"
 
-      - name: Consume fresh human ACCEPT and freeze Reconstructor contract
+      - name: Consume fresh corrected Reconstructor ACCEPT
         run: |
           python -m executor.cli github-pilot-decide \
             --profile trust_profiles/github-p4-pilots.json \
-            --issue 63 \
-            --comment 5308357219 \
+            --issue 0 \
+            --comment 0 \
             --ledger .executor/reconstructor-authority.sqlite3 \
             > reconstructor-frozen.json
 
-      - name: Materialize authority-free Reconstructor proposal
+      - name: Materialize provenance-bound Reconstructor proposal
         run: |
           python -m executor.cli materialize-pilot-proposal \
             --candidate evidence/p4/candidates/reconstructor-solution-candidate.json \
+            --provenance evidence/p4/provenance/reconstructor-solution-provenance.json \
             --frozen reconstructor-frozen.json \
             > reconstructor-proposal.json
 
@@ -149,14 +165,14 @@ jobs:
         run: |
           python -m executor.cli run-pilot \
             --profile trust_profiles/github-p4-pilots.json \
-            --issue 63 \
-            --comment 5308357219 \
+            --issue 0 \
+            --comment 0 \
             --frozen reconstructor-frozen.json \
             --proposal reconstructor-proposal.json \
             --ledger .executor/reconstructor-authority.sqlite3 \
             --workspace target \
             --runs-root pilot-evidence/reconstructor/runs \
-            --run-id p4-reconstructor-real-002 \
+            --run-id p4-reconstructor-corrected-001 \
             --image "$EXECUTOR_SANDBOX_IMAGE" \
             --executor-root . \
             --executor-commit "${{ github.event.pull_request.head.sha }}" \
@@ -169,11 +185,11 @@ jobs:
         if: always()
         run: test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=p4-bounded-real-pilot)"
 
-      - name: Upload Reconstructor exact-head evidence
+      - name: Upload Reconstructor corrected evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: p4-reconstructor-exact-head-evidence
+          name: p4-reconstructor-corrected-evidence
           if-no-files-found: error
           include-hidden-files: true
           path: |
