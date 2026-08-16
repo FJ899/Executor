@@ -4,7 +4,7 @@ import copy
 import hashlib
 from typing import Any
 
-from executor.authority_ledger import AtomicAuthorityLedger
+from executor.github_authority import GovernedAuthorityLedger
 from executor.github_trust import (
     GitHubTrustError,
     VerifiedGitHubDecision,
@@ -47,6 +47,7 @@ def build_pilot_draft(request: VerifiedGitHubRequest) -> dict[str, Any]:
             "merge": False,
             "deploy": False,
             "release": False,
+            "global_consumption": "GITHUB_REF_REQUIRED",
         },
         "solution_boundary": {
             "owner": "EXTERNAL_INTELLIGENCE",
@@ -61,7 +62,7 @@ def apply_github_decision(
     *,
     draft: dict[str, Any],
     decision: VerifiedGitHubDecision,
-    ledger: AtomicAuthorityLedger,
+    ledger: GovernedAuthorityLedger,
 ) -> dict[str, Any]:
     expected_draft = pilot_draft_sha256(draft)
     if decision.draft_sha256 != expected_draft:
@@ -124,9 +125,8 @@ def apply_github_decision(
         }
     else:
         raise GitHubTrustError("unsupported verified GitHub decision")
-    bound = ledger.bind_result(
-        execution_token=consumption.execution_token,
+    result["decision_consumption"] = ledger.bind_result(
+        consumption=consumption,
         result=result,
     )
-    result["decision_consumption"] = bound.to_dict()
     return result
