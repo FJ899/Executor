@@ -31,10 +31,7 @@ from executor.github_authority import (
 )
 from executor.github_trust import VerifiedGitHubDecision, VerifiedGitHubRequest, canonical_json
 from executor.repository_access import canonical_repository_path, validate_scope_pattern
-from executor.repository_identity import (
-    RepositoryIdentityError,
-    repository_identity_from_remote,
-)
+from executor.repository_identity import RepositoryIdentityError, repository_identity_from_remote
 from executor.repository_snapshot import RepositorySnapshotError, verify_source_tree
 from executor.sandbox.docker import (
     DockerSandboxBackend,
@@ -146,9 +143,7 @@ def _verify_pilot_checkout(
         raise RepositoryIdentityError("pilot repository root must be a directory")
     remote = _git(root, "remote", "get-url", "origin").stdout
     identity = repository_identity_from_remote(remote)
-    if identity is None or identity[0] != "github.com" or (
-        identity[1].lower() != repository.lower()
-    ):
+    if identity is None or identity[0] != "github.com" or identity[1].lower() != repository.lower():
         raise RepositoryIdentityError(f"pilot repository origin mismatch: {identity!r}")
     actual_tree = _git(root, "rev-parse", "HEAD^{tree}").stdout.strip()
     if actual_tree != source_tree:
@@ -224,10 +219,7 @@ class PilotDockerSandboxBackend(DockerSandboxBackend):
         contract: dict[str, Any],
         docker_binary: str = "docker",
     ) -> None:
-        super().__init__(
-            policy_snapshot=policy_snapshot,
-            docker_binary=docker_binary,
-        )
+        super().__init__(policy_snapshot=policy_snapshot, docker_binary=docker_binary)
         self.repository = contract["target"]["repository"]
         self.commit = contract["target"]["commit"]
         self.source_tree = contract["target"]["tree"]
@@ -284,11 +276,7 @@ class PilotDockerSandboxBackend(DockerSandboxBackend):
         else:
             if changed != tuple(sorted(item.path for item in self._proposal.mutations)):
                 raise SandboxExecutionError("pilot post-change scope mismatch")
-            if any(
-                fnmatch(path, pattern)
-                for path in changed
-                for pattern in self.protected
-            ):
+            if any(fnmatch(path, pattern) for path in changed for pattern in self.protected):
                 raise SandboxExecutionError("protected pilot material changed")
         return root
 
@@ -384,6 +372,9 @@ class PilotRuntime:
         self.backend = backend
         self.spec = build_pilot_sandbox_spec(contract, image)
         self.execution_environment = environment
+        self.execution_environment_sha256 = hashlib.sha256(
+            canonical_json(environment).encode("utf-8")
+        ).hexdigest()
 
     def _run(
         self,
@@ -457,11 +448,13 @@ class PilotRuntime:
         expires = min(now + timedelta(minutes=10), decision_expiry)
         if expires <= now:
             raise PilotBlocked("GitHub ACCEPT expired before effect authorization")
+
+        # One human decision can create exactly one effect key. Operator-controlled run_id
+        # and proposal variation cannot mint a second authority namespace.
         effect_identity = canonical_json(
             {
                 "decision_evidence_ref": self.verified_decision.evidence_ref,
                 "contract_sha256": self.contract_sha256,
-                "proposal_sha256": self.proposal.payload_sha256,
             }
         )
         packet_id = "pilot-" + hashlib.sha256(effect_identity.encode("utf-8")).hexdigest()[:48]
@@ -486,7 +479,6 @@ class PilotRuntime:
                 "task_contract_sha256": context.task_contract_sha256,
                 "test_contract_sha256": context.test_contract_sha256,
                 "repository_commits": context.repository_commits,
-                "execution_environment": self.execution_environment,
             },
             "action": {
                 "kind": "EXTERNAL_PROJECT_EXECUTION",
@@ -494,6 +486,10 @@ class PilotRuntime:
                     "APPLY_SOLUTION_PROPOSAL",
                     self.proposal.proposal_id,
                     self.proposal.payload_sha256,
+                    "EXECUTION_ENVIRONMENT_SHA256",
+                    self.execution_environment_sha256,
+                    "SOLUTION_PROVENANCE_SHA256",
+                    self.proposal.provenance_sha256,
                 ],
                 "paths": [item.path for item in self.proposal.mutations],
                 "network": False,
@@ -506,6 +502,7 @@ class PilotRuntime:
                     "exact fresh GitHub ACCEPT binds the current frozen contract",
                     "repository and write scope match the bounded P4 pilot policy",
                     "global GitHub authority receipt enforces one effect per human decision",
+                    "exact workflow, image and proposal provenance are integrity-bound",
                     "merge, deploy and release remain forbidden",
                 ],
             },
@@ -576,7 +573,10 @@ class PilotRuntime:
             "source_tree": self.proposal.source_tree,
             "contract_sha256": self.contract_sha256,
             "proposal_sha256": self.proposal.payload_sha256,
+            "solution_provenance": self.proposal.provenance,
+            "solution_provenance_sha256": self.proposal.provenance_sha256,
             "execution_environment": self.execution_environment,
+            "execution_environment_sha256": self.execution_environment_sha256,
             "status": "FAILED",
             "error": None,
             "changed_paths": [],
@@ -592,6 +592,7 @@ class PilotRuntime:
                 "isolation": "UNKNOWN",
                 "authority": "UNKNOWN",
                 "execution_environment": "BOUND",
+                "solution_provenance": "BOUND",
             },
             "human_review_required": True,
             "merge_allowed": False,
@@ -708,7 +709,9 @@ class PilotRuntime:
                 "source_tree",
                 "contract_sha256",
                 "proposal_sha256",
+                "solution_provenance_sha256",
                 "execution_environment",
+                "execution_environment_sha256",
                 "status",
                 "error",
                 "changed_paths",
@@ -745,6 +748,7 @@ class PilotRuntime:
                 "body_evidence": {
                     "contract_sha256": self.contract_sha256,
                     "proposal_sha256": self.proposal.payload_sha256,
+                    "solution_provenance_sha256": self.proposal.provenance_sha256,
                     "patch_sha256": report["patch"]["sha256"],
                     "authority_result_sha256": report["authority_consumption"]["result_sha256"],
                     "global_authority_ref": global_receipt["ref"],
