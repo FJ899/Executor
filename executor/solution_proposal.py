@@ -80,6 +80,7 @@ def materialize_solution_candidate(
     candidate: dict[str, Any],
     *,
     frozen_result: dict[str, Any],
+    provenance: dict[str, Any],
 ) -> dict[str, Any]:
     if not isinstance(candidate, dict) or set(candidate) != {
         "schema_version",
@@ -91,7 +92,6 @@ def materialize_solution_candidate(
         "mutations",
         "rationale",
         "evidence_plan",
-        "provenance",
     }:
         raise SolutionProposalError("solution candidate has invalid fields")
     if (
@@ -109,7 +109,7 @@ def materialize_solution_candidate(
         "mutations": copy.deepcopy(candidate["mutations"]),
         "rationale": candidate["rationale"],
         "evidence_plan": copy.deepcopy(candidate["evidence_plan"]),
-        "provenance": copy.deepcopy(candidate["provenance"]),
+        "provenance": copy.deepcopy(provenance),
     }
     validate_solution_proposal(proposal, frozen_result=frozen_result)
     return proposal
