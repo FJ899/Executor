@@ -3,12 +3,17 @@
 Date: 2026-08-16
 Authority: `PROJECT_COMPLETION_MAP.md` section 7.2 (`AI_DELEGABLE`) and G-16/GAP-14.
 
+## Current status
+
+Independent Phase C rejected historical candidate `24107bc8a8186ed1928e098118982efb9d62ffaa`. PR #61 remains the sole active Executor implementation path and is under corrective Phase-B rework. Historical successful pilot artifacts tied to the rejected SHA are retained as evidence, not current completion proof.
+
 ## Active completion path
 
 - `JTJ07/Executor#61` — active Phase B completion candidate; draft; not authorized to merge.
-- `JTJ07/scriptops#8` — governed pilot review artifact; draft; merge not authorized.
-- `JTJ07/creative-os-project-reconstructor#4` — governed pilot review artifact; draft; merge not authorized.
-- Request issues `JTJ07/Executor#62` and `#63` remain durable authority/evidence records and are not temporary work items.
+- `JTJ07/scriptops#8` — historical governed pilot review output; draft; merge not authorized.
+- `JTJ07/creative-os-project-reconstructor#4` — historical governed pilot review output; draft; merge not authorized.
+- Request issues `JTJ07/Executor#62` and `#63` remain durable historical authority/evidence records and are not temporary work items.
+- Additional corrected direct-human request records may be added during the Phase-C rework. They remain evidence records rather than unfinished implementation work.
 
 ## Archived Executor PRs
 
@@ -27,10 +32,20 @@ All closed PRs remain readable and retain their commits, descriptions and discus
 
 - #35 `TEMP: PR32 trusted ledger payload transport` — closed as completed after its transport purpose; provenance remains in the issue and comments.
 
-## Branch retention policy
+## Branch/ref retention policy
 
-Historical branch refs may remain on GitHub for evidence retention. A branch with no open PR and no current completion responsibility is archival, not an active roadmap/critical-path branch. Branch deletion is not required for G-16 unless a branch is still presented as active work or creates ambiguity about the current completion path.
+Historical implementation branch refs may remain on GitHub for evidence retention. A branch with no open PR and no current completion responsibility is archival, not an active roadmap/critical-path branch.
+
+The corrected authority design additionally creates deterministic provider-backed refs under:
+
+```text
+refs/heads/executor-authority/<sha256(authority_key)>
+```
+
+These refs are **durable one-shot authority receipts**, not implementation branches. They are part of origin-to-result evidence and must not be deleted as repository cleanup. Their presence does not represent unfinished critical-path work.
+
+Deleting, force-moving, or reusing an authority receipt ref is outside the supported Executor operator workflow and invalidates the affected evidence chain.
 
 ## Current rule
 
-The only active Executor implementation PR for the approved completion path is PR #61. Historical closed items must not be treated as candidate implementation or maturity evidence unless a verifier explicitly cites a preserved historical fact.
+The only active Executor implementation PR for the approved completion path is PR #61. Historical closed items and rejected candidate evidence must not be treated as current implementation/maturity proof unless a verifier explicitly cites them for historical/falsification context.
