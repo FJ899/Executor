@@ -28,7 +28,11 @@
       "external_intelligence_provenance": "evidence/p4/intelligence/scriptops-provenance.json",
       "external_intelligence_prompt": "evidence/p4/intelligence/scriptops-prompt.txt",
       "required_executions_per_exact_candidate": 3,
-      "active_fresh_human_accept_comments": [],
+      "active_fresh_human_accept_comments": [
+        5309431944,
+        5309432744,
+        5309433932
+      ],
       "historical_consumed_human_accept_comments": [
         5309032642,
         5309033360,
@@ -52,7 +56,11 @@
       "external_intelligence_provenance": "evidence/p4/intelligence/reconstructor-provenance.json",
       "external_intelligence_prompt": "evidence/p4/intelligence/reconstructor-prompt.txt",
       "required_executions_per_exact_candidate": 3,
-      "active_fresh_human_accept_comments": [],
+      "active_fresh_human_accept_comments": [
+        5309439844,
+        5309440490,
+        5309441091
+      ],
       "historical_consumed_human_accept_comments": [
         5309040666,
         5309041408,
