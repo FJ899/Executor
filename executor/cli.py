@@ -5,10 +5,18 @@ import json
 import subprocess
 from pathlib import Path
 
+from executor.authority_ledger import AuthorityLedgerError, AtomicAuthorityLedger
 from executor.checkpoints import build_snapshot
 from executor.contracts import validate_test_contract
-from executor.governance import validate_project_bundle, validate_task_bundle
-from executor.policy import PolicyEngine
+from executor.execution_environment import (
+    ExecutionEnvironmentError,
+    build_github_actions_environment,
+)
+from executor.github_authority import (
+    GlobalAuthorityError,
+    GitHubGlobalAuthority,
+    GovernedAuthorityLedger,
+)
 from executor.github_trust import (
     GitHubRestClient,
     GitHubTrustError,
@@ -16,6 +24,7 @@ from executor.github_trust import (
     verify_github_decision,
     verify_github_request,
 )
+from executor.governance import validate_project_bundle, validate_task_bundle
 from executor.pilot_contract import (
     PilotContractError,
     apply_github_decision,
@@ -23,14 +32,14 @@ from executor.pilot_contract import (
     pilot_draft_sha256,
 )
 from executor.pilot_runtime import PilotBlocked, PilotRuntime
+from executor.policy import PolicyEngine
+from executor.repository_reader import read_wrapped_repository_file
+from executor.repository_roots import parse_repository_roots
+from executor.request_to_contract import FormationError, RequestToContract001
 from executor.solution_proposal import (
     SolutionProposalError,
     materialize_solution_candidate,
 )
-from executor.repository_reader import read_wrapped_repository_file
-from executor.repository_roots import parse_repository_roots
-from executor.request_to_contract import FormationError, RequestToContract001
-from executor.authority_ledger import AuthorityLedgerError, AtomicAuthorityLedger
 from executor.state_machine import InvalidTransition, RunIntegrityError, RunState, RunStore
 from executor.strict_json import load_json_object
 
@@ -88,6 +97,16 @@ def _git_head(root: str) -> str:
 
 def _github_profile(path: str) -> GitHubTrustProfile:
     return GitHubTrustProfile.from_dict(load_json_object(path))
+
+
+def _governed_ledger(path: str, profile: GitHubTrustProfile) -> GovernedAuthorityLedger:
+    global_authority = GitHubGlobalAuthority.from_environment(
+        expected_repository=profile.intake_repository
+    )
+    return GovernedAuthorityLedger(
+        AtomicAuthorityLedger(path),
+        global_authority,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -177,9 +196,10 @@ def main(argv: list[str] | None = None) -> int:
 
     p_materialize = sub.add_parser(
         "materialize-pilot-proposal",
-        help="bind an external solution candidate to one exact frozen contract",
+        help="bind an external solution candidate and its provenance to one exact frozen contract",
     )
     p_materialize.add_argument("--candidate", required=True)
+    p_materialize.add_argument("--provenance", required=True)
     p_materialize.add_argument("--frozen", required=True)
 
     p_create = sub.add_parser("run-create")
@@ -206,12 +226,24 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "validate-project":
-            result = validate_project_bundle(load_json_object(args.path), executor_policy=load_json_object(args.policy), base_dir=args.base_dir)
+            result = validate_project_bundle(
+                load_json_object(args.path),
+                executor_policy=load_json_object(args.policy),
+                base_dir=args.base_dir,
+            )
             _print(result.to_dict())
             return 0 if result.ok else 2
         if args.command == "validate-test":
-            evidence = load_json_object(args.holdout_evidence) if args.holdout_evidence else None
-            result = validate_test_contract(load_json_object(args.path), base_dir=args.base_dir, holdout_evidence=evidence)
+            evidence = (
+                load_json_object(args.holdout_evidence)
+                if args.holdout_evidence
+                else None
+            )
+            result = validate_test_contract(
+                load_json_object(args.path),
+                base_dir=args.base_dir,
+                holdout_evidence=evidence,
+            )
             _print(result.to_dict())
             return 0 if result.ok else 2
         if args.command == "validate-task":
@@ -226,23 +258,58 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "policy-check":
             project = load_json_object(args.project)
             policy = load_json_object(args.policy)
-            validation = validate_project_bundle(project, executor_policy=policy, base_dir=args.base_dir)
+            validation = validate_project_bundle(
+                project,
+                executor_policy=policy,
+                base_dir=args.base_dir,
+            )
             if not validation.ok:
                 _print(validation.to_dict())
                 return 2
             engine = PolicyEngine(project, policy)
             results = []
             if args.path:
-                results.append(engine.check_path_change(args.path, public_api_change=args.public_api_change, data_schema_change=args.data_schema_change, result_semantics_change=args.result_semantics_change).to_dict())
+                results.append(
+                    engine.check_path_change(
+                        args.path,
+                        public_api_change=args.public_api_change,
+                        data_schema_change=args.data_schema_change,
+                        result_semantics_change=args.result_semantics_change,
+                    ).to_dict()
+                )
                 if args.allowed:
-                    results.append(engine.check_forbidden_path(args.path, args.allowed, repository_root=args.repository_root).to_dict())
-            results.extend(o.to_dict() for o in engine.check_capabilities(network=args.network, secrets=args.secret, command=args.command_line))
+                    results.append(
+                        engine.check_forbidden_path(
+                            args.path,
+                            args.allowed,
+                            repository_root=args.repository_root,
+                        ).to_dict()
+                    )
+            results.extend(
+                objection.to_dict()
+                for objection in engine.check_capabilities(
+                    network=args.network,
+                    secrets=args.secret,
+                    command=args.command_line,
+                )
+            )
             _print({"objections": results})
-            return 2 if any(item["kind"] in {"HARD_VETO", "POLICY_VETO"} for item in results) else 0
+            return (
+                2
+                if any(
+                    item["kind"] in {"HARD_VETO", "POLICY_VETO"}
+                    for item in results
+                )
+                else 0
+            )
         if args.command == "repository-read":
             project = load_json_object(args.project)
             policy = load_json_object(args.policy)
-            validation = validate_project_bundle(project, executor_policy=policy, base_dir=args.base_dir)
+            validation = validate_project_bundle(
+                project,
+                executor_policy=policy,
+                base_dir=args.base_dir,
+            )
             if not validation.ok:
                 _print(validation.to_dict())
                 return 2
@@ -312,7 +379,7 @@ def main(argv: list[str] | None = None) -> int:
             result = apply_github_decision(
                 draft=draft,
                 decision=decision,
-                ledger=AtomicAuthorityLedger(args.ledger),
+                ledger=_governed_ledger(args.ledger, profile),
             )
             _print(result)
             return 0 if result["status"] == "AUTHORIZED_AND_FROZEN" else 2
@@ -333,6 +400,11 @@ def main(argv: list[str] | None = None) -> int:
                 draft_sha256=frozen.get("draft_sha256", ""),
             )
             commit = args.executor_commit or _git_head(args.executor_root)
+            environment = build_github_actions_environment(
+                image_id=args.image,
+                executor_root=args.executor_root,
+                executor_commit=commit,
+            )
             runtime = PilotRuntime(
                 executor_root=args.executor_root,
                 executor_commit=commit,
@@ -340,9 +412,10 @@ def main(argv: list[str] | None = None) -> int:
                 proposal=load_json_object(args.proposal),
                 verified_request=request,
                 verified_decision=decision,
-                ledger_path=args.ledger,
+                ledger=_governed_ledger(args.ledger, profile),
                 runs_root=args.runs_root,
                 image=args.image,
+                execution_environment=environment,
                 docker_binary=args.docker_binary,
             )
             result = runtime.execute(
@@ -350,11 +423,16 @@ def main(argv: list[str] | None = None) -> int:
                 run_id=args.run_id,
             )
             _print(result)
-            return 0 if result["status"] == "ACTION_COMPLETED_REVIEW_REQUIRED" else 2
+            return (
+                0
+                if result["status"] == "ACTION_COMPLETED_REVIEW_REQUIRED"
+                else 2
+            )
         if args.command == "materialize-pilot-proposal":
             proposal = materialize_solution_candidate(
                 load_json_object(args.candidate),
                 frozen_result=load_json_object(args.frozen),
+                provenance=load_json_object(args.provenance),
             )
             _print(proposal)
             return 0
@@ -364,20 +442,30 @@ def main(argv: list[str] | None = None) -> int:
             _print(store.load_state(run_id))
             return 0
         if args.command == "run-transition":
-            event = RunStore(args.runs_root).transition(args.run_id, args.state, _snapshot_from_args(args), reason=args.reason)
+            event = RunStore(args.runs_root).transition(
+                args.run_id,
+                args.state,
+                _snapshot_from_args(args),
+                reason=args.reason,
+            )
             _print(event)
             return 0
         if args.command == "run-status":
             _print(RunStore(args.runs_root).load_state(args.run_id))
             return 0
         if args.command == "run-revalidate":
-            result = RunStore(args.runs_root).revalidate(args.run_id, _snapshot_from_args(args))
+            result = RunStore(args.runs_root).revalidate(
+                args.run_id,
+                _snapshot_from_args(args),
+            )
             _print(result.to_dict())
             return 0 if result.unchanged else 3
     except (
         AuthorityLedgerError,
+        ExecutionEnvironmentError,
         FormationError,
         GitHubTrustError,
+        GlobalAuthorityError,
         PilotBlocked,
         PilotContractError,
         SolutionProposalError,
