@@ -1,11 +1,17 @@
 {
-  "schema_version": "executor-p4-pilot-candidate-evidence/1.2",
-  "status": "SIX_FRESH_HUMAN_ACCEPTS_VALIDATED_CORRECTED_SERIES_EXECUTION_PENDING",
+  "schema_version": "executor-p4-pilot-candidate-evidence/1.3",
+  "status": "EVIDENCE_GATED_EXACT_CANDIDATE",
   "updated_at": "2026-08-16",
+  "state_model": {
+    "rule": "Committed state defines the evidence contract; immutable GitHub runs/artifacts/receipts establish post-commit facts for the exact PR head; PR body may provide locators but cannot override committed policy.",
+    "transient_execution_status_committed_here": false,
+    "p4_claimed": false,
+    "final_human_acceptance_recorded": false
+  },
   "historical_rejected_candidate": {
     "executor_sha": "24107bc8a8186ed1928e098118982efb9d62ffaa",
     "verdict": "FALSE-COMPLETION",
-    "meaning": "Historical pilot runs and artifacts are preserved but are not current P4 completion evidence."
+    "meaning": "Historical runs and artifacts are retained as provenance only and never satisfy a later exact-candidate gate."
   },
   "corrected_requests": [
     {
@@ -21,8 +27,9 @@
       "solution_candidate": "evidence/p4/candidates/scriptops-solution-candidate.json",
       "external_intelligence_provenance": "evidence/p4/intelligence/scriptops-provenance.json",
       "external_intelligence_prompt": "evidence/p4/intelligence/scriptops-prompt.txt",
-      "required_corrected_executions": 3,
-      "human_accept_comments": [5309032642, 5309033360, 5309034120]
+      "required_executions_per_exact_candidate": 3,
+      "active_fresh_human_accept_comments": [5309233904, 5309234306, 5309234972],
+      "historical_consumed_human_accept_comments": [5309032642, 5309033360, 5309034120]
     },
     {
       "repository": "JTJ07/creative-os-project-reconstructor",
@@ -37,8 +44,9 @@
       "solution_candidate": "evidence/p4/candidates/reconstructor-solution-candidate-corrected.json",
       "external_intelligence_provenance": "evidence/p4/intelligence/reconstructor-provenance.json",
       "external_intelligence_prompt": "evidence/p4/intelligence/reconstructor-prompt.txt",
-      "required_corrected_executions": 3,
-      "human_accept_comments": [5309040666, 5309041408, 5309042154]
+      "required_executions_per_exact_candidate": 3,
+      "active_fresh_human_accept_comments": [5309241731, 5309242858, 5309243169],
+      "historical_consumed_human_accept_comments": [5309040666, 5309041408, 5309042154]
     }
   ],
   "series_definition": {
@@ -46,25 +54,32 @@
     "authorized_repositories": 2,
     "independent_executions_per_objective": 3,
     "total_independently_authorized_executions": 6,
-    "basis": "PROJECT_COMPLETION_MAP.md P4 requires multiple real runs across more than one repository or independent module set."
+    "third_objective_required": false,
+    "basis": "PROJECT_COMPLETION_MAP.md P4 requires multiple real runs across more than one repository or independent module set; docs/product/P4_REPEATABILITY_POLICY.md freezes this bounded two-objective, six-execution series."
   },
   "corrective_controls": [
     "GitHub provider-backed global one-shot authority refs",
-    "stable effect identity independent of caller run_id",
+    "stable effect identity independent of caller run_id and local ledger path",
     "local SQLite retained as crash-safe evidence, not sole uniqueness boundary",
-    "exact GitHub Actions workflow and Docker image identity binding",
+    "exact PR-head checkout assertion in foundation CI",
+    "exact GitHub Actions workflow and resolved Docker image identity binding",
     "post-request external-intelligence provenance with prompt hash and zero human solution edits",
     "zero-test unittest discovery fails closed",
     "three independently authorized executions required per real objective"
   ],
-  "historical_human_review_outputs": [
-    "JTJ07/scriptops#8 remains DRAFT and previously APPROVED; merge unauthorized.",
-    "JTJ07/creative-os-project-reconstructor#4 remains DRAFT and previously APPROVED; merge unauthorized."
+  "post_commit_evidence_requirements": [
+    "Foundation CI must assert exact PR head SHA.",
+    "GP001 replay must pass on the same exact PR head.",
+    "Corrected six-execution pilot series must pass on the same exact PR head.",
+    "Artifacts must include raw evidence and SQLite ledgers.",
+    "Provider decision/effect receipt refs must exist live and match FINAL bindings.",
+    "Target PRs must remain OPEN, DRAFT, UNMERGED with reviewed unchanged heads.",
+    "PR #61 body may list immutable run/artifact locators only after the runs exist; the verifier must resolve them independently."
   ],
-  "blockers": [
-    "The six independently authorized corrected executions must complete with exact-head evidence.",
-    "Exact-head foundation CI and GP001 replay must be green.",
-    "A fresh independent Phase C must verify the corrected candidate before any final human product acceptance."
-  ],
-  "current_rule": "Resolve the exact current PR #61 head; never treat historical pilot locators as a P4 PASS claim."
+  "completion_boundary": {
+    "p4": "NOT_CLAIMED",
+    "executor_1_0_human_acceptance": "NOT_RECORDED",
+    "merge_release_deploy_tag": "NOT_AUTHORIZED"
+  },
+  "current_rule": "Resolve the exact current PR #61 head/tree and exact-head immutable evidence. Never infer current PASS from historical runs, mutable prose, or a different SHA."
 }
