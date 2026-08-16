@@ -32,6 +32,21 @@ Changing `run_id`, local ledger path, runner or process must not create a second
 
 Provider refs under `refs/heads/executor-authority/*` are durable authority receipts. They are evidence, not active implementation branches, and repository cleanup must not delete them.
 
+## Freshness at consequential authority
+
+Freshness is a property of the actual authority reservation, not merely of an earlier request/decision observation or precondition start.
+
+For every decision/effect provider reservation:
+
+- the exact decision expiry is bound into the provider receipt as `not_after`;
+- local runtime re-samples UTC after preconditions immediately before effect authorization;
+- the GitHub reservation commit is then fetched back and its provider-controlled `committer.date` is compared with `not_after`;
+- `provider_created_at >= not_after` is fail-closed: the one-shot provider ref remains spent, local effect consumption does not occur, target mutation does not occur, and review-required success is forbidden;
+- a missing or malformed provider reservation timestamp is fail-closed;
+- caller-supplied or precondition-start clocks cannot establish freshness for consequential authority.
+
+This provider-time check is the authoritative temporal boundary. The local clock is an early rejection layer, not the sole proof that authority was consumed before expiry.
+
 ## Retry policy
 
 Retry is classified by where failure occurs.
@@ -45,6 +60,8 @@ No target mutation has been authorized. A bounded operator retry may occur while
 ### After effect authority reservation
 
 No automatic retry is allowed. The global authority receipt remains spent even if execution later blocks or fails.
+
+A provider reservation created at or after `not_after` is also spent fail-closed: it cannot authorize mutation and cannot be retried with the same decision.
 
 A new consequential attempt requires a new direct-human `ACCEPT` over the then-current exact draft. The new decision receives a new provider event identity and therefore a new authority namespace.
 
