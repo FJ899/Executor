@@ -1,6 +1,6 @@
 ---
 document: "Executor Implementation Inventory"
-version: "0.4"
+version: "0.5"
 status: "PHASE C FALSE-COMPLETION / CORRECTIVE PHASE B ACTIVE"
 date: "2026-08-16"
 scope: "current PR #61 implementation state; no P4 completion claim"
@@ -8,7 +8,7 @@ repository: "JTJ07/Executor"
 baseline: "Phase B work branch from main@5e254811; current head must be resolved from PR #61"
 ---
 
-# Executor Implementation Inventory v0.4
+# Executor Implementation Inventory v0.5
 
 ## 1. Reading rule
 
@@ -29,7 +29,7 @@ All ACCEPT comments consumed by those exact candidates are historical provenance
 |---|---|---|
 | GitHub request origin | request actor must match allowed login/id/type/association and `performed_via_github_app` must be present and `null` | verify live request provider records on the final exact head |
 | GitHub decision/freeze | ACCEPT/MODIFY/REJECT exact binding plus the same direct-human provider requirement | six new fresh human ACCEPT events are required for the final six-execution series |
-| Decision freshness | runtime re-samples real UTC after preconditions at effect authorization; caller/precondition-start clock is not an authority input | adversarial exact-head regression must prove expiry during precondition blocks before AAP/effect reservation and mutation |
+| Decision freshness | runtime re-samples UTC after preconditions at effect authorization; caller/precondition-start clock is not an authority input; exact decision expiry is bound to provider receipt `not_after`; GitHub reservation `committer.date` is read back as `provider_created_at` and must be strictly earlier than expiry | prove local expiry crossing and provider-time at/after-deadline cases fail closed, then verify `provider_created_at < not_after` in every final-series receipt |
 | Atomic authority | provider-backed GitHub refs are global one-shot uniqueness; SQLite is crash-safe local evidence/result binding | verify new final-series RESERVED→FINAL chains live and against artifacts |
 | Solution proposal | External Intelligence provenance is exact-bound, post-request, zero-human-edit and effect-capability `NONE` | verify in final exact artifacts |
 | Input/environment identity | exact source commit/tree, workflow SHA and resolved Docker image are integrity-bound | verify exact final workflow/image/source evidence |
@@ -71,6 +71,12 @@ A decision may be fresh when live-verified and then expire while a legal precond
 
 The public runtime/effect-authorization interface must not expose a caller-controlled clock that can recreate the stale-time path.
 
+### FC-08 — provider-time expiry
+
+The exact decision expiry must travel into the GitHub authority receipt as `not_after`. After atomic ref creation, Executor must read the provider-controlled reservation commit timestamp. Missing/malformed provider time or `provider_created_at >= not_after` is fail-closed. The ref remains spent, but local effect consumption and target mutation are forbidden.
+
+Successful provider receipts must expose `provider_created_at < not_after`, allowing independent Phase C to verify temporal freshness without trusting the runner clock.
+
 ## 4. Supported product scope
 
 The human-selected endpoint remains:
@@ -86,8 +92,9 @@ The human-selected endpoint remains:
 
 ```text
 D11 FALSE-COMPLETION: EXPIRY TOCTOU
-  -> RE-SAMPLE FRESHNESS AT EFFECT AUTHORIZATION
-  -> ADVERSARIAL EXPIRY-CROSSING REGRESSION
+  -> POST-PRECONDITION LOCAL FRESHNESS CHECK
+  -> PROVIDER-SERVER-TIME not_after ENFORCEMENT
+  -> ADVERSARIAL EXPIRY REGRESSIONS
   -> CANONICAL STATE RECONCILIATION
   -> FULL FOUNDATION / DOCKER / GP001 PROOF
   -> SIX NEW DIRECT-HUMAN ACCEPT EVENTS
