@@ -1,9 +1,20 @@
 # P4 pilot value metrics
 
-Status: EVIDENCE RECORDED / NOT A P4 COMPLETION CLAIM
+Status: HISTORICAL VALUE EVIDENCE + CORRECTED SERIES PENDING / NOT A P4 COMPLETION CLAIM
 Date: 2026-08-16
 
-This file records the direct-human review/value evidence required for the bounded P4 pilot class. It does not authorize merge, deployment, release, or a maturity claim.
+This file preserves direct-human value observations from the first two pilot outputs while making explicit that their Executor completion candidate was rejected by independent Phase C. It does not authorize merge, deployment, release, or a maturity claim.
+
+## Independent Phase-C correction
+
+Historical Executor candidate `24107bc8a8186ed1928e098118982efb9d62ffaa` was rejected as `FALSE-COMPLETION` because human effect authority was replayable. Additional evidence gaps were also identified.
+
+Therefore:
+
+- the reviews below remain valid observations about the two target patches;
+- the old exact-candidate artifacts do **not** count as corrected P4 authority/replay proof;
+- no success-rate metric below may present the rejected candidate as P4 PASS;
+- a new corrected real-pilot series is required.
 
 ## Direct-human source
 
@@ -15,51 +26,67 @@ Authoritative value-review comment on Executor PR #61:
 - updated: `2026-08-16T16:03:33Z`
 - author association: `OWNER`
 
-The human recorded that the Executor-assisted path required materially less human work than manual completion.
+The human recorded that the Executor-assisted path required materially less human work than manual completion for these two reviewed patches.
 
-## Pilot review evidence
+## Historical patch-review observations
 
-### ScriptOps
+### ScriptOps PR #8
 
-- target PR: `JTJ07/scriptops#8`
 - target head: `897de878703a029df814f2551b993c3818defa2a`
 - review id: `4946578707`
 - reviewer: `JTJ07` / user id `219382941`
 - review state: `APPROVED`
-- review created: `2026-08-16T15:53:56Z`
 - human review time: approximately `3 minutes`
 - human-estimated manual completion time: approximately `15 minutes`
-- human explanation: a manual path would require iterative AI guidance to diagnose, implement, test, and deploy the change
-- observed human-time ratio from the human estimates: about `5x` less review time than estimated manual completion time
+- bounded ratio from the estimates: about `5x` less review time
 
-### Project Reconstructor
+### Project Reconstructor PR #4
 
-- target PR: `JTJ07/creative-os-project-reconstructor#4`
 - target head: `e59b9d6c1b496bcb6411e712e7c65cc891578ac3`
 - review id: `4946583370`
 - reviewer: `JTJ07` / user id `219382941`
 - review state: `APPROVED`
-- review created: `2026-08-16T15:56:31Z`
 - human review time: approximately `15 seconds`
 - human-estimated manual completion time: approximately `15 minutes`
-- human explanation: a manual path would require iterative AI guidance to diagnose, implement, test, and deploy the change
-- observed human-time ratio from the human estimates: about `60x` less review time than estimated manual completion time
+- bounded ratio from the estimates: about `60x` less review time
 
-## Bounded value result
+Both PRs remain intentionally DRAFT and unmerged.
 
-- reviewed pilot outputs: `2/2`
-- human approvals: `2/2`
-- both outputs remain intentionally `DRAFT`
-- merge remains unauthorized
-- the measured comparison is human review effort versus the human's estimate of manual completion effort; it is not a controlled productivity benchmark
+## Historical objective observations
 
-## Cost and reproducibility disclosure
+- patch outputs reviewed: `2/2`;
+- patch reviews approved: `2/2`;
+- these are **review acceptance observations**, not a corrected P4 objective-completion rate;
+- the old Reconstructor evidence included a declared unittest discovery that ran zero tests, so its old aggregate regression PASS is not accepted as corrected evidence.
 
-- new paid services authorized for this Phase B work: none
-- actual shared platform/provider allocation or billing cost: not independently measured
-- reproducibility evidence must be taken from the exact-candidate GitHub Actions replay and its bound artifacts, not from this human-time record
-- exact-candidate replay remains a separate evidence gate and must include the durable authority-ledger SQLite files
+## Corrected P4 series requirements
+
+`docs/product/P4_REPEATABILITY_POLICY.md` freezes the candidate measurement policy.
+
+Before a P4 claim is presented again, evidence must cover at least three distinct real bounded task objectives across the two authorized repositories or independent modules, including:
+
+- corrected global one-shot authority proof;
+- fresh exact request/decision evidence;
+- exact workflow/image/source identity;
+- post-request External Intelligence provenance;
+- real postconditions and non-empty declared regression evidence;
+- objective completion rate and first-attempt/retry counts reported separately;
+- failure taxonomy;
+- runtime and request-to-consumption latency;
+- human review acceptance/time evidence;
+- model/dependency identity and stability evidence;
+- bounded cost disclosure.
+
+## Cost disclosure
+
+- new paid services authorized for this Phase B work: none;
+- actual shared platform/provider allocation or billing cost: **not independently measured**;
+- this file must not translate “no new paid service authorized” into a claim of zero actual compute/platform cost.
 
 ## Interpretation boundary
 
-These observations support the claim that, for the two authorized bounded pilots, human review required materially less human effort than the human estimated for manual completion. They do not establish general productivity, economic ROI, P4 acceptance, or product completion. Independent Phase C verification and final human acceptance remain required.
+The historical reviews support only this statement:
+
+> For two bounded patches, the human reported materially less review effort than the human estimated for manual completion.
+
+They do not establish general productivity, ROI, corrected P4 success rate, P4 acceptance, or product completion.
