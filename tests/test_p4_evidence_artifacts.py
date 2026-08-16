@@ -95,6 +95,18 @@ class P4EvidenceArtifactTests(unittest.TestCase):
                     len(candidate["mutations"]),
                     request["task"]["max_production_files"],
                 )
+                self.assertEqual(
+                    candidate["evidence_plan"],
+                    request["task"]["postcondition_argv"]
+                    + request["task"]["regression_argv"],
+                )
+                commands = (
+                    request["task"]["precondition_argv"]
+                    + candidate["evidence_plan"]
+                )
+                for argv in commands:
+                    if argv[:2] == ["python", "-c"]:
+                        compile(argv[2], f"<{name}-evidence>", "exec")
                 for mutation in candidate["mutations"]:
                     self.assertEqual(
                         hashlib.sha256(

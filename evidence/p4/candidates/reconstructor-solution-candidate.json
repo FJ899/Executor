@@ -18,7 +18,7 @@
     [
       "python",
       "-c",
-      "import importlib.util,tempfile,sys; from pathlib import Path; spec=importlib.util.spec_from_file_location('verify','scripts/verify_reconstructor.py'); module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); directory=tempfile.TemporaryDirectory(); root=Path(directory.name)/'repository'; root.mkdir(); outside=Path(directory.name)/'outside.txt'; outside.write_text('outside'); (root/'README.md').symlink_to(outside); module.ROOT=root; blocked=False; exec(\\\"try:\\\\n module.read_text('README.md')\\\\nexcept SystemExit:\\\\n blocked=True\\\"); sys.exit(0 if blocked else 1)"
+      "import importlib.util,tempfile,sys; from pathlib import Path; spec=importlib.util.spec_from_file_location('verify','scripts/verify_reconstructor.py'); module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); directory=tempfile.TemporaryDirectory(); root=Path(directory.name)/'repository'; root.mkdir(); outside=Path(directory.name)/'outside.txt'; outside.write_text('outside'); (root/'README.md').symlink_to(outside); module.ROOT=root; blocked=False; exec(\"try:\\n module.read_text('README.md')\\nexcept SystemExit:\\n blocked=True\"); sys.exit(0 if blocked else 1)"
     ],
     [
       "python",

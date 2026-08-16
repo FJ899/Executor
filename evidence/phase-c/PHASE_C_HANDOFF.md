@@ -18,6 +18,7 @@ P4 is not claimed. The executing agent is not the independent verifier.
 
 ## Candidate implementation
 
+- Executor draft PR: `JTJ07/Executor#61`, head `c03e11b0ddeda3e2eb5540b8d0ca0c960a8cd494` plus any later evidence-only correction commits;
 - current GitHub issue/comment and target commit/tree verification;
 - exact draft hash and `ACCEPT/MODIFY/REJECT` handling;
 - durable SQLite authority consumption and terminal result binding;
@@ -25,6 +26,8 @@ P4 is not claimed. The executing agent is not the independent verifier.
 - bounded pilot sandbox runtime and draft-PR request artifact;
 - two prepared pilot request bodies, exact solution candidates and patches;
 - adversarial, concurrency, proposal and runtime tests.
+
+Published-candidate CI at `c03e11b0...` passed in full: `Verify Executor foundations` run `31934386616` (including wheel/install/CLI smoke and Docker security/cleanup) and `GP001 replay repeatability` run `31934386612`.
 
 ## Observed pilot counterexamples
 
@@ -37,8 +40,8 @@ Locators: `evidence/p4/PILOT_CANDIDATE_MANIFEST.json`, `evidence/p4/requests/` a
 
 1. Two direct-human GitHub request issues do not yet exist.
 2. Two exact, fresh, direct-human GitHub `ACCEPT` comments do not yet exist.
-3. The implementation branch/draft PR and both pilot branch/draft PR writes require renewed GitHub tool approval after the current approval timeout.
-4. Full GitHub Actions, Docker, wheel/CLI smoke and both real pilot runs must complete on published branches.
+3. Both pilot branch/draft PR writes and target-repository CI remain pending.
+4. Both real pilot runs must complete through the exact frozen authority path.
 
 ## Independent verification obligations
 

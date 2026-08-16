@@ -51,7 +51,6 @@
   ],
   "blockers": [
     "No direct-human GitHub request issues exist yet.",
-    "No exact direct-human GitHub ACCEPT comments exist yet.",
-    "GitHub write approval for branch/PR publication timed out in the current environment."
+    "No exact direct-human GitHub ACCEPT comments exist yet."
   ]
 }
