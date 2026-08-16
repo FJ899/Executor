@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   scriptops-pilot-series:
-    if: ${{ github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
+    if: false
     runs-on: ubuntu-latest
     env:
       EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: JTJ07/Executor
@@ -159,7 +159,7 @@ jobs:
             pilot-evidence/scriptops/runs/**
 
   reconstructor-pilot-series:
-    if: ${{ github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
+    if: false
     runs-on: ubuntu-latest
     env:
       EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: JTJ07/Executor
