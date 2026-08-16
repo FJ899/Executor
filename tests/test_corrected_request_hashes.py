@@ -33,7 +33,7 @@ CASES = (
         "issue_node_id": "I_kwDOTpqUf88AAAABM-aINQ",
         "created_at": "2026-08-16T18:18:20Z",
         "body_sha256": "158ab5918c20802658b2c6649a63e6fb25511c0c0d745efcb170cf3577a022db",
-        "draft_sha256": "0c7e92bf2e86f74cf75d8cde6e66e74d38b0a212b197e3781a06712a86e46919",
+        "draft_sha256": "cfdcfa2ac6b2d6ac7e3da59b0d7aece0e54d43e99f3c8977e8cd422285b50cf6",
     },
     {
         "name": "reconstructor",
@@ -42,7 +42,7 @@ CASES = (
         "issue_node_id": "I_kwDOTpqUf88AAAABM-Zuww",
         "created_at": "2026-08-16T18:16:39Z",
         "body_sha256": "e662f7c25fc699b252abcc6a25254b510bd9de94d703116f23631994de1bccbc",
-        "draft_sha256": "b473388083ad19579d903efb3f7e2777e4b55bb94cf5b50d09ceb53636a41a1b",
+        "draft_sha256": "49f3ae5290220ed70db4d257f4abfec1ed67af67da9c9b9c4a1ff026a6a2863e",
     },
 )
 
