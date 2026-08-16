@@ -5,15 +5,19 @@ Authority: `PROJECT_COMPLETION_MAP.md` section 7.2 (`AI_DELEGABLE`) and G-16/GAP
 
 ## Current status
 
-Independent Phase C rejected historical candidate `24107bc8a8186ed1928e098118982efb9d62ffaa`. PR #61 remains the sole active Executor implementation path and is under corrective Phase-B rework. Historical successful pilot artifacts tied to the rejected SHA are retained as evidence, not current completion proof.
+PR #61 remains the sole active Executor implementation path and is under corrective Phase-B rework. Independent Phase C has rejected multiple exact candidates; all successful runs, artifacts, provider receipts and human decisions tied to rejected SHAs are retained as historical evidence, not current completion proof.
+
+The latest rejected exact candidate is `d11f3dd9d6c484a9c554cd562db46c30e0a333fe` (`FALSE-COMPLETION`, decision-freshness TOCTOU). Earlier rejected/blocked exact candidates remain historical as recorded in `evidence/p4/PILOT_CANDIDATE_MANIFEST.json` and `evidence/phase-c/PHASE_C_HANDOFF.md`.
 
 ## Active completion path
 
 - `JTJ07/Executor#61` — active Phase B completion candidate; draft; not authorized to merge.
-- `JTJ07/scriptops#8` — historical governed pilot review output; draft; merge not authorized.
-- `JTJ07/creative-os-project-reconstructor#4` — historical governed pilot review output; draft; merge not authorized.
-- Request issues `JTJ07/Executor#62` and `#63` remain durable historical authority/evidence records and are not temporary work items.
-- Additional corrected direct-human request records may be added during the Phase-C rework. They remain evidence records rather than unfinished implementation work.
+- `JTJ07/scriptops#8` — bounded governed pilot review output; draft; merge not authorized.
+- `JTJ07/creative-os-project-reconstructor#4` — bounded governed pilot review output; draft; merge not authorized.
+- Request issues `JTJ07/Executor#62` through `#65` are durable authority/evidence history and are not temporary work items.
+- Fresh direct-human decision comments required by a later exact candidate are also durable evidence records after use.
+
+Target pilot PRs may remain open/draft/unmerged because merge is intentionally outside the approved pilot authority. Their presence is not a repository-closure blocker.
 
 ## Archived Executor PRs
 
@@ -36,7 +40,7 @@ All closed PRs remain readable and retain their commits, descriptions and discus
 
 Historical implementation branch refs may remain on GitHub for evidence retention. A branch with no open PR and no current completion responsibility is archival, not an active roadmap/critical-path branch.
 
-The corrected authority design additionally creates deterministic provider-backed refs under:
+The authority design creates deterministic provider-backed refs under:
 
 ```text
 refs/heads/executor-authority/<sha256(authority_key)>
@@ -48,4 +52,4 @@ Deleting, force-moving, or reusing an authority receipt ref is outside the suppo
 
 ## Current rule
 
-The only active Executor implementation PR for the approved completion path is PR #61. Historical closed items and rejected candidate evidence must not be treated as current implementation/maturity proof unless a verifier explicitly cites them for historical/falsification context.
+The only active Executor implementation PR for the approved completion path is PR #61. Historical closed items and rejected-candidate evidence must not be treated as current implementation/maturity proof unless a verifier explicitly cites them for historical/falsification context. Final closure must be independently rechecked against live GitHub and Saddle state on the final exact candidate.
