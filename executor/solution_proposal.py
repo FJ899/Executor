@@ -4,6 +4,7 @@ import copy
 import hashlib
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from fnmatch import fnmatch
 from typing import Any
 
@@ -55,6 +56,8 @@ class ValidatedSolutionProposal:
     mutations: tuple[ProposedMutation, ...]
     rationale: str
     evidence_plan: tuple[tuple[str, ...], ...]
+    provenance: dict[str, Any]
+    provenance_sha256: str
     payload_sha256: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -67,6 +70,8 @@ class ValidatedSolutionProposal:
             "mutations": [item.to_dict() for item in self.mutations],
             "rationale": self.rationale,
             "evidence_plan": [list(item) for item in self.evidence_plan],
+            "provenance": copy.deepcopy(self.provenance),
+            "provenance_sha256": self.provenance_sha256,
             "payload_sha256": self.payload_sha256,
         }
 
@@ -86,6 +91,7 @@ def materialize_solution_candidate(
         "mutations",
         "rationale",
         "evidence_plan",
+        "provenance",
     }:
         raise SolutionProposalError("solution candidate has invalid fields")
     if (
@@ -103,6 +109,7 @@ def materialize_solution_candidate(
         "mutations": copy.deepcopy(candidate["mutations"]),
         "rationale": candidate["rationale"],
         "evidence_plan": copy.deepcopy(candidate["evidence_plan"]),
+        "provenance": copy.deepcopy(candidate["provenance"]),
     }
     validate_solution_proposal(proposal, frozen_result=frozen_result)
     return proposal
@@ -119,6 +126,93 @@ def _find_forbidden_keys(value: Any, *, path: str = "$") -> list[str]:
         for index, child in enumerate(value):
             found.extend(_find_forbidden_keys(child, path=f"{path}[{index}]"))
     return found
+
+
+def _parse_utc(value: Any, *, label: str) -> datetime:
+    if not isinstance(value, str) or not value.endswith("Z"):
+        raise SolutionProposalError(f"{label} must be RFC3339 UTC")
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError as exc:
+        raise SolutionProposalError(f"{label} is invalid") from exc
+    if parsed.utcoffset() is None or parsed.utcoffset().total_seconds() != 0:
+        raise SolutionProposalError(f"{label} must be UTC")
+    return parsed.astimezone(timezone.utc)
+
+
+def _validate_provenance(
+    value: Any,
+    *,
+    contract: dict[str, Any],
+) -> tuple[dict[str, Any], str]:
+    expected = {
+        "schema_version",
+        "producer_role",
+        "provider",
+        "model",
+        "generated_at",
+        "request",
+        "source",
+        "prompt_sha256",
+        "human_solution_edits",
+        "effect_capability",
+        "derivation",
+        "historical_candidate_relation",
+    }
+    if not isinstance(value, dict) or set(value) != expected:
+        raise SolutionProposalError("solution provenance has invalid fields")
+    if value.get("schema_version") != "executor-solution-provenance/1.0":
+        raise SolutionProposalError("solution provenance schema is invalid")
+    if value.get("producer_role") != "EXTERNAL_INTELLIGENCE":
+        raise SolutionProposalError("solution must be produced by external intelligence")
+    if not isinstance(value.get("provider"), str) or not value["provider"].strip():
+        raise SolutionProposalError("solution provenance provider is required")
+    if not isinstance(value.get("model"), str) or not value["model"].strip():
+        raise SolutionProposalError("solution provenance model is required")
+    if value.get("human_solution_edits") != 0:
+        raise SolutionProposalError("human solution edits must be zero")
+    if value.get("effect_capability") != "NONE":
+        raise SolutionProposalError("solution producer must have no effect capability")
+    if value.get("derivation") != "REGENERATED_AFTER_HUMAN_REQUEST":
+        raise SolutionProposalError("solution provenance must be post-request regeneration")
+    if value.get("historical_candidate_relation") not in {
+        "SAME_FIX_REDERIVED",
+        "NEW_FIX",
+    }:
+        raise SolutionProposalError("historical candidate relation is invalid")
+    prompt_sha = value.get("prompt_sha256")
+    if not isinstance(prompt_sha, str) or _SHA256.fullmatch(prompt_sha) is None:
+        raise SolutionProposalError("solution provenance prompt hash is invalid")
+
+    request = value.get("request")
+    request_evidence = contract.get("request_evidence", {})
+    request_expected = {
+        "repository": request_evidence.get("repository"),
+        "issue_number": request_evidence.get("issue_number"),
+        "issue_node_id": request_evidence.get("issue_node_id"),
+        "body_sha256": request_evidence.get("body_sha256"),
+    }
+    if not isinstance(request, dict) or request != request_expected:
+        raise SolutionProposalError("solution provenance request binding mismatch")
+
+    target = contract.get("target", {})
+    source_expected = {
+        "repository": target.get("repository"),
+        "commit": target.get("commit"),
+        "tree": target.get("tree"),
+    }
+    if value.get("source") != source_expected:
+        raise SolutionProposalError("solution provenance source binding mismatch")
+
+    generated = _parse_utc(value.get("generated_at"), label="provenance.generated_at")
+    request_created = _parse_utc(
+        request_evidence.get("created_at"), label="request_evidence.created_at"
+    )
+    if generated <= request_created:
+        raise SolutionProposalError("solution provenance predates the human request")
+    normalized = copy.deepcopy(value)
+    sha = hashlib.sha256(canonical_json(normalized).encode("utf-8")).hexdigest()
+    return normalized, sha
 
 
 def validate_solution_proposal(
@@ -138,6 +232,7 @@ def validate_solution_proposal(
         "mutations",
         "rationale",
         "evidence_plan",
+        "provenance",
     }
     if set(proposal) != expected_keys:
         raise SolutionProposalError("solution proposal has missing or additional fields")
@@ -169,10 +264,13 @@ def validate_solution_proposal(
         }[field]
         if proposal.get(field) != target.get(proposal_field):
             raise SolutionProposalError(f"solution proposal {field} mismatch")
-    if not isinstance(proposal.get("rationale"), str) or not proposal[
-        "rationale"
-    ].strip():
+    if not isinstance(proposal.get("rationale"), str) or not proposal["rationale"].strip():
         raise SolutionProposalError("solution proposal rationale is required")
+
+    provenance, provenance_sha = _validate_provenance(
+        proposal.get("provenance"),
+        contract=contract,
+    )
 
     mutations = proposal.get("mutations")
     maximum = contract["task"]["max_production_files"]
@@ -252,5 +350,7 @@ def validate_solution_proposal(
         mutations=tuple(normalized),
         rationale=proposal["rationale"],
         evidence_plan=tuple(commands),
+        provenance=provenance,
+        provenance_sha256=provenance_sha,
         payload_sha256=payload_sha,
     )
