@@ -4,14 +4,18 @@ on:
   pull_request:
     types: [synchronize]
 
-# Intentionally disabled during Phase-C corrective rework.
-# The final enabling commit must replace all placeholder issue/comment IDs with
-# fresh direct-human authority for the corrected request set.
+# Corrected Phase-C proof workflow.
+# Intentionally disabled until six fresh direct-human ACCEPT comments are bound.
+# Final enabling commit must replace all zero comment IDs and remove `false &&`.
 permissions:
   contents: write
 
+concurrency:
+  group: p4-corrected-series-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
-  scriptops-pilot:
+  scriptops-pilot-series:
     if: ${{ false && github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
     runs-on: ubuntu-latest
     env:
@@ -30,6 +34,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Record exact Executor identity
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          git rev-parse HEAD > scriptops-executor-head.txt
+          git rev-parse 'HEAD^{tree}' > scriptops-executor-tree.txt
+          sha256sum .github/workflows/p4-real-pilots-one-shot.yml > scriptops-workflow-sha256.txt
 
       - name: Build isolated ScriptOps pilot image with pinned runtime dependencies
         run: |
@@ -42,8 +53,10 @@ jobs:
           DOCKERFILE
           docker build --pull -f "$RUNNER_TEMP/p4-scriptops.Dockerfile" -t executor-scriptops-pilot:pyyaml-git .
 
-      - name: Resolve exact image ID
-        run: echo "EXECUTOR_SANDBOX_IMAGE=$(docker image inspect --format='{{.Id}}' executor-scriptops-pilot:pyyaml-git)" >> "$GITHUB_ENV"
+      - name: Resolve exact ScriptOps image ID
+        run: |
+          echo "EXECUTOR_SANDBOX_IMAGE=$(docker image inspect --format='{{.Id}}' executor-scriptops-pilot:pyyaml-git)" >> "$GITHUB_ENV"
+          docker image inspect --format='{{.Id}}' executor-scriptops-pilot:pyyaml-git > scriptops-image-id.txt
 
       - name: Acquire exact ScriptOps source
         run: |
@@ -53,64 +66,102 @@ jobs:
           test "$(git -C target rev-parse 'HEAD^{tree}')" = "ba0b99bd99682dcc7a942537b502a7a72151fa09"
           test -z "$(git -C target status --porcelain=v1 --untracked-files=all)"
 
-      - name: Consume fresh human ACCEPT and freeze ScriptOps contract
+      - name: Execute three independently authorized ScriptOps pilots
         run: |
-          python -m executor.cli github-pilot-decide \
-            --profile trust_profiles/github-p4-pilots.json \
-            --issue 62 \
-            --comment 0 \
-            --ledger .executor/scriptops-authority.sqlite3 \
-            > scriptops-frozen.json
+          set -euo pipefail
+          SCRIPTOPS_COMMENTS=(0 0 0)
+          for idx in 1 2 3; do
+            comment="${SCRIPTOPS_COMMENTS[$((idx-1))]}"
+            test "$comment" != "0"
+            git -C target reset --hard daa6e5dc210e09171a530eeffe5601e0e74ae041
+            git -C target clean -fdx
+            test "$(git -C target rev-parse HEAD)" = "daa6e5dc210e09171a530eeffe5601e0e74ae041"
+            test "$(git -C target rev-parse 'HEAD^{tree}')" = "ba0b99bd99682dcc7a942537b502a7a72151fa09"
+            test -z "$(git -C target status --porcelain=v1 --untracked-files=all)"
 
-      - name: Materialize provenance-bound ScriptOps proposal
+            python -m executor.cli github-pilot-decide \
+              --profile trust_profiles/github-p4-pilots.json \
+              --issue 65 \
+              --comment "$comment" \
+              --ledger .executor/scriptops-authority.sqlite3 \
+              > "scriptops-frozen-$idx.json"
+
+            python -m executor.cli materialize-pilot-proposal \
+              --candidate evidence/p4/candidates/scriptops-solution-candidate.json \
+              --provenance evidence/p4/intelligence/scriptops-provenance.json \
+              --frozen "scriptops-frozen-$idx.json" \
+              > "scriptops-proposal-$idx.json"
+
+            python -m executor.cli run-pilot \
+              --profile trust_profiles/github-p4-pilots.json \
+              --issue 65 \
+              --comment "$comment" \
+              --frozen "scriptops-frozen-$idx.json" \
+              --proposal "scriptops-proposal-$idx.json" \
+              --ledger .executor/scriptops-authority.sqlite3 \
+              --workspace target \
+              --runs-root pilot-evidence/scriptops/runs \
+              --run-id "p4-scriptops-corrected-00$idx" \
+              --image "$EXECUTOR_SANDBOX_IMAGE" \
+              --executor-root . \
+              --executor-commit "${{ github.event.pull_request.head.sha }}" \
+              > "scriptops-result-$idx.json"
+
+            grep -q '"status": "ACTION_COMPLETED_REVIEW_REQUIRED"' "scriptops-result-$idx.json"
+            git -C target diff --no-ext-diff --no-textconv --binary daa6e5dc210e09171a530eeffe5601e0e74ae041 > "scriptops-pilot-$idx.patch"
+            git -C target status --porcelain=v1 --untracked-files=all > "scriptops-status-$idx.txt"
+            test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=p4-bounded-real-pilot)"
+          done
+          cmp scriptops-pilot-1.patch scriptops-pilot-2.patch
+          cmp scriptops-pilot-1.patch scriptops-pilot-3.patch
+          sha256sum scriptops-pilot-1.patch scriptops-pilot-2.patch scriptops-pilot-3.patch > scriptops-series-patch-sha256.txt
+
+      - name: Record ScriptOps global authority bindings
         run: |
-          python -m executor.cli materialize-pilot-proposal \
-            --candidate evidence/p4/candidates/scriptops-solution-candidate.json \
-            --provenance evidence/p4/provenance/scriptops-solution-provenance.json \
-            --frozen scriptops-frozen.json \
-            > scriptops-proposal.json
+          python - <<'PY'
+          import json
+          out = []
+          for idx in (1, 2, 3):
+              frozen = json.load(open(f"scriptops-frozen-{idx}.json", encoding="utf-8"))
+              result = json.load(open(f"scriptops-result-{idx}.json", encoding="utf-8"))
+              out.append({
+                  "iteration": idx,
+                  "decision_consumption": frozen.get("decision_consumption"),
+                  "effect_consumption": result.get("authority_consumption"),
+                  "execution_environment": result.get("execution_environment"),
+                  "solution_provenance": result.get("solution_provenance"),
+                  "status": result.get("status"),
+              })
+          print(json.dumps({"series": out}, indent=2, sort_keys=True))
+          PY
+          > scriptops-global-authority-series.json
 
-      - name: Execute governed ScriptOps pilot
-        run: |
-          python -m executor.cli run-pilot \
-            --profile trust_profiles/github-p4-pilots.json \
-            --issue 62 \
-            --comment 0 \
-            --frozen scriptops-frozen.json \
-            --proposal scriptops-proposal.json \
-            --ledger .executor/scriptops-authority.sqlite3 \
-            --workspace target \
-            --runs-root pilot-evidence/scriptops/runs \
-            --run-id p4-scriptops-corrected-001 \
-            --image "$EXECUTOR_SANDBOX_IMAGE" \
-            --executor-root . \
-            --executor-commit "${{ github.event.pull_request.head.sha }}" \
-            > scriptops-result.json
-          grep -q '"status": "ACTION_COMPLETED_REVIEW_REQUIRED"' scriptops-result.json
-          git -C target diff --no-ext-diff --no-textconv --binary daa6e5dc210e09171a530eeffe5601e0e74ae041 > scriptops-pilot.patch
-          git -C target status --porcelain=v1 --untracked-files=all > scriptops-status.txt
-
-      - name: Verify ScriptOps sandbox cleanup
-        if: always()
-        run: test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=p4-bounded-real-pilot)"
-
-      - name: Upload ScriptOps corrected evidence
+      - name: Upload ScriptOps corrected series evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: p4-scriptops-corrected-evidence
+          name: p4-scriptops-corrected-series-evidence
           if-no-files-found: error
           include-hidden-files: true
           path: |
-            scriptops-frozen.json
-            scriptops-proposal.json
-            scriptops-result.json
-            scriptops-pilot.patch
-            scriptops-status.txt
+            scriptops-executor-head.txt
+            scriptops-executor-tree.txt
+            scriptops-workflow-sha256.txt
+            scriptops-image-id.txt
+            scriptops-frozen-*.json
+            scriptops-proposal-*.json
+            scriptops-result-*.json
+            scriptops-pilot-*.patch
+            scriptops-status-*.txt
+            scriptops-series-patch-sha256.txt
+            scriptops-global-authority-series.json
+            evidence/p4/requests/scriptops-request.json
+            evidence/p4/intelligence/scriptops-prompt.txt
+            evidence/p4/intelligence/scriptops-provenance.json
             .executor/scriptops-authority.sqlite3*
             pilot-evidence/scriptops/runs/**
 
-  reconstructor-pilot:
+  reconstructor-pilot-series:
     if: ${{ false && github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
     runs-on: ubuntu-latest
     env:
@@ -130,11 +181,20 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Record exact Executor identity
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          git rev-parse HEAD > reconstructor-executor-head.txt
+          git rev-parse 'HEAD^{tree}' > reconstructor-executor-tree.txt
+          sha256sum .github/workflows/p4-real-pilots-one-shot.yml > reconstructor-workflow-sha256.txt
+
       - name: Pull isolated Reconstructor pilot image
         run: docker pull python:3.11-slim-bookworm
 
-      - name: Resolve exact image ID
-        run: echo "EXECUTOR_SANDBOX_IMAGE=$(docker image inspect --format='{{.Id}}' python:3.11-slim-bookworm)" >> "$GITHUB_ENV"
+      - name: Resolve exact Reconstructor image ID
+        run: |
+          echo "EXECUTOR_SANDBOX_IMAGE=$(docker image inspect --format='{{.Id}}' python:3.11-slim-bookworm)" >> "$GITHUB_ENV"
+          docker image inspect --format='{{.Id}}' python:3.11-slim-bookworm > reconstructor-image-id.txt
 
       - name: Acquire exact Reconstructor source
         run: |
@@ -144,59 +204,97 @@ jobs:
           test "$(git -C target rev-parse 'HEAD^{tree}')" = "5960d74773b19456863ac66084385b7619aa4285"
           test -z "$(git -C target status --porcelain=v1 --untracked-files=all)"
 
-      - name: Consume fresh corrected Reconstructor ACCEPT
+      - name: Execute three independently authorized Reconstructor pilots
         run: |
-          python -m executor.cli github-pilot-decide \
-            --profile trust_profiles/github-p4-pilots.json \
-            --issue 0 \
-            --comment 0 \
-            --ledger .executor/reconstructor-authority.sqlite3 \
-            > reconstructor-frozen.json
+          set -euo pipefail
+          RECONSTRUCTOR_COMMENTS=(0 0 0)
+          for idx in 1 2 3; do
+            comment="${RECONSTRUCTOR_COMMENTS[$((idx-1))]}"
+            test "$comment" != "0"
+            git -C target reset --hard defc7b029097284f94136fec54b75c313ac12f68
+            git -C target clean -fdx
+            test "$(git -C target rev-parse HEAD)" = "defc7b029097284f94136fec54b75c313ac12f68"
+            test "$(git -C target rev-parse 'HEAD^{tree}')" = "5960d74773b19456863ac66084385b7619aa4285"
+            test -z "$(git -C target status --porcelain=v1 --untracked-files=all)"
 
-      - name: Materialize provenance-bound Reconstructor proposal
+            python -m executor.cli github-pilot-decide \
+              --profile trust_profiles/github-p4-pilots.json \
+              --issue 64 \
+              --comment "$comment" \
+              --ledger .executor/reconstructor-authority.sqlite3 \
+              > "reconstructor-frozen-$idx.json"
+
+            python -m executor.cli materialize-pilot-proposal \
+              --candidate evidence/p4/candidates/reconstructor-solution-candidate.json \
+              --provenance evidence/p4/intelligence/reconstructor-provenance.json \
+              --frozen "reconstructor-frozen-$idx.json" \
+              > "reconstructor-proposal-$idx.json"
+
+            python -m executor.cli run-pilot \
+              --profile trust_profiles/github-p4-pilots.json \
+              --issue 64 \
+              --comment "$comment" \
+              --frozen "reconstructor-frozen-$idx.json" \
+              --proposal "reconstructor-proposal-$idx.json" \
+              --ledger .executor/reconstructor-authority.sqlite3 \
+              --workspace target \
+              --runs-root pilot-evidence/reconstructor/runs \
+              --run-id "p4-reconstructor-corrected-00$idx" \
+              --image "$EXECUTOR_SANDBOX_IMAGE" \
+              --executor-root . \
+              --executor-commit "${{ github.event.pull_request.head.sha }}" \
+              > "reconstructor-result-$idx.json"
+
+            grep -q '"status": "ACTION_COMPLETED_REVIEW_REQUIRED"' "reconstructor-result-$idx.json"
+            git -C target diff --no-ext-diff --no-textconv --binary defc7b029097284f94136fec54b75c313ac12f68 > "reconstructor-pilot-$idx.patch"
+            git -C target status --porcelain=v1 --untracked-files=all > "reconstructor-status-$idx.txt"
+            test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=p4-bounded-real-pilot)"
+          done
+          cmp reconstructor-pilot-1.patch reconstructor-pilot-2.patch
+          cmp reconstructor-pilot-1.patch reconstructor-pilot-3.patch
+          sha256sum reconstructor-pilot-1.patch reconstructor-pilot-2.patch reconstructor-pilot-3.patch > reconstructor-series-patch-sha256.txt
+
+      - name: Record Reconstructor global authority bindings
         run: |
-          python -m executor.cli materialize-pilot-proposal \
-            --candidate evidence/p4/candidates/reconstructor-solution-candidate.json \
-            --provenance evidence/p4/provenance/reconstructor-solution-provenance.json \
-            --frozen reconstructor-frozen.json \
-            > reconstructor-proposal.json
+          python - <<'PY'
+          import json
+          out = []
+          for idx in (1, 2, 3):
+              frozen = json.load(open(f"reconstructor-frozen-{idx}.json", encoding="utf-8"))
+              result = json.load(open(f"reconstructor-result-{idx}.json", encoding="utf-8"))
+              out.append({
+                  "iteration": idx,
+                  "decision_consumption": frozen.get("decision_consumption"),
+                  "effect_consumption": result.get("authority_consumption"),
+                  "execution_environment": result.get("execution_environment"),
+                  "solution_provenance": result.get("solution_provenance"),
+                  "status": result.get("status"),
+              })
+          print(json.dumps({"series": out}, indent=2, sort_keys=True))
+          PY
+          > reconstructor-global-authority-series.json
 
-      - name: Execute governed Reconstructor pilot
-        run: |
-          python -m executor.cli run-pilot \
-            --profile trust_profiles/github-p4-pilots.json \
-            --issue 0 \
-            --comment 0 \
-            --frozen reconstructor-frozen.json \
-            --proposal reconstructor-proposal.json \
-            --ledger .executor/reconstructor-authority.sqlite3 \
-            --workspace target \
-            --runs-root pilot-evidence/reconstructor/runs \
-            --run-id p4-reconstructor-corrected-001 \
-            --image "$EXECUTOR_SANDBOX_IMAGE" \
-            --executor-root . \
-            --executor-commit "${{ github.event.pull_request.head.sha }}" \
-            > reconstructor-result.json
-          grep -q '"status": "ACTION_COMPLETED_REVIEW_REQUIRED"' reconstructor-result.json
-          git -C target diff --no-ext-diff --no-textconv --binary defc7b029097284f94136fec54b75c313ac12f68 > reconstructor-pilot.patch
-          git -C target status --porcelain=v1 --untracked-files=all > reconstructor-status.txt
-
-      - name: Verify Reconstructor sandbox cleanup
-        if: always()
-        run: test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=p4-bounded-real-pilot)"
-
-      - name: Upload Reconstructor corrected evidence
+      - name: Upload Reconstructor corrected series evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: p4-reconstructor-corrected-evidence
+          name: p4-reconstructor-corrected-series-evidence
           if-no-files-found: error
           include-hidden-files: true
           path: |
-            reconstructor-frozen.json
-            reconstructor-proposal.json
-            reconstructor-result.json
-            reconstructor-pilot.patch
-            reconstructor-status.txt
+            reconstructor-executor-head.txt
+            reconstructor-executor-tree.txt
+            reconstructor-workflow-sha256.txt
+            reconstructor-image-id.txt
+            reconstructor-frozen-*.json
+            reconstructor-proposal-*.json
+            reconstructor-result-*.json
+            reconstructor-pilot-*.patch
+            reconstructor-status-*.txt
+            reconstructor-series-patch-sha256.txt
+            reconstructor-global-authority-series.json
+            evidence/p4/requests/reconstructor-request.json
+            evidence/p4/intelligence/reconstructor-prompt.txt
+            evidence/p4/intelligence/reconstructor-provenance.json
             .executor/reconstructor-authority.sqlite3*
             pilot-evidence/reconstructor/runs/**
