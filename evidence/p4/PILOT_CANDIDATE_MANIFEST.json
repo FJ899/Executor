@@ -1,5 +1,5 @@
 {
-  "schema_version": "executor-p4-pilot-candidate-evidence/1.4",
+  "schema_version": "executor-p4-pilot-candidate-evidence/1.5",
   "status": "CORRECTIVE_REWORK_FRESH_HUMAN_AUTHORITY_REQUIRED",
   "updated_at": "2026-08-16",
   "state_model": {
@@ -105,7 +105,8 @@
     "zero-test unittest discovery fails closed",
     "three independently authorized executions required per real objective",
     "provider-verifiable direct-human origin requires performed_via_github_app to be present and null; app-mediated or missing signals fail closed",
-    "decision freshness is re-sampled at the effect-authorization boundary after preconditions; caller-supplied or precondition-start clocks cannot authorize an effect"
+    "decision freshness is re-sampled at the effect-authorization boundary after preconditions; caller-supplied or precondition-start clocks cannot authorize an effect",
+    "decision expiry is bound to provider receipt not_after; GitHub reservation commit committer.date is read back as provider_created_at and must be strictly earlier than not_after; expired or unverifiable provider-time reservations fail closed before local effect consumption or mutation"
   ],
   "post_commit_evidence_requirements": [
     "Foundation CI must assert exact PR head SHA.",
@@ -113,6 +114,8 @@
     "Corrected six-execution pilot series must pass on the same exact PR head using six new fresh direct-human ACCEPT events.",
     "Artifacts must include raw evidence and SQLite ledgers.",
     "Provider decision/effect receipt refs must exist live and match FINAL bindings.",
+    "Every current provider reservation must expose a valid provider_created_at strictly earlier than the exact decision not_after deadline.",
+    "Provider-time expiry at/after not_after must be proven fail-closed and may spend the ref but cannot permit local effect consumption or mutation.",
     "Target PRs must remain OPEN, DRAFT, UNMERGED with reviewed unchanged heads.",
     "PR #61 body may list immutable run/artifact locators only after the runs exist; the verifier must resolve them independently.",
     "Direct-human request and decision verification must reject non-null or missing performed_via_github_app before any freeze or consequential effect.",
@@ -123,5 +126,5 @@
     "executor_1_0_human_acceptance": "NOT_RECORDED",
     "merge_release_deploy_tag": "NOT_AUTHORIZED"
   },
-  "current_rule": "Resolve the exact current PR #61 head/tree and exact-head immutable evidence. Never reuse human ACCEPT events consumed by a rejected candidate. Freshness must hold at effect authorization after preconditions. Never infer current PASS from historical runs, consumed decisions, mutable prose, or a different SHA."
+  "current_rule": "Resolve the exact current PR #61 head/tree and exact-head immutable evidence. Never reuse human ACCEPT events consumed by a rejected candidate. Freshness must hold after preconditions and at provider reservation time. Never infer current PASS from historical runs, consumed decisions, mutable prose, or a different SHA."
 }
