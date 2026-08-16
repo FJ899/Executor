@@ -6,6 +6,7 @@ import os
 import re
 import sqlite3
 import stat
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -103,29 +104,39 @@ class AtomicAuthorityLedger:
         return connection
 
     def _initialize(self) -> None:
-        with self._connect() as connection:
-            connection.execute("PRAGMA journal_mode = WAL")
-            connection.execute("PRAGMA synchronous = FULL")
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS authority_consumptions (
-                    authority_key TEXT PRIMARY KEY,
-                    payload_sha256 TEXT NOT NULL,
-                    action_kind TEXT NOT NULL,
-                    run_id TEXT NOT NULL,
-                    execution_token TEXT NOT NULL UNIQUE,
-                    consumed_at TEXT NOT NULL,
-                    state TEXT NOT NULL CHECK (state IN ('CONSUMED', 'FINAL')),
-                    result_sha256 TEXT,
-                    result_json BLOB,
-                    CHECK (
-                        (state = 'CONSUMED' AND result_sha256 IS NULL AND result_json IS NULL)
-                        OR
-                        (state = 'FINAL' AND result_sha256 IS NOT NULL AND result_json IS NOT NULL)
+        last_locked: sqlite3.OperationalError | None = None
+        for _ in range(40):
+            try:
+                with self._connect() as connection:
+                    connection.execute("PRAGMA journal_mode = WAL")
+                    connection.execute("PRAGMA synchronous = FULL")
+                    connection.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS authority_consumptions (
+                            authority_key TEXT PRIMARY KEY,
+                            payload_sha256 TEXT NOT NULL,
+                            action_kind TEXT NOT NULL,
+                            run_id TEXT NOT NULL,
+                            execution_token TEXT NOT NULL UNIQUE,
+                            consumed_at TEXT NOT NULL,
+                            state TEXT NOT NULL CHECK (state IN ('CONSUMED', 'FINAL')),
+                            result_sha256 TEXT,
+                            result_json BLOB,
+                            CHECK (
+                                (state = 'CONSUMED' AND result_sha256 IS NULL AND result_json IS NULL)
+                                OR
+                                (state = 'FINAL' AND result_sha256 IS NOT NULL AND result_json IS NOT NULL)
+                            )
+                        )
+                        """
                     )
-                )
-                """
-            )
+                return
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower():
+                    raise
+                last_locked = exc
+                time.sleep(0.05)
+        raise AuthorityLedgerError("authority ledger initialization remained locked") from last_locked
 
     @staticmethod
     def _validate_consume(
