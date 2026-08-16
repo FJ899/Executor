@@ -101,6 +101,7 @@ def issue(body=None):
         "created_at": "2026-08-16T00:00:00Z",
         "updated_at": "2026-08-16T00:00:00Z",
         "author_association": "OWNER",
+        "performed_via_github_app": None,
         "user": {"login": "JTJ07", "id": 219382941, "type": "User"},
     }
 
@@ -131,6 +132,7 @@ def comment(payload):
         "created_at": "2026-08-16T00:01:00Z",
         "updated_at": "2026-08-16T00:01:00Z",
         "author_association": "OWNER",
+        "performed_via_github_app": None,
         "user": {"login": "JTJ07", "id": 219382941, "type": "User"},
     }
 
@@ -236,6 +238,62 @@ class GitHubTrustTests(unittest.TestCase):
         bad["user"] = {"login": "mallory", "id": 5, "type": "User"}
         source.values[COMMENT_URL] = bad
         with self.assertRaisesRegex(GitHubTrustError, "allowed GitHub user"):
+            verify_github_decision(
+                source,
+                profile=profile(),
+                request=request,
+                comment_id=9001,
+                draft_sha256=pilot_draft_sha256(draft),
+                now=NOW,
+            )
+
+    def test_app_mediated_request_blocks(self):
+        payload = request_payload()
+        mediated = issue(json.dumps(payload, sort_keys=True))
+        mediated["performed_via_github_app"] = {"id": 123, "slug": "executor-bot"}
+        source = FakeSource(
+            {
+                ISSUE_URL: mediated,
+                commit_url(payload): commit_evidence(payload),
+            }
+        )
+        with self.assertRaisesRegex(GitHubTrustError, "app-mediated"):
+            verify_github_request(source, profile=profile(), issue_number=61, now=NOW)
+
+    def test_missing_request_direct_human_signal_blocks(self):
+        payload = request_payload()
+        missing = issue(json.dumps(payload, sort_keys=True))
+        missing.pop("performed_via_github_app")
+        source = FakeSource(
+            {
+                ISSUE_URL: missing,
+                commit_url(payload): commit_evidence(payload),
+            }
+        )
+        with self.assertRaisesRegex(GitHubTrustError, "provider-verifiable"):
+            verify_github_request(source, profile=profile(), issue_number=61, now=NOW)
+
+    def test_app_mediated_decision_blocks(self):
+        source, request, draft, _ = self.verified_pair()
+        mediated = comment(decision_payload(request, pilot_draft_sha256(draft)))
+        mediated["performed_via_github_app"] = {"id": 123, "slug": "executor-bot"}
+        source.values[COMMENT_URL] = mediated
+        with self.assertRaisesRegex(GitHubTrustError, "app-mediated"):
+            verify_github_decision(
+                source,
+                profile=profile(),
+                request=request,
+                comment_id=9001,
+                draft_sha256=pilot_draft_sha256(draft),
+                now=NOW,
+            )
+
+    def test_missing_decision_direct_human_signal_blocks(self):
+        source, request, draft, _ = self.verified_pair()
+        missing = comment(decision_payload(request, pilot_draft_sha256(draft)))
+        missing.pop("performed_via_github_app")
+        source.values[COMMENT_URL] = missing
+        with self.assertRaisesRegex(GitHubTrustError, "provider-verifiable"):
             verify_github_decision(
                 source,
                 profile=profile(),

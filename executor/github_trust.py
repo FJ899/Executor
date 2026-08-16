@@ -311,6 +311,14 @@ def _verify_actor(
         raise GitHubTrustError(f"{label} actor is not the allowed GitHub user")
     if event.get("author_association") not in {"OWNER", "MEMBER", "COLLABORATOR"}:
         raise GitHubTrustError(f"{label} actor lacks governed repository association")
+    if "performed_via_github_app" not in event:
+        raise GitHubTrustError(
+            f"{label} direct-human origin is not provider-verifiable"
+        )
+    if event["performed_via_github_app"] is not None:
+        raise GitHubTrustError(
+            f"{label} is app-mediated, not a direct-human GitHub event"
+        )
     return login, actor_id
 
 

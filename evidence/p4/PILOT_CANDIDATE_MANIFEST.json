@@ -28,8 +28,15 @@
       "external_intelligence_provenance": "evidence/p4/intelligence/scriptops-provenance.json",
       "external_intelligence_prompt": "evidence/p4/intelligence/scriptops-prompt.txt",
       "required_executions_per_exact_candidate": 3,
-      "active_fresh_human_accept_comments": [5309233904, 5309234306, 5309234972],
-      "historical_consumed_human_accept_comments": [5309032642, 5309033360, 5309034120]
+      "active_fresh_human_accept_comments": [],
+      "historical_consumed_human_accept_comments": [
+        5309032642,
+        5309033360,
+        5309034120,
+        5309233904,
+        5309234306,
+        5309234972
+      ]
     },
     {
       "repository": "JTJ07/creative-os-project-reconstructor",
@@ -45,8 +52,15 @@
       "external_intelligence_provenance": "evidence/p4/intelligence/reconstructor-provenance.json",
       "external_intelligence_prompt": "evidence/p4/intelligence/reconstructor-prompt.txt",
       "required_executions_per_exact_candidate": 3,
-      "active_fresh_human_accept_comments": [5309241731, 5309242858, 5309243169],
-      "historical_consumed_human_accept_comments": [5309040666, 5309041408, 5309042154]
+      "active_fresh_human_accept_comments": [],
+      "historical_consumed_human_accept_comments": [
+        5309040666,
+        5309041408,
+        5309042154,
+        5309241731,
+        5309242858,
+        5309243169
+      ]
     }
   ],
   "series_definition": {
@@ -65,7 +79,8 @@
     "exact GitHub Actions workflow and resolved Docker image identity binding",
     "post-request external-intelligence provenance with prompt hash and zero human solution edits",
     "zero-test unittest discovery fails closed",
-    "three independently authorized executions required per real objective"
+    "three independently authorized executions required per real objective",
+    "provider-verifiable direct-human origin requires performed_via_github_app to be present and null; app-mediated or missing signals fail closed"
   ],
   "post_commit_evidence_requirements": [
     "Foundation CI must assert exact PR head SHA.",
@@ -74,12 +89,13 @@
     "Artifacts must include raw evidence and SQLite ledgers.",
     "Provider decision/effect receipt refs must exist live and match FINAL bindings.",
     "Target PRs must remain OPEN, DRAFT, UNMERGED with reviewed unchanged heads.",
-    "PR #61 body may list immutable run/artifact locators only after the runs exist; the verifier must resolve them independently."
+    "PR #61 body may list immutable run/artifact locators only after the runs exist; the verifier must resolve them independently.",
+    "Direct-human request and decision verification must reject non-null or missing performed_via_github_app before any freeze or consequential effect."
   ],
   "completion_boundary": {
     "p4": "NOT_CLAIMED",
     "executor_1_0_human_acceptance": "NOT_RECORDED",
     "merge_release_deploy_tag": "NOT_AUTHORIZED"
   },
-  "current_rule": "Resolve the exact current PR #61 head/tree and exact-head immutable evidence. Never infer current PASS from historical runs, mutable prose, or a different SHA."
+  "current_rule": "Resolve the exact current PR #61 head/tree and exact-head immutable evidence. Direct-human request/decision origin is provider-verifiable only when performed_via_github_app is present and null. Never infer current PASS from historical runs, consumed decisions, mutable prose, or a different SHA."
 }

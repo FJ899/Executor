@@ -78,6 +78,7 @@ class CorrectedRequestHashTests(unittest.TestCase):
                     "created_at": case["created_at"],
                     "updated_at": case["created_at"],
                     "author_association": "OWNER",
+                    "performed_via_github_app": None,
                     "user": {
                         "login": PROFILE.allowed_actor_login,
                         "id": PROFILE.allowed_actor_id,

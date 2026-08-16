@@ -45,6 +45,18 @@ The rejected failure classes are mandatory regression targets:
 6. P4 repeatability evidence must match the approved map and policy;
 7. canonical state must not contradict live exact-candidate evidence.
 
+## Latest independent false-completion finding
+
+Independent Phase C rejected candidate `fdf876e0e2af6d9e4ecea2301ecb686a471037bd` as `FALSE-COMPLETION` because the GitHub actor verifier accepted app-mediated issue/comment events attributed to the allowed user. GitHub exposes `performed_via_github_app`, but that candidate did not enforce it.
+
+For every later candidate, direct-human origin is fail-closed for both request and decision events:
+
+- `performed_via_github_app` must be present in provider evidence;
+- its value must be exactly `null`;
+- a non-null app object or a missing provider signal must block before request/decision verification, contract freezing or consequential execution.
+
+This is a mandatory G-04 regression target. Concrete historical direct-human comments remain provenance only after they are consumed by a rejected exact candidate.
+
 ## Corrective architecture to verify
 
 The candidate implements:

@@ -64,6 +64,7 @@ class P4EvidenceArtifactTests(unittest.TestCase):
                     "created_at": "2026-08-16T18:00:00Z",
                     "updated_at": "2026-08-16T18:00:00Z",
                     "author_association": "OWNER",
+                    "performed_via_github_app": None,
                     "user": {
                         "login": PROFILE.allowed_actor_login,
                         "id": PROFILE.allowed_actor_id,
