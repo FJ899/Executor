@@ -1,0 +1,103 @@
+name: Phase C expiry TOCTOU corrective patch
+
+on:
+  push:
+    branches: [phase-b/p4-repeatable-executor-1.0]
+    paths: [.github/workflows/phase-c-expiry-toctou-fix.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-corrective-patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-b/p4-repeatable-executor-1.0
+          fetch-depth: 0
+
+      - name: Apply minimal freshness fix and adversarial regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          runtime_path = Path('executor/pilot_runtime.py')
+          text = runtime_path.read_text(encoding='utf-8')
+
+          old = '_UNITTEST_COUNT = re.compile(r"\\bRan\\s+(\\d+)\\s+tests?\\b")\n\n\ndef _git('
+          new = '_UNITTEST_COUNT = re.compile(r"\\bRan\\s+(\\d+)\\s+tests?\\b")\n\n\ndef _utc_now() -> datetime:\n    """Return the real UTC clock at the exact authority-consumption boundary."""\n    return datetime.now(timezone.utc)\n\n\ndef _git('
+          if old not in text:
+              raise SystemExit('runtime clock insertion anchor not found')
+          text = text.replace(old, new, 1)
+
+          old = '''    def _authorize_action(\n        self,\n        *,\n        run_id: str,\n        now: datetime,\n    ) -> tuple[dict[str, Any], GovernedAuthorityConsumption]:\n        task = self.contract["task"]\n'''
+          new = '''    def _authorize_action(\n        self,\n        *,\n        run_id: str,\n    ) -> tuple[dict[str, Any], GovernedAuthorityConsumption]:\n        # Freshness is evaluated here, immediately before provider reservation.\n        # No caller-supplied or precondition-time clock may authorize an effect.\n        now = _utc_now().astimezone(timezone.utc)\n        task = self.contract["task"]\n'''
+          if old not in text:
+              raise SystemExit('authorize signature anchor not found')
+          text = text.replace(old, new, 1)
+
+          old = '''    def execute(\n        self,\n        *,\n        workspace: str | Path,\n        run_id: str,\n        now: datetime | None = None,\n    ) -> dict[str, Any]:\n        if _RUN_ID.fullmatch(run_id) is None:\n            raise PilotBlocked("run_id is invalid")\n        current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)\n'''
+          new = '''    def execute(\n        self,\n        *,\n        workspace: str | Path,\n        run_id: str,\n    ) -> dict[str, Any]:\n        if _RUN_ID.fullmatch(run_id) is None:\n            raise PilotBlocked("run_id is invalid")\n'''
+          if old not in text:
+              raise SystemExit('execute signature anchor not found')
+          text = text.replace(old, new, 1)
+
+          old = '            packet, consumption = self._authorize_action(run_id=run_id, now=current)\n'
+          new = '            packet, consumption = self._authorize_action(run_id=run_id)\n'
+          if old not in text:
+              raise SystemExit('authorize call anchor not found')
+          text = text.replace(old, new, 1)
+          runtime_path.write_text(text, encoding='utf-8')
+
+          tests_path = Path('tests/test_pilot_runtime.py')
+          text = tests_path.read_text(encoding='utf-8')
+          text = text.replace('import tempfile\nimport unittest\n', 'import tempfile\nimport unittest\nfrom datetime import timedelta\n')
+          text = text.replace('from types import SimpleNamespace\n', 'from types import SimpleNamespace\nfrom unittest.mock import patch\n')
+
+          anchor = '        self.environment = execution_environment(image=self.image)\n\n    def tearDown(self):\n        self.temp.cleanup()\n'
+          replacement = '        self.environment = execution_environment(image=self.image)\n        self.clock_patcher = patch("executor.pilot_runtime._utc_now", return_value=NOW)\n        self.clock_patcher.start()\n\n    def tearDown(self):\n        self.clock_patcher.stop()\n        self.temp.cleanup()\n'
+          if anchor not in text:
+              raise SystemExit('test clock patcher anchor not found')
+          text = text.replace(anchor, replacement, 1)
+
+          text = text.replace(',\n            now=NOW,\n        )', ',\n        )')
+          text = text.replace('runtime._authorize_action(run_id="pilot-replay-001", now=NOW)', 'runtime._authorize_action(run_id="pilot-replay-001")')
+          text = text.replace('second._authorize_action(run_id="pilot-replay-002", now=NOW)', 'second._authorize_action(run_id="pilot-replay-002")')
+          text = text.replace('runtime._authorize_action(run_id="pilot-ledger-a", now=NOW)', 'runtime._authorize_action(run_id="pilot-ledger-a")')
+          text = text.replace('second._authorize_action(run_id="pilot-ledger-b", now=NOW)', 'second._authorize_action(run_id="pilot-ledger-b")')
+
+          anchor = '''    def test_zero_test_unittest_discovery_is_not_regression_pass(self):\n        runtime = self.runtime([1, 0, 0], zero_test_discovery=True)\n'''
+          regression = '''    def test_decision_expiring_during_precondition_blocks_before_effect_authority(self):\n        runtime = self.runtime([1])\n        with patch(\n            "executor.pilot_runtime._utc_now",\n            return_value=NOW + timedelta(minutes=30),\n        ):\n            report = runtime.execute(\n                workspace=self.fixture.root,\n                run_id="pilot-expiry-crossing",\n            )\n        self.assertEqual(report["status"], "BLOCKED")\n        self.assertIn("expired before effect authorization", report["error"])\n        self.assertEqual(report["evidence"]["precondition"], "OBSERVED_FAILURE")\n        self.assertNotIn("authorization_packet", report)\n        self.assertNotIn("authority_consumption", report)\n        self.assertEqual(\n            (self.fixture.root / "phase6/scriptops-v2-hardening.py").read_text(),\n            "VALUE = 1\\n",\n        )\n\n    def test_runtime_exposes_no_caller_supplied_authority_clock(self):\n        import inspect\n\n        self.assertNotIn("now", inspect.signature(PilotRuntime.execute).parameters)\n        self.assertNotIn("now", inspect.signature(PilotRuntime._authorize_action).parameters)\n\n''' + anchor
+          if anchor not in text:
+              raise SystemExit('test insertion anchor not found')
+          text = text.replace(anchor, regression, 1)
+          tests_path.write_text(text, encoding='utf-8')
+
+          workflow_path = Path('.github/workflows/p4-real-pilots-one-shot.yml')
+          text = workflow_path.read_text(encoding='utf-8')
+          old = "if: ${{ github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}"
+          new = "if: ${{ false && github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}"
+          count = text.count(old)
+          if count != 2:
+              raise SystemExit(f'expected 2 P4 job gates, found {count}')
+          workflow_path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+
+          python -m compileall -q executor
+          python -m unittest tests.test_pilot_runtime -v
+
+      - name: Commit corrective implementation and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Executor Phase C corrective agent'
+          git config user.email 'executor-phase-c@users.noreply.github.com'
+          git rm .github/workflows/phase-c-expiry-toctou-fix.yml
+          git add executor/pilot_runtime.py tests/test_pilot_runtime.py .github/workflows/p4-real-pilots-one-shot.yml
+          git diff --cached --check
+          git commit -m 'phase-c: recheck decision freshness at effect reservation'
+          git push origin HEAD:phase-b/p4-repeatable-executor-1.0
