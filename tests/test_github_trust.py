@@ -4,7 +4,7 @@ import copy
 import json
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from executor.authority_ledger import AtomicAuthorityLedger, AuthorityReplayError
@@ -115,8 +115,7 @@ def decision_payload(request, draft_sha, decision="ACCEPT"):
         },
         "draft_sha256": draft_sha,
         "decision": decision,
-        "issued_at": "2026-08-16T00:01:00Z",
-        "expires_at": "2026-08-16T00:30:00Z",
+        "valid_for_seconds": 1800,
         "nonce": "decision-nonce-001",
     }
 
@@ -181,6 +180,40 @@ class GitHubTrustTests(unittest.TestCase):
                     ledger=ledger,
                 )
 
+    def test_accept_uses_provider_created_at_without_payload_prediction(self):
+        payload = request_payload()
+        values = {
+            ISSUE_URL: issue(json.dumps(payload, sort_keys=True)),
+            commit_url(payload): commit_evidence(payload),
+        }
+        source = FakeSource(values)
+        request = verify_github_request(
+            source,
+            profile=profile(),
+            issue_number=61,
+            now=NOW,
+        )
+        draft = build_pilot_draft(request)
+        decision = decision_payload(request, pilot_draft_sha256(draft))
+        self.assertNotIn("issued_at", decision)
+        self.assertNotIn("expires_at", decision)
+        provider_comment = comment(decision)
+        provider_comment["created_at"] = "2026-08-16T00:01:37Z"
+        provider_comment["updated_at"] = provider_comment["created_at"]
+        source.values[COMMENT_URL] = provider_comment
+
+        verified = verify_github_decision(
+            source,
+            profile=profile(),
+            request=request,
+            comment_id=9001,
+            draft_sha256=pilot_draft_sha256(draft),
+            now=NOW,
+        )
+
+        self.assertEqual(verified.created_at, "2026-08-16T00:01:37Z")
+        self.assertEqual(verified.expires_at, "2026-08-16T00:31:37Z")
+
     def test_modify_and_reject_never_freeze(self):
         for choice, status in (
             ("MODIFY", "MODIFICATION_REQUIRED"),
@@ -231,6 +264,56 @@ class GitHubTrustTests(unittest.TestCase):
                 now=NOW,
             )
 
+    def test_observation_time_does_not_change_draft_identity(self):
+        payload = request_payload()
+        source = FakeSource(
+            {
+                ISSUE_URL: issue(json.dumps(payload, sort_keys=True)),
+                commit_url(payload): commit_evidence(payload),
+            }
+        )
+        first = verify_github_request(
+            source,
+            profile=profile(),
+            issue_number=61,
+            now=NOW,
+        )
+        second = verify_github_request(
+            source,
+            profile=profile(),
+            issue_number=61,
+            now=NOW + timedelta(minutes=10),
+        )
+
+        self.assertNotEqual(first.observed_at, second.observed_at)
+        self.assertEqual(
+            pilot_draft_sha256(build_pilot_draft(first)),
+            pilot_draft_sha256(build_pilot_draft(second)),
+        )
+
+    def test_wrong_issue_or_request_hash_blocks(self):
+        for field, value in (
+            ("issue_number", 62),
+            ("body_sha256", "f" * 64),
+        ):
+            with self.subTest(field=field):
+                source, request, draft, _ = self.verified_pair()
+                invalid = decision_payload(request, pilot_draft_sha256(draft))
+                invalid["request"][field] = value
+                source.values[COMMENT_URL] = comment(invalid)
+                with self.assertRaisesRegex(
+                    GitHubTrustError,
+                    "stale or mismatched",
+                ):
+                    verify_github_decision(
+                        source,
+                        profile=profile(),
+                        request=request,
+                        comment_id=9001,
+                        draft_sha256=pilot_draft_sha256(draft),
+                        now=NOW,
+                    )
+
     def test_changed_request_content_invalidates_decision_binding(self):
         source, request, draft, _ = self.verified_pair()
         changed = request_payload()
@@ -242,6 +325,10 @@ class GitHubTrustTests(unittest.TestCase):
             profile=profile(),
             issue_number=61,
             now=NOW,
+        )
+        self.assertNotEqual(
+            pilot_draft_sha256(draft),
+            pilot_draft_sha256(build_pilot_draft(current)),
         )
         with self.assertRaisesRegex(
             GitHubTrustError,
@@ -265,6 +352,21 @@ class GitHubTrustTests(unittest.TestCase):
                 request=request,
                 comment_id=9001,
                 draft_sha256="f" * 64,
+                now=NOW,
+            )
+
+    def test_decision_lifetime_cannot_exceed_profile(self):
+        source, request, draft, _ = self.verified_pair()
+        invalid = decision_payload(request, pilot_draft_sha256(draft))
+        invalid["valid_for_seconds"] = 3601
+        source.values[COMMENT_URL] = comment(invalid)
+        with self.assertRaisesRegex(GitHubTrustError, "valid_for_seconds"):
+            verify_github_decision(
+                source,
+                profile=profile(),
+                request=request,
+                comment_id=9001,
+                draft_sha256=pilot_draft_sha256(draft),
                 now=NOW,
             )
 

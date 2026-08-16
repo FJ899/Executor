@@ -537,8 +537,7 @@ def verify_github_decision(
             "request",
             "draft_sha256",
             "decision",
-            "issued_at",
-            "expires_at",
+            "valid_for_seconds",
             "nonce",
         },
         label="decision payload",
@@ -553,6 +552,13 @@ def verify_github_decision(
         payload["nonce"]
     ) is None:
         raise GitHubTrustError("decision nonce is invalid")
+    valid_for_seconds = payload.get("valid_for_seconds")
+    if type(valid_for_seconds) is not int or not (
+        60 <= valid_for_seconds <= profile.max_decision_lifetime_seconds
+    ):
+        raise GitHubTrustError(
+            "decision valid_for_seconds exceeds the trust profile"
+        )
     request_ref = payload.get("request")
     if not isinstance(request_ref, dict):
         raise GitHubTrustError("decision request binding must be an object")
@@ -568,23 +574,14 @@ def verify_github_decision(
         "body_sha256": request.body_sha256,
     }:
         raise GitHubTrustError("GitHub decision request binding is stale or mismatched")
-    issued = _parse_utc(payload.get("issued_at"), label="decision issued_at")
-    expires = _parse_utc(payload.get("expires_at"), label="decision expires_at")
-    if issued > current + timedelta(minutes=5) or expires <= current:
-        raise GitHubTrustError("GitHub decision is not currently fresh")
-    if (
-        expires <= issued
-        or expires - issued
-        > timedelta(seconds=profile.max_decision_lifetime_seconds)
-    ):
-        raise GitHubTrustError("GitHub decision lifetime exceeds the trust profile")
     created_at = comment.get("created_at")
     updated_at = comment.get("updated_at")
-    created = _parse_utc(created_at, label="decision created_at")
     if created_at != updated_at:
         raise GitHubTrustError("edited GitHub decisions are not accepted")
-    if abs((created - issued).total_seconds()) > 5:
-        raise GitHubTrustError("decision payload time is not bound to the GitHub event")
+    created = _parse_utc(created_at, label="decision created_at")
+    expires = created + timedelta(seconds=valid_for_seconds)
+    if created > current + timedelta(minutes=5) or expires <= current:
+        raise GitHubTrustError("GitHub decision is not currently fresh")
     comment_node_id = comment.get("node_id")
     if type(comment.get("id")) is not int or not isinstance(comment_node_id, str):
         raise GitHubTrustError("GitHub decision lacks immutable event identity")
@@ -600,7 +597,7 @@ def verify_github_decision(
         decision=payload["decision"],
         draft_sha256=draft_sha256,
         created_at=created_at,
-        expires_at=payload["expires_at"],
+        expires_at=expires.isoformat().replace("+00:00", "Z"),
         observed_at=current.isoformat().replace("+00:00", "Z"),
         payload=payload,
         _proof=_VERIFIED_EVIDENCE_PROOF,

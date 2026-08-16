@@ -19,7 +19,7 @@ creative-os-executor github-pilot-draft \
   --issue ISSUE_NUMBER
 ```
 
-The command fetches the current issue and target commit from GitHub, verifies actor, repository association, exact body, expiry and `commit -> tree`, then prints a non-executable draft and `draft_sha256`.
+The command fetches the current issue and target commit from GitHub, verifies actor, repository association, exact body, expiry and `commit -> tree`, then prints a non-executable draft and `draft_sha256`. Observation metadata such as `request_evidence.observed_at` remains in the evidence output but is excluded from semantic draft-hash material, so repeated reads of one unchanged issue produce the same `draft_sha256`.
 
 ## 2. Publish one exact decision
 
@@ -36,13 +36,12 @@ Post one unedited issue comment with this shape:
   },
   "draft_sha256": "COPY_EXACT_DRAFT_SHA256",
   "decision": "ACCEPT",
-  "issued_at": "RFC3339_UTC_MATCHING_COMMENT_CREATION",
-  "expires_at": "RFC3339_UTC_NO_MORE_THAN_60_MINUTES_LATER",
+  "valid_for_seconds": 3600,
   "nonce": "UNIQUE_SAFE_VALUE"
 }
 ```
 
-`MODIFY` and `REJECT` are legal but never executable. Edited comments, another actor, another issue, changed request body, changed draft, stale/expired evidence or replay fail closed.
+`MODIFY` and `REJECT` are legal but never executable. The provider's immutable GitHub comment `created_at` is the authoritative decision timestamp; expiry is derived as `created_at + valid_for_seconds`, bounded by the trust profile (currently 3600 seconds). The human does not supply or predict a server timestamp. Edited comments, another actor, another issue, changed request body, changed draft, stale/expired evidence or replay fail closed.
 
 Consume the decision:
 

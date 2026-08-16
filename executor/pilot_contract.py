@@ -17,8 +17,18 @@ class PilotContractError(ValueError):
     pass
 
 
+def _draft_hash_material(draft: dict[str, Any]) -> dict[str, Any]:
+    material = copy.deepcopy(draft)
+    request_evidence = material.get("request_evidence")
+    if not isinstance(request_evidence, dict):
+        raise PilotContractError("draft request evidence is missing")
+    request_evidence.pop("observed_at", None)
+    return material
+
+
 def pilot_draft_sha256(draft: dict[str, Any]) -> str:
-    return hashlib.sha256(canonical_json(draft).encode("utf-8")).hexdigest()
+    material = _draft_hash_material(draft)
+    return hashlib.sha256(canonical_json(material).encode("utf-8")).hexdigest()
 
 
 def build_pilot_draft(request: VerifiedGitHubRequest) -> dict[str, Any]:
