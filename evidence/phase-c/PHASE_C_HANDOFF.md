@@ -1,101 +1,105 @@
 # Independent Phase C Handoff
 
-## Status
+## Status model
 
-`PHASE C FALSE-COMPLETION RECORDED / CORRECTIVE SERIES AUTHORIZED / EXECUTION PENDING / NEW PHASE C NOT READY`
+`EXACT-CANDIDATE EVIDENCE GATED / P4 NOT CLAIMED / FINAL HUMAN ACCEPTANCE PENDING`
 
-Independent Phase C rejected historical Executor candidate `24107bc8a8186ed1928e098118982efb9d62ffaa`. The executing agent is correcting the implementation under the unchanged human-approved completion map. No current SHA is a completion candidate until this document is explicitly advanced to `READY FOR FRESH PHASE C` after the corrected series and exact-head evidence pass.
+This committed document deliberately does **not** encode a transient post-commit workflow state such as `EXECUTION PENDING` or `READY`.
 
-The verifier must always resolve the exact current head/tree of `JTJ07/Executor#61`; historical successful workflows or artifacts never substitute for evidence tied to a later corrected candidate.
+Reason: every exact-candidate proof workflow runs only after the candidate commit exists. Writing the run IDs or post-run verdict back into this file would create a new commit and invalidate the exact SHA that was actually tested.
+
+Canonical source hierarchy for Phase C is therefore:
+
+1. the current `JTJ07/Executor#61` head commit and tree define the candidate implementation and policy;
+2. this committed handoff defines the evidence contract and completion rules;
+3. immutable GitHub Actions runs, artifacts, provider authority receipts, issues/comments and target reviews establish post-commit facts for that exact SHA;
+4. PR #61 body may contain **locators only** for those immutable post-commit records and may not override committed policy or requirements;
+5. the independent verifier must resolve every locator itself and fail closed on any mismatch.
+
+A mutable PR-body statement is never sufficient evidence by itself.
 
 ## Human-selected constants
 
 - DONE: P4 Repeatable Executor 1.0.
 - Trusted front door/provider: external GitHub intake.
-- Allowed actor/profile: `trust_profiles/github-p4-pilots.json`.
+- Allowed human actor/profile: `trust_profiles/github-p4-pilots.json`.
 - Solution ownership: External Intelligence without effect authority.
 - Pilot repositories: `JTJ07/scriptops` and `JTJ07/creative-os-project-reconstructor`.
-- Effects: dedicated branch, commit and draft PR only.
-- Forbidden: merge, deploy, release, new secrets, new credentials and new paid services unless separately authorized.
+- Supported class: `BOUNDED_CORRECTNESS_OR_QUALITY_FIX` within the frozen profile limits.
+- External effects: dedicated branch, commit and draft PR only.
+- Forbidden without separate authorization: merge, deploy, release, tag, new secrets, new credentials and new paid services.
 
-## Rejected Phase-C findings that are now mandatory regression targets
+## Historical rejected candidate
 
-The corrected candidate must independently falsify each prior failure:
+Independent Phase C rejected candidate `24107bc8a8186ed1928e098118982efb9d62ffaa` as `FALSE-COMPLETION`.
 
-1. **Same-ledger replay:** changing caller-controlled `run_id` must not mint a new effect authority key from one human decision.
-2. **Cross-ledger replay:** choosing a different local SQLite file or runner must not create a fresh authority namespace.
-3. **Solution provenance:** proposal evidence must prove a post-request External Intelligence derivation with provider/model/prompt hash, zero human solution edits and no effect capability.
-4. **Environment identity:** exact workflow file identity and resolved Docker image identity must be integrity-bound into action/result evidence, not recoverable only from logs.
-5. **Silent zero-test regression:** a declared unittest discovery that runs zero tests must produce `BLOCKED`, never aggregate regression PASS.
-6. **P4 series evidence:** the completion candidate must meet the repeatability series/metrics policy rather than infer P4 from two successful patch reviews.
-7. **Canonical truth:** README/inventory/manifest/handoff/value evidence must all distinguish historical rejected evidence from the current candidate.
+That candidate and its artifacts are historical evidence only. They may not satisfy any exact-candidate gate for a later SHA.
 
-## Corrective architecture under test
+The rejected failure classes are mandatory regression targets:
 
-The open branch currently introduces:
+1. same human decision + different caller `run_id` must not mint a second effect;
+2. same human decision + different local SQLite file/runner must not mint a second global authority namespace;
+3. External Intelligence provenance must be post-request, exact-bound and authority-free;
+4. workflow and resolved image identity must be bound into execution evidence;
+5. `unittest discover` reporting zero tests must fail closed;
+6. P4 repeatability evidence must match the approved map and policy;
+7. canonical state must not contradict live exact-candidate evidence.
 
-- deterministic GitHub provider-backed authority receipt refs shared across runners/local databases;
-- local SQLite retained as crash-safe consumption/result evidence, not the global uniqueness root;
-- one stable effect authority identity per human decision + frozen contract, independent of `run_id` and proposal variation;
-- exact workflow/image environment identity included in terminal evidence and integrity-bound into the effect packet;
-- post-request proposal provenance validation;
+## Corrective architecture to verify
+
+The candidate implements:
+
+- deterministic GitHub provider-backed authority receipt refs as the global one-shot uniqueness boundary;
+- stable decision/effect identities independent of caller-controlled `run_id` and local ledger path;
+- local SQLite WAL / `BEGIN IMMEDIATE` as crash-safe evidence and result binding, not as the sole global uniqueness root;
+- exact GitHub Actions workflow identity and resolved Docker image identity in action/result evidence;
+- post-request External Intelligence provenance with model/provider/prompt hash, zero human solution edits and no effect capability;
 - fail-closed zero-test discovery handling;
-- explicit P4 retry/model/dependency/series policy in `docs/product/P4_REPEATABILITY_POLICY.md`.
+- bounded retry/failure/model/dependency policy in `docs/product/P4_REPEATABILITY_POLICY.md`.
 
-These are implementation candidates only. Their presence is not proof until exact-head tests and real corrected pilot evidence pass.
+## Corrected series contract
 
-## Historical real outputs retained, not accepted as corrected P4 evidence
+The human-approved completion map requires multiple real runs across more than one repository or independent module set. It does not require a third distinct task objective.
 
-- ScriptOps request #62 / PR `JTJ07/scriptops#8` / human review APPROVED.
-- Reconstructor request #63 / PR `JTJ07/creative-os-project-reconstructor#4` / human review APPROVED.
+For this bounded candidate the committed series contract is:
 
-The historical Reconstructor request contains a regression discovery command that executed zero tests, so that request cannot be silently reused as corrected regression evidence. A new direct-human request was therefore created as issue #64 with a meaningful non-empty regression set. ScriptOps was likewise re-issued as #65 for the corrected series.
+- ScriptOps objective from issue #65;
+- Project Reconstructor objective from issue #64;
+- two distinct real objectives across the two authorized repositories;
+- three separate fresh direct-human ACCEPT events per objective;
+- six independently authorized real executions total;
+- every repetition starts from the same exact pinned source for that objective;
+- every repetition must produce the same bounded patch, pass frozen postconditions/regressions, preserve scope/isolation, and produce independent one-shot authority evidence.
 
-Historical human-time observations remain in `P4_VALUE_METRICS.md`, with their interpretation bounded to patch review effort only.
+Human ACCEPT events consumed by an earlier exact candidate are historical and cannot be silently reused for a later candidate.
 
-## Corrected direct-human authority set
+## Post-commit exact-candidate evidence contract
 
-ScriptOps issue #65, draft SHA `cfdcfa2ac6b2d6ac7e3da59b0d7aece0e54d43e99f3c8977e8cd422285b50cf6`:
+A fresh Phase C may report technical PASS only if it independently confirms, for the current PR #61 head SHA/tree:
 
-- comment `5309032642` — `p4-scriptops-corrected-accept-001`;
-- comment `5309033360` — `p4-scriptops-corrected-accept-002`;
-- comment `5309034120` — `p4-scriptops-corrected-accept-003`.
+- foundation CI checked out and asserted the **exact PR head SHA**, not `refs/pull/*/merge`;
+- GP001 replay is green on the exact head;
+- the corrected real-pilot series is green on the exact head;
+- the six human decision events used by that exact series are direct `JTJ07` owner comments, unedited, fresh at consumption, exact-bound and each consumed at most once;
+- both pilot artifacts contain raw run reports, identical per-objective patches, exact source/head/tree/workflow/image identities and the local SQLite ledgers;
+- provider-backed decision/effect receipt refs exist live and their FINAL commits match artifact/local result bindings;
+- same-run, cross-run, cross-ledger, concurrent, crash/replay, proposal-substitution and result-substitution attacks fail closed;
+- the Reconstructor corrected request uses meaningful non-empty regressions, and generic zero-test discovery is fail closed;
+- both target PRs remain OPEN + DRAFT + UNMERGED with unchanged reviewed heads and green target CI;
+- value, latency, cost-boundary, retry/failure taxonomy, operator/model/version policy and documented limits satisfy G-15 without an unsupported general ROI claim;
+- repository closure and Saddle state satisfy G-16;
+- no committed document presents historical evidence as current exact-candidate PASS.
 
-Reconstructor issue #64, draft SHA `49f3ae5290220ed70db4d257f4abfec1ed67af67da9c9b9c4a1ff026a6a2863e`:
+The immutable run/artifact/receipt locators for the current exact SHA are written to PR #61 body after the workflows complete. The verifier must resolve them from GitHub rather than trust the body text.
 
-- comment `5309040666` — `p4-reconstructor-corrected-accept-001`;
-- comment `5309041408` — `p4-reconstructor-corrected-accept-002`;
-- comment `5309042154` — `p4-reconstructor-corrected-accept-003`.
+## Completion boundary
 
-All six events were observed as direct `JTJ07` / user-id `219382941` owner comments with exact request/draft binding and distinct nonces. They authorize six separate bounded attempts only; they do not authorize merge, release or deployment.
-
-## Evidence requirements for the next handoff
-
-Before this handoff may become `READY FOR FRESH PHASE C`, the branch must contain and/or point to:
-
-- green exact-head foundation CI and GP001 replay;
-- explicit tests for same-decision different-`run_id` replay;
-- explicit tests for same-decision different-local-ledger replay;
-- provider-backed global reservation/final result receipts from real GitHub Actions;
-- the six fresh direct-human decision events above, each consumed at most once;
-- the approved P4 series for this candidate: two distinct real bounded objectives across the two authorized repositories, each repeated three times under separate fresh ACCEPT events;
-- durable post-request solution provenance for each proposal;
-- exact source commit/tree, exact workflow SHA and resolved image ID in each artifact;
-- meaningful non-empty regression evidence where a test-discovery command is declared;
-- draft-only target outputs and human reviews;
-- corrected P4 series metrics, failure taxonomy, latency, cost disclosure and model/dependency stability evidence;
-- repository closure state and no contradictory active success claim.
-
-Each pilot artifact must permit independent recomputation from raw material and include its local SQLite ledger plus locators for the provider-backed authority receipts.
-
-## Next independent verification
-
-A fresh verifier must reconstruct G-01 through G-18 from `PROJECT_COMPLETION_MAP.md` and specifically attempt to recreate the prior false-success paths. It must not rely on this executing agent's statement that the fixes work.
-
-Until this file is advanced after the corrected series, the only truthful completion state is:
+Until independent Phase C verifies the exact candidate:
 
 ```text
-PROJECT COMPLETION: NOT READY FOR RE-VERIFICATION
 P4: NOT CLAIMED
-MERGE / RELEASE / DEPLOY: NOT AUTHORIZED
+EXECUTOR 1.0: NOT HUMAN-ACCEPTED
+MERGE / RELEASE / DEPLOY / TAG: NOT AUTHORIZED
 ```
+
+If G-01 through G-16 pass and no false-success path remains, the next gate is the explicit final human `EXECUTOR 1.0: ACCEPT` decision. That decision is not implied by CI, this file, PR metadata or any AI statement.
