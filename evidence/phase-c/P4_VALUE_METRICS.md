@@ -3,7 +3,7 @@
 Status: `EVIDENCE-GATED / NOT A P4 COMPLETION CLAIM`
 Date: 2026-08-16
 
-This file defines the metric interpretation and preserves durable human observations. It does not claim that the current PR head has passed its post-commit workflows. Exact-head operational values are established by immutable GitHub runs/artifacts referenced from PR #61 after those records exist and must be independently verified.
+This file defines metric interpretation and preserves durable human observations. It does not claim that the current PR head has passed its post-commit workflows. Exact-head operational values are established by immutable GitHub runs/artifacts referenced from PR #61 after those records exist and must be independently verified.
 
 ## Source hierarchy
 
@@ -16,9 +16,14 @@ A later PR-body statement cannot convert a failed/missing exact-head run into PA
 
 ## Historical rejected completion evidence
 
-Candidate `24107bc8a8186ed1928e098118982efb9d62ffaa` was rejected by independent Phase C as `FALSE-COMPLETION` because effect authority could be replayed. Its pilot artifacts are historical only.
+The following exact candidates are not current P4 evidence:
 
-A later corrected candidate `7f662cd487c14d62a4838be8c43cef1358869d50` produced six corrected real executions with strong authority/evidence results, but independent Phase C still BLOCKED project completion on G-02 canonical-state inconsistency and G-14 foundation-CI exact-SHA binding. Those six executions therefore do not substitute for proof of a later exact candidate.
+- `24107bc8a8186ed1928e098118982efb9d62ffaa` — independent `FALSE-COMPLETION` on global authority/replay;
+- `7f662cd487c14d62a4838be8c43cef1358869d50` — independent `BLOCKED` on G-02/G-14 despite six corrected executions;
+- `fdf876e0e2af6d9e4ecea2301ecb686a471037bd` — independent `FALSE-COMPLETION` on direct-human/app-mediated GitHub provenance;
+- `d11f3dd9d6c484a9c554cd562db46c30e0a333fe` — independent `FALSE-COMPLETION` because a decision could expire during a precondition while stale precondition-start time was reused at later effect authorization.
+
+Runs, artifacts, provider receipts, review-required results and human ACCEPT events consumed by any rejected exact candidate remain historical provenance only. They cannot be counted as current exact-candidate success.
 
 ## Direct-human value source
 
@@ -51,7 +56,7 @@ The human reported that the Executor-assisted review path required materially le
 - human review time: approximately `15 seconds`;
 - human-estimated manual completion time: approximately `15 minutes`.
 
-These are bounded human observations for these two reviewed patch heads. They are not a general productivity or ROI claim.
+These are bounded human observations for these two reviewed patch heads. They are not a general productivity or ROI claim. A fresh exact candidate may rely on these observations only if the independent verifier confirms that the reviewed target heads and patch contents are unchanged and remain the exact outputs under evaluation.
 
 ## Approved P4 series definition
 
@@ -99,7 +104,9 @@ Retries are governed by `docs/product/P4_REPEATABILITY_POLICY.md`:
 - before global effect reservation: bounded retry may be allowed while the decision remains fresh and no effect receipt exists;
 - after effect reservation: no automatic consequential retry; a new attempt requires a new direct-human ACCEPT.
 
-Failure taxonomy includes trust/origin, decision/replay, solution provenance, input identity, environment, precondition, postcondition, regression, scope, isolation, evidence and human review.
+Failure taxonomy includes trust/origin, decision/freshness/replay, solution provenance, input identity, environment, precondition, postcondition, regression, scope, isolation, evidence and human review.
+
+A freshness failure after preconditions but before effect reservation is a pre-effect BLOCKED attempt; it must never be converted into review-required success and must not consume a consequential effect after expiry.
 
 ## Cost disclosure
 
