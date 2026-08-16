@@ -1,0 +1,4 @@
+Act as External Intelligence with no effect authority.
+Using human request JTJ07/Executor#64 and exact target source JTJ07/creative-os-project-reconstructor@defc7b029097284f94136fec54b75c313ac12f68 (tree 5960d74773b19456863ac66084385b7619aa4285), independently derive the smallest correction that prevents required-file symlinks from escaping the repository root and preserves meaningful non-empty regression evidence.
+Preserve the frozen scope. Do not authorize, merge, deploy, release, request secrets, or widen network access.
+Return only a bounded mutation proposal and the evidence plan needed to prove the requested behavior.
