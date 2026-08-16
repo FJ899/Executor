@@ -89,6 +89,7 @@ For the exact PR #61 head presented to Phase C, the verifier must independently 
 - exact model/provider/provenance and prompt hash;
 - exact workflow/image/source identities;
 - provider-backed one-shot authority receipt count/state;
+- provider freshness evidence for every decision/effect reservation: exact `not_after`, provider-controlled `provider_created_at`, and proof that `provider_created_at < not_after`;
 - local SQLite action/result FINAL bindings;
 - patch reproducibility within each objective;
 - cost disclosure boundary.
@@ -103,6 +104,8 @@ Retries are governed by `docs/product/P4_REPEATABILITY_POLICY.md`:
 
 - before global effect reservation: bounded retry may be allowed while the decision remains fresh and no effect receipt exists;
 - after effect reservation: no automatic consequential retry; a new attempt requires a new direct-human ACCEPT.
+
+A provider reservation whose server-controlled timestamp is at/after the bound `not_after` deadline is spent fail-closed and may not authorize local effect consumption or mutation. It therefore requires a new direct-human ACCEPT for any later consequential attempt.
 
 Failure taxonomy includes trust/origin, decision/freshness/replay, solution provenance, input identity, environment, precondition, postcondition, regression, scope, isolation, evidence and human review.
 
