@@ -1,48 +1,59 @@
 {
   "schema_version": "executor-p4-pilot-candidate-evidence/1.1",
-  "status": "PHASE_C_REJECTED_REWORK_ACTIVE",
+  "status": "CORRECTIVE_SERIES_PREPARED_AWAITING_SIX_FRESH_HUMAN_ACCEPTS",
   "updated_at": "2026-08-16",
   "historical_rejected_candidate": {
     "executor_sha": "24107bc8a8186ed1928e098118982efb9d62ffaa",
     "verdict": "FALSE-COMPLETION",
     "meaning": "Historical pilot runs and artifacts are preserved but are not current P4 completion evidence."
   },
-  "observed_human_events": {
-    "scriptops_request_issue": 62,
-    "scriptops_last_historical_accept_comment": 5308343712,
-    "reconstructor_request_issue": 63,
-    "reconstructor_last_historical_accept_comment": 5308357219,
-    "note": "These decisions are historical/consumed or expired and cannot authorize the corrected candidate."
-  },
-  "historical_pilots": [
+  "corrected_requests": [
     {
       "repository": "JTJ07/scriptops",
+      "executor_issue": 65,
+      "request_id": "p4-scriptops-numeric-candidate-002",
+      "request_body_sha256": "158ab5918c20802658b2c6649a63e6fb25511c0c0d745efcb170cf3577a022db",
+      "draft_sha256": "0c7e92bf2e86f74cf75d8cde6e66e74d38b0a212b197e3781a06712a86e46919",
       "base_commit": "daa6e5dc210e09171a530eeffe5601e0e74ae041",
       "base_tree": "ba0b99bd99682dcc7a942537b502a7a72151fa09",
       "target_pr": 8,
       "target_head": "897de878703a029df814f2551b993c3818defa2a",
-      "human_review": "APPROVED",
-      "historical_result": "ACTION_COMPLETED_REVIEW_REQUIRED",
-      "current_completion_status": "REJECTED_CANDIDATE_EVIDENCE_ONLY"
+      "external_intelligence_provenance": "evidence/p4/intelligence/scriptops-provenance.json",
+      "external_intelligence_prompt": "evidence/p4/intelligence/scriptops-prompt.txt",
+      "required_corrected_executions": 3
     },
     {
       "repository": "JTJ07/creative-os-project-reconstructor",
+      "executor_issue": 64,
+      "request_id": "p4-reconstructor-symlink-boundary-002",
+      "request_body_sha256": "e662f7c25fc699b252abcc6a25254b510bd9de94d703116f23631994de1bccbc",
+      "draft_sha256": "b473388083ad19579d903efb3f7e2777e4b55bb94cf5b50d09ceb53636a41a1b",
       "base_commit": "defc7b029097284f94136fec54b75c313ac12f68",
       "base_tree": "5960d74773b19456863ac66084385b7619aa4285",
       "target_pr": 4,
       "target_head": "e59b9d6c1b496bcb6411e712e7c65cc891578ac3",
-      "human_review": "APPROVED",
-      "historical_result": "ACTION_COMPLETED_REVIEW_REQUIRED",
-      "current_completion_status": "REJECTED_CANDIDATE_EVIDENCE_ONLY",
-      "evidence_gap": "One frozen unittest discovery command ran zero tests and therefore cannot support a corrected regression PASS."
+      "external_intelligence_provenance": "evidence/p4/intelligence/reconstructor-provenance.json",
+      "external_intelligence_prompt": "evidence/p4/intelligence/reconstructor-prompt.txt",
+      "required_corrected_executions": 3
     }
   ],
-  "phase_c_blockers_under_rework": [
-    "Global one-shot authority must survive different run_id values and different local SQLite files.",
-    "External Intelligence solution provenance must be durable and post-request.",
-    "Exact workflow and sandbox image identity must be bound into effect evidence.",
-    "Zero-test regression discovery must fail closed.",
-    "A corrected P4 real-pilot series and repeatability metrics remain required."
+  "corrective_controls": [
+    "GitHub provider-backed global one-shot authority refs",
+    "stable effect identity independent of caller run_id",
+    "local SQLite retained as crash-safe evidence, not sole uniqueness boundary",
+    "exact GitHub Actions workflow and Docker image identity binding",
+    "post-request external-intelligence provenance with prompt hash and zero human solution edits",
+    "zero-test unittest discovery fails closed",
+    "three independently authorized successful executions required per pilot repository"
   ],
-  "current_rule": "Resolve the exact current PR #61 head; never treat this manifest or historical pilot locators as a P4 PASS claim."
+  "historical_human_review_outputs": [
+    "JTJ07/scriptops#8 remains DRAFT and previously APPROVED; merge unauthorized.",
+    "JTJ07/creative-os-project-reconstructor#4 remains DRAFT and previously APPROVED; merge unauthorized."
+  ],
+  "blockers": [
+    "Three fresh direct-human ACCEPT comments are required on issue #65.",
+    "Three fresh direct-human ACCEPT comments are required on issue #64.",
+    "The corrected series workflow remains disabled until all six comment IDs are validated."
+  ],
+  "current_rule": "Resolve the exact current PR #61 head; never treat historical pilot locators as a P4 PASS claim."
 }
