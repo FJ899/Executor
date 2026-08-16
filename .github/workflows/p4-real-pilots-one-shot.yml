@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   scriptops-pilot:
-    if: ${{ false && github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
+    if: ${{ github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout exact Executor candidate head
@@ -50,7 +50,7 @@ jobs:
           python -m executor.cli github-pilot-decide \
             --profile trust_profiles/github-p4-pilots.json \
             --issue 62 \
-            --comment 5307785576 \
+            --comment 5308343712 \
             --ledger .executor/scriptops-authority.sqlite3 \
             > scriptops-frozen.json
 
@@ -66,7 +66,7 @@ jobs:
           python -m executor.cli run-pilot \
             --profile trust_profiles/github-p4-pilots.json \
             --issue 62 \
-            --comment 5307785576 \
+            --comment 5308343712 \
             --frozen scriptops-frozen.json \
             --proposal scriptops-proposal.json \
             --ledger .executor/scriptops-authority.sqlite3 \
@@ -102,7 +102,7 @@ jobs:
             pilot-evidence/scriptops/runs/**
 
   reconstructor-pilot:
-    if: ${{ false && github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
+    if: ${{ github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout exact Executor candidate head
@@ -135,7 +135,7 @@ jobs:
           python -m executor.cli github-pilot-decide \
             --profile trust_profiles/github-p4-pilots.json \
             --issue 63 \
-            --comment 5307672258 \
+            --comment 5308357219 \
             --ledger .executor/reconstructor-authority.sqlite3 \
             > reconstructor-frozen.json
 
@@ -151,7 +151,7 @@ jobs:
           python -m executor.cli run-pilot \
             --profile trust_profiles/github-p4-pilots.json \
             --issue 63 \
-            --comment 5307672258 \
+            --comment 5308357219 \
             --frozen reconstructor-frozen.json \
             --proposal reconstructor-proposal.json \
             --ledger .executor/reconstructor-authority.sqlite3 \
