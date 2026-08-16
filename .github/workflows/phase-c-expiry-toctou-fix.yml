@@ -35,7 +35,7 @@ jobs:
           text = text.replace(old, new, 1)
 
           old = '''    def _authorize_action(\n        self,\n        *,\n        run_id: str,\n        now: datetime,\n    ) -> tuple[dict[str, Any], GovernedAuthorityConsumption]:\n        task = self.contract["task"]\n'''
-          new = '''    def _authorize_action(\n        self,\n        *,\n        run_id: str,\n    ) -> tuple[dict[str, Any], GovernedAuthorityConsumption]:\n        # Freshness is evaluated here, immediately before provider reservation.\n        # No caller-supplied or precondition-time clock may authorize an effect.\n        now = _utc_now().astimezone(timezone.utc)\n        task = self.contract["task"]\n'''
+          new = '''    def _authorize_action(\n        self,\n        *,\n        run_id: str,\n    ) -> tuple[dict[str, Any], GovernedAuthorityConsumption]:\n        # Freshness is evaluated immediately before provider reservation.\n        # Caller-supplied or precondition-time clocks cannot authorize an effect.\n        now = _utc_now().astimezone(timezone.utc)\n        task = self.contract["task"]\n'''
           if old not in text:
               raise SystemExit('authorize signature anchor not found')
           text = text.replace(old, new, 1)
@@ -55,8 +55,8 @@ jobs:
 
           tests_path = Path('tests/test_pilot_runtime.py')
           text = tests_path.read_text(encoding='utf-8')
-          text = text.replace('import tempfile\nimport unittest\n', 'import tempfile\nimport unittest\nfrom datetime import timedelta\n')
-          text = text.replace('from types import SimpleNamespace\n', 'from types import SimpleNamespace\nfrom unittest.mock import patch\n')
+          text = text.replace('import tempfile\nimport unittest\n', 'import tempfile\nimport unittest\nfrom datetime import timedelta\n', 1)
+          text = text.replace('from types import SimpleNamespace\n', 'from types import SimpleNamespace\nfrom unittest.mock import patch\n', 1)
 
           anchor = '        self.environment = execution_environment(image=self.image)\n\n    def tearDown(self):\n        self.temp.cleanup()\n'
           replacement = '        self.environment = execution_environment(image=self.image)\n        self.clock_patcher = patch("executor.pilot_runtime._utc_now", return_value=NOW)\n        self.clock_patcher.start()\n\n    def tearDown(self):\n        self.clock_patcher.stop()\n        self.temp.cleanup()\n'
@@ -64,11 +64,23 @@ jobs:
               raise SystemExit('test clock patcher anchor not found')
           text = text.replace(anchor, replacement, 1)
 
-          text = text.replace(',\n            now=NOW,\n        )', ',\n        )')
-          text = text.replace('runtime._authorize_action(run_id="pilot-replay-001", now=NOW)', 'runtime._authorize_action(run_id="pilot-replay-001")')
-          text = text.replace('second._authorize_action(run_id="pilot-replay-002", now=NOW)', 'second._authorize_action(run_id="pilot-replay-002")')
-          text = text.replace('runtime._authorize_action(run_id="pilot-ledger-a", now=NOW)', 'runtime._authorize_action(run_id="pilot-ledger-a")')
-          text = text.replace('second._authorize_action(run_id="pilot-ledger-b", now=NOW)', 'second._authorize_action(run_id="pilot-ledger-b")')
+          for run_id in ('pilot-runtime-001', 'pilot-green-001', 'pilot-zero-tests'):
+              old = f'            run_id="{run_id}",\n            now=NOW,\n'
+              new = f'            run_id="{run_id}",\n'
+              if old not in text:
+                  raise SystemExit(f'execute clock call anchor not found: {run_id}')
+              text = text.replace(old, new, 1)
+
+          replacements = {
+              'runtime._authorize_action(run_id="pilot-replay-001", now=NOW)': 'runtime._authorize_action(run_id="pilot-replay-001")',
+              'second._authorize_action(run_id="pilot-replay-002", now=NOW)': 'second._authorize_action(run_id="pilot-replay-002")',
+              'runtime._authorize_action(run_id="pilot-ledger-a", now=NOW)': 'runtime._authorize_action(run_id="pilot-ledger-a")',
+              'second._authorize_action(run_id="pilot-ledger-b", now=NOW)': 'second._authorize_action(run_id="pilot-ledger-b")',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'authorize test anchor not found: {old}')
+              text = text.replace(old, new, 1)
 
           anchor = '''    def test_zero_test_unittest_discovery_is_not_regression_pass(self):\n        runtime = self.runtime([1, 0, 0], zero_test_discovery=True)\n'''
           regression = '''    def test_decision_expiring_during_precondition_blocks_before_effect_authority(self):\n        runtime = self.runtime([1])\n        with patch(\n            "executor.pilot_runtime._utc_now",\n            return_value=NOW + timedelta(minutes=30),\n        ):\n            report = runtime.execute(\n                workspace=self.fixture.root,\n                run_id="pilot-expiry-crossing",\n            )\n        self.assertEqual(report["status"], "BLOCKED")\n        self.assertIn("expired before effect authorization", report["error"])\n        self.assertEqual(report["evidence"]["precondition"], "OBSERVED_FAILURE")\n        self.assertNotIn("authorization_packet", report)\n        self.assertNotIn("authority_consumption", report)\n        self.assertEqual(\n            (self.fixture.root / "phase6/scriptops-v2-hardening.py").read_text(),\n            "VALUE = 1\\n",\n        )\n\n    def test_runtime_exposes_no_caller_supplied_authority_clock(self):\n        import inspect\n\n        self.assertNotIn("now", inspect.signature(PilotRuntime.execute).parameters)\n        self.assertNotIn("now", inspect.signature(PilotRuntime._authorize_action).parameters)\n\n''' + anchor
@@ -78,13 +90,16 @@ jobs:
           tests_path.write_text(text, encoding='utf-8')
 
           workflow_path = Path('.github/workflows/p4-real-pilots-one-shot.yml')
-          text = workflow_path.read_text(encoding='utf-8')
-          old = "if: ${{ github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}"
-          new = "if: ${{ false && github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}"
-          count = text.count(old)
-          if count != 2:
-              raise SystemExit(f'expected 2 P4 job gates, found {count}')
-          workflow_path.write_text(text.replace(old, new), encoding='utf-8')
+          lines = workflow_path.read_text(encoding='utf-8').splitlines()
+          changed = 0
+          for index, line in enumerate(lines):
+              if line.lstrip().startswith('if:') and 'github.event.pull_request.number == 61' in line:
+                  indent = line[:len(line) - len(line.lstrip())]
+                  lines[index] = indent + 'if: false'
+                  changed += 1
+          if changed != 2:
+              raise SystemExit(f'expected 2 P4 job gates, found {changed}')
+          workflow_path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
           PY
 
           python -m compileall -q executor
