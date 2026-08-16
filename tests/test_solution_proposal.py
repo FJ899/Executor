@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from executor.authority_ledger import AtomicAuthorityLedger
+from executor.github_trust import verify_github_decision, verify_github_request
 from executor.pilot_contract import (
     apply_github_decision,
     build_pilot_draft,
@@ -18,6 +18,7 @@ from executor.solution_proposal import (
     materialize_solution_candidate,
     validate_solution_proposal,
 )
+from tests.p4_test_support import governed_ledger, provenance_for
 from tests.test_github_trust import (
     COMMENT_URL,
     ISSUE_URL,
@@ -30,7 +31,6 @@ from tests.test_github_trust import (
     issue,
     profile,
 )
-from executor.github_trust import verify_github_decision, verify_github_request
 
 
 def frozen_result():
@@ -65,7 +65,7 @@ def frozen_result():
     result = apply_github_decision(
         draft=draft,
         decision=decision,
-        ledger=AtomicAuthorityLedger(Path(temp.name) / "ledger.sqlite3"),
+        ledger=governed_ledger(Path(temp.name) / "ledger.sqlite3"),
     )
     return temp, result
 
@@ -94,6 +94,7 @@ def proposal(result):
             ["python", "-c", "raise SystemExit(0)"],
             ["python", "-m", "unittest", "discover", "-s", "tests"],
         ],
+        "provenance": provenance_for(result),
     }
 
 
@@ -101,12 +102,12 @@ class SolutionProposalTests(unittest.TestCase):
     def test_external_proposal_is_bounded_and_has_no_authority(self):
         temp, frozen = frozen_result()
         self.addCleanup(temp.cleanup)
-        validated = validate_solution_proposal(
-            proposal(frozen),
-            frozen_result=frozen,
-        )
+        validated = validate_solution_proposal(proposal(frozen), frozen_result=frozen)
         self.assertEqual(len(validated.mutations), 1)
         self.assertEqual(validated.repository, "JTJ07/scriptops")
+        self.assertEqual(validated.provenance["producer_role"], "EXTERNAL_INTELLIGENCE")
+        self.assertEqual(validated.provenance["human_solution_edits"], 0)
+        self.assertEqual(validated.provenance["effect_capability"], "NONE")
 
     def test_proposal_cannot_smuggle_authority(self):
         temp, frozen = frozen_result()
@@ -116,40 +117,53 @@ class SolutionProposalTests(unittest.TestCase):
         with self.assertRaises(SolutionProposalError):
             validate_solution_proposal(candidate, frozen_result=frozen)
 
+    def test_missing_or_pre_request_provenance_blocks(self):
+        temp, frozen = frozen_result()
+        self.addCleanup(temp.cleanup)
+        missing = proposal(frozen)
+        missing.pop("provenance")
+        with self.assertRaises(SolutionProposalError):
+            validate_solution_proposal(missing, frozen_result=frozen)
+        predates = proposal(frozen)
+        predates["provenance"]["generated_at"] = "2026-08-15T23:59:59Z"
+        with self.assertRaisesRegex(SolutionProposalError, "predates"):
+            validate_solution_proposal(predates, frozen_result=frozen)
+
     def test_wrong_contract_scope_or_after_hash_blocks(self):
         temp, frozen = frozen_result()
         self.addCleanup(temp.cleanup)
-        for change in ("contract", "scope", "hash"):
+        for change in ("contract", "scope", "hash", "request-provenance"):
             with self.subTest(change=change):
                 candidate = copy.deepcopy(proposal(frozen))
                 if change == "contract":
                     candidate["contract_sha256"] = "d" * 64
                 elif change == "scope":
                     candidate["mutations"][0]["path"] = "tests/test_escape.py"
-                else:
+                elif change == "hash":
                     candidate["mutations"][0]["expected_after_sha256"] = "e" * 64
+                else:
+                    candidate["provenance"]["request"]["body_sha256"] = "e" * 64
                 with self.assertRaises(SolutionProposalError):
                     validate_solution_proposal(candidate, frozen_result=frozen)
 
-    def test_candidate_materializes_only_after_exact_contract_freeze(self):
+    def test_candidate_materializes_only_with_separate_exact_provenance(self):
         temp, frozen = frozen_result()
         self.addCleanup(temp.cleanup)
         complete = proposal(frozen)
         candidate = {
             key: copy.deepcopy(value)
             for key, value in complete.items()
-            if key not in {"schema_version", "contract_sha256"}
+            if key not in {"schema_version", "contract_sha256", "provenance"}
         }
         candidate["schema_version"] = "executor-solution-candidate/1.0"
         candidate["status"] = "AWAITING_FROZEN_CONTRACT_SHA"
         materialized = materialize_solution_candidate(
             candidate,
             frozen_result=frozen,
+            provenance=provenance_for(frozen),
         )
-        self.assertEqual(
-            materialized["contract_sha256"],
-            frozen["contract_sha256"],
-        )
+        self.assertEqual(materialized["contract_sha256"], frozen["contract_sha256"])
+        self.assertEqual(materialized["provenance"]["producer_role"], "EXTERNAL_INTELLIGENCE")
         self.assertNotIn("status", materialized)
 
 
