@@ -2,9 +2,9 @@
 
 ## Status
 
-`PHASE C FALSE-COMPLETION RECORDED / CORRECTIVE PHASE B ACTIVE / NEW PHASE C NOT READY`
+`PHASE C FALSE-COMPLETION RECORDED / CORRECTIVE SERIES AUTHORIZED / EXECUTION PENDING / NEW PHASE C NOT READY`
 
-Independent Phase C rejected historical Executor candidate `24107bc8a8186ed1928e098118982efb9d62ffaa`. The executing agent is correcting the implementation under the unchanged human-approved completion map. No current SHA is a completion candidate until this document is explicitly advanced to `READY FOR FRESH PHASE C`.
+Independent Phase C rejected historical Executor candidate `24107bc8a8186ed1928e098118982efb9d62ffaa`. The executing agent is correcting the implementation under the unchanged human-approved completion map. No current SHA is a completion candidate until this document is explicitly advanced to `READY FOR FRESH PHASE C` after the corrected series and exact-head evidence pass.
 
 The verifier must always resolve the exact current head/tree of `JTJ07/Executor#61`; historical successful workflows or artifacts never substitute for evidence tied to a later corrected candidate.
 
@@ -49,9 +49,25 @@ These are implementation candidates only. Their presence is not proof until exac
 - ScriptOps request #62 / PR `JTJ07/scriptops#8` / human review APPROVED.
 - Reconstructor request #63 / PR `JTJ07/creative-os-project-reconstructor#4` / human review APPROVED.
 
-The historical Reconstructor request contains a regression discovery command that executed zero tests, so that request cannot be silently reused as corrected regression evidence. A new direct-human request is required if the regression set changes.
+The historical Reconstructor request contains a regression discovery command that executed zero tests, so that request cannot be silently reused as corrected regression evidence. A new direct-human request was therefore created as issue #64 with a meaningful non-empty regression set. ScriptOps was likewise re-issued as #65 for the corrected series.
 
 Historical human-time observations remain in `P4_VALUE_METRICS.md`, with their interpretation bounded to patch review effort only.
+
+## Corrected direct-human authority set
+
+ScriptOps issue #65, draft SHA `cfdcfa2ac6b2d6ac7e3da59b0d7aece0e54d43e99f3c8977e8cd422285b50cf6`:
+
+- comment `5309032642` — `p4-scriptops-corrected-accept-001`;
+- comment `5309033360` — `p4-scriptops-corrected-accept-002`;
+- comment `5309034120` — `p4-scriptops-corrected-accept-003`.
+
+Reconstructor issue #64, draft SHA `49f3ae5290220ed70db4d257f4abfec1ed67af67da9c9b9c4a1ff026a6a2863e`:
+
+- comment `5309040666` — `p4-reconstructor-corrected-accept-001`;
+- comment `5309041408` — `p4-reconstructor-corrected-accept-002`;
+- comment `5309042154` — `p4-reconstructor-corrected-accept-003`.
+
+All six events were observed as direct `JTJ07` / user-id `219382941` owner comments with exact request/draft binding and distinct nonces. They authorize six separate bounded attempts only; they do not authorize merge, release or deployment.
 
 ## Evidence requirements for the next handoff
 
@@ -61,8 +77,8 @@ Before this handoff may become `READY FOR FRESH PHASE C`, the branch must contai
 - explicit tests for same-decision different-`run_id` replay;
 - explicit tests for same-decision different-local-ledger replay;
 - provider-backed global reservation/final result receipts from real GitHub Actions;
-- fresh direct-human request/decision evidence for every corrected pilot;
-- at least three distinct real bounded task objectives across the authorized repositories/modules;
+- the six fresh direct-human decision events above, each consumed at most once;
+- the approved P4 series for this candidate: two distinct real bounded objectives across the two authorized repositories, each repeated three times under separate fresh ACCEPT events;
 - durable post-request solution provenance for each proposal;
 - exact source commit/tree, exact workflow SHA and resolved image ID in each artifact;
 - meaningful non-empty regression evidence where a test-discovery command is declared;
