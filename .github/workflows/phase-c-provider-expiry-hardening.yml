@@ -1,0 +1,159 @@
+name: Phase C provider-time expiry hardening
+
+on:
+  push:
+    branches: [phase-b/p4-repeatable-executor-1.0]
+    paths: [.github/workflows/phase-c-provider-expiry-hardening.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-hardening:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-b/p4-repeatable-executor-1.0
+          fetch-depth: 0
+
+      - name: Apply provider-time expiry boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          # --- executor/github_authority.py ---
+          path = Path('executor/github_authority.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              'import urllib.request\nfrom dataclasses import dataclass\n',
+              'import urllib.request\nfrom dataclasses import dataclass\nfrom datetime import datetime, timezone\n',
+              1,
+          )
+          text = text.replace(
+              'class GlobalAuthorityReplayError(GlobalAuthorityError):\n    pass\n\n\nclass GlobalAuthorityHttpError',
+              'class GlobalAuthorityReplayError(GlobalAuthorityError):\n    pass\n\n\nclass GlobalAuthorityExpiredError(GlobalAuthorityError):\n    pass\n\n\nclass GlobalAuthorityHttpError',
+              1,
+          )
+          anchor = '_RECEIPT_PREFIX = "EXECUTOR_GLOBAL_AUTHORITY_RECEIPT_V1\\n"\n\n\nclass GitHubAuthorityTransport'
+          replacement = '''_RECEIPT_PREFIX = "EXECUTOR_GLOBAL_AUTHORITY_RECEIPT_V1\\n"\n\n\ndef _parse_provider_timestamp(value: str, *, label: str) -> datetime:\n    if not isinstance(value, str) or not value.endswith("Z"):\n        raise GlobalAuthorityError(f"{label} must be a UTC Z timestamp")\n    try:\n        parsed = datetime.fromisoformat(value[:-1] + "+00:00")\n    except ValueError as exc:\n        raise GlobalAuthorityError(f"{label} is invalid") from exc\n    return parsed.astimezone(timezone.utc)\n\n\nclass GitHubAuthorityTransport'''
+          if anchor not in text:
+              raise SystemExit('github_authority timestamp anchor missing')
+          text = text.replace(anchor, replacement, 1)
+
+          old = '''class GlobalAuthorityReservation:\n    authority_key: str\n    payload_sha256: str\n    action_kind: str\n    run_id: str\n    ref: str\n    reservation_sha: str\n\n    def to_dict(self) -> dict[str, Any]:\n        return {\n            "provider": "GITHUB_REF",\n            "authority_key": self.authority_key,\n            "payload_sha256": self.payload_sha256,\n            "action_kind": self.action_kind,\n            "run_id": self.run_id,\n            "ref": self.ref,\n            "reservation_sha": self.reservation_sha,\n        }\n'''
+          new = '''class GlobalAuthorityReservation:\n    authority_key: str\n    payload_sha256: str\n    action_kind: str\n    run_id: str\n    ref: str\n    reservation_sha: str\n    not_after: str | None = None\n    provider_created_at: str | None = None\n\n    def to_dict(self) -> dict[str, Any]:\n        return {\n            "provider": "GITHUB_REF",\n            "authority_key": self.authority_key,\n            "payload_sha256": self.payload_sha256,\n            "action_kind": self.action_kind,\n            "run_id": self.run_id,\n            "ref": self.ref,\n            "reservation_sha": self.reservation_sha,\n            "not_after": self.not_after,\n            "provider_created_at": self.provider_created_at,\n        }\n'''
+          if old not in text:
+              raise SystemExit('reservation dataclass anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''    def reserve(\n        self,\n        *,\n        authority_key: str,\n        payload_sha256: str,\n        action_kind: str,\n        run_id: str,\n    ) -> GlobalAuthorityReservation:\n        self._validate(\n'''
+          new = '''    def reserve(\n        self,\n        *,\n        authority_key: str,\n        payload_sha256: str,\n        action_kind: str,\n        run_id: str,\n        not_after: str | None = None,\n    ) -> GlobalAuthorityReservation:\n        deadline = (\n            _parse_provider_timestamp(not_after, label="not_after")\n            if not_after is not None\n            else None\n        )\n        self._validate(\n'''
+          if old not in text:
+              raise SystemExit('reserve signature anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''            "run_id": run_id,\n            "result_sha256": None,\n        }\n'''
+          new = '''            "run_id": run_id,\n            "not_after": not_after,\n            "result_sha256": None,\n        }\n'''
+          if old not in text:
+              raise SystemExit('receipt deadline anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''        return GlobalAuthorityReservation(\n            authority_key=authority_key,\n            payload_sha256=payload_sha256,\n            action_kind=action_kind,\n            run_id=run_id,\n            ref=ref,\n            reservation_sha=commit_sha,\n        )\n'''
+          new = '''        provider_created_at = None\n        if deadline is not None:\n            provider_commit = self._get_commit(commit_sha)\n            committer = provider_commit.get("committer")\n            if not isinstance(committer, dict):\n                raise GlobalAuthorityError("provider reservation commit has no committer time")\n            provider_created_at = committer.get("date")\n            provider_time = _parse_provider_timestamp(\n                provider_created_at,\n                label="provider reservation time",\n            )\n            if provider_time >= deadline:\n                # The one-shot ref is intentionally left spent. No local consumption or\n                # consequential effect is allowed after the provider proves expiry.\n                raise GlobalAuthorityExpiredError(\n                    "global authority reservation occurred at or after authority expiry"\n                )\n        return GlobalAuthorityReservation(\n            authority_key=authority_key,\n            payload_sha256=payload_sha256,\n            action_kind=action_kind,\n            run_id=run_id,\n            ref=ref,\n            reservation_sha=commit_sha,\n            not_after=not_after,\n            provider_created_at=provider_created_at,\n        )\n'''
+          if old not in text:
+              raise SystemExit('reservation return anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''            "action_kind": reservation.action_kind,\n            "run_id": reservation.run_id,\n        }\n'''
+          new = '''            "action_kind": reservation.action_kind,\n            "run_id": reservation.run_id,\n            "not_after": reservation.not_after,\n        }\n'''
+          if old not in text:
+              raise SystemExit('finalize expected anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''        run_id: str,\n        now: Any = None,\n    ) -> GovernedAuthorityConsumption:\n        reservation = self.global_authority.reserve(\n            authority_key=authority_key,\n            payload_sha256=payload_sha256,\n            action_kind=action_kind,\n            run_id=run_id,\n        )\n'''
+          new = '''        run_id: str,\n        now: Any = None,\n        not_after: str | None = None,\n    ) -> GovernedAuthorityConsumption:\n        reservation = self.global_authority.reserve(\n            authority_key=authority_key,\n            payload_sha256=payload_sha256,\n            action_kind=action_kind,\n            run_id=run_id,\n            not_after=not_after,\n        )\n'''
+          if old not in text:
+              raise SystemExit('governed consume anchor missing')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+
+          # --- executor/pilot_contract.py ---
+          path = Path('executor/pilot_contract.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''        action_kind=f"CONTRACT_{decision.decision}",\n        run_id=str(draft.get("request_id", "")),\n    )\n'''
+          new = '''        action_kind=f"CONTRACT_{decision.decision}",\n        run_id=str(draft.get("request_id", "")),\n        not_after=decision.expires_at,\n    )\n'''
+          if old not in text:
+              raise SystemExit('pilot contract consume anchor missing')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # --- executor/pilot_runtime.py ---
+          path = Path('executor/pilot_runtime.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              '    GlobalAuthorityError,\n    GovernedAuthorityConsumption,\n',
+              '    GlobalAuthorityError,\n    GlobalAuthorityExpiredError,\n    GovernedAuthorityConsumption,\n',
+              1,
+          )
+          old = '''        consumption = self.ledger.consume(\n            authority_key=f"aap:{decision.packet_id}",\n            payload_sha256=decision.payload_sha256,\n            action_kind=decision.action_kind,\n            run_id=run_id,\n            now=now,\n        )\n        return packet, consumption\n'''
+          new = '''        try:\n            consumption = self.ledger.consume(\n                authority_key=f"aap:{decision.packet_id}",\n                payload_sha256=decision.payload_sha256,\n                action_kind=decision.action_kind,\n                run_id=run_id,\n                now=now,\n                not_after=self.verified_decision.expires_at,\n            )\n        except GlobalAuthorityExpiredError as exc:\n            raise PilotBlocked(str(exc)) from exc\n        return packet, consumption\n'''
+          if old not in text:
+              raise SystemExit('pilot runtime consume anchor missing')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # --- tests/p4_test_support.py ---
+          path = Path('tests/p4_test_support.py')
+          text = path.read_text(encoding='utf-8')
+          old = '    def reserve(self, *, authority_key, payload_sha256, action_kind, run_id):\n'
+          new = '    def reserve(self, *, authority_key, payload_sha256, action_kind, run_id, not_after=None):\n'
+          if old not in text:
+              raise SystemExit('fake global signature anchor missing')
+          text = text.replace(old, new, 1)
+          old = '''            ref=ref,\n            reservation_sha=reservation_sha,\n        )\n'''
+          new = '''            ref=ref,\n            reservation_sha=reservation_sha,\n            not_after=not_after,\n            provider_created_at="2026-08-16T00:01:00Z" if not_after else None,\n        )\n'''
+          if old not in text:
+              raise SystemExit('fake reservation anchor missing')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # --- tests/test_github_authority.py ---
+          path = Path('tests/test_github_authority.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              '    GlobalAuthorityHttpError,\n    GlobalAuthorityReplayError,\n',
+              '    GlobalAuthorityExpiredError,\n    GlobalAuthorityHttpError,\n    GlobalAuthorityReplayError,\n',
+              1,
+          )
+          old = '''class FakeGitHubTransport:\n    def __init__(self):\n        self.refs = {"refs/heads/main": "1" * 40}\n'''
+          new = '''class FakeGitHubTransport:\n    def __init__(self, *, provider_time="2026-08-16T18:00:00Z"):\n        self.provider_time = provider_time\n        self.refs = {"refs/heads/main": "1" * 40}\n'''
+          if old not in text:
+              raise SystemExit('fake transport init anchor missing')
+          text = text.replace(old, new, 1)
+          old = '''                "tree": {"sha": payload["tree"]},\n                "parents": list(payload["parents"]),\n            }\n'''
+          new = '''                "tree": {"sha": payload["tree"]},\n                "parents": list(payload["parents"]),\n                "committer": {"date": self.provider_time},\n            }\n'''
+          if old not in text:
+              raise SystemExit('fake commit time anchor missing')
+          text = text.replace(old, new, 1)
+
+          anchor = '''    def test_global_ref_name_depends_only_on_authority_key_not_run_id(self):\n'''
+          regression = '''    def test_provider_server_time_after_deadline_spends_authority_but_fails_closed(self):\n        transport = FakeGitHubTransport(provider_time="2026-08-16T18:02:00Z")\n        authority = GitHubGlobalAuthority(\n            repository="JTJ07/Executor",\n            transport=transport,\n        )\n        key = "aap:provider-expiry"\n        with self.assertRaises(GlobalAuthorityExpiredError):\n            authority.reserve(\n                authority_key=key,\n                payload_sha256="d" * 64,\n                action_kind="EXTERNAL_PROJECT_EXECUTION",\n                run_id="expiry-run",\n                not_after="2026-08-16T18:01:00Z",\n            )\n        self.assertIn(GitHubGlobalAuthority._ref_for(key), transport.refs)\n\n    def test_provider_server_time_before_deadline_is_bound_into_receipt_evidence(self):\n        authority = GitHubGlobalAuthority(\n            repository="JTJ07/Executor",\n            transport=FakeGitHubTransport(provider_time="2026-08-16T18:00:00Z"),\n        )\n        reservation = authority.reserve(\n            authority_key="aap:provider-fresh",\n            payload_sha256="e" * 64,\n            action_kind="EXTERNAL_PROJECT_EXECUTION",\n            run_id="fresh-run",\n            not_after="2026-08-16T18:01:00Z",\n        )\n        self.assertEqual(reservation.not_after, "2026-08-16T18:01:00Z")\n        self.assertEqual(reservation.provider_created_at, "2026-08-16T18:00:00Z")\n\n''' + anchor
+          if anchor not in text:
+              raise SystemExit('github authority regression insertion anchor missing')
+          path.write_text(text.replace(anchor, regression, 1), encoding='utf-8')
+          PY
+
+          python -m compileall -q executor tests
+          python -m unittest tests.test_github_authority tests.test_pilot_runtime tests.test_github_trust -v
+
+      - name: Commit provider-time hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Executor Phase C corrective agent'
+          git config user.email 'executor-phase-c@users.noreply.github.com'
+          git add executor/github_authority.py executor/pilot_contract.py executor/pilot_runtime.py tests/p4_test_support.py tests/test_github_authority.py
+          git diff --cached --check
+          git commit -m 'phase-c: bind authority expiry to provider reservation time'
+          git push origin HEAD:phase-b/p4-repeatable-executor-1.0
