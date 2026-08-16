@@ -1,0 +1,23 @@
+{
+  "schema_version": "executor-solution-provenance/1.0",
+  "producer_role": "EXTERNAL_INTELLIGENCE",
+  "provider": "OpenAI",
+  "model": "GPT-5.6 Sol",
+  "generated_at": "2026-08-16T18:21:31Z",
+  "request": {
+    "repository": "JTJ07/Executor",
+    "issue_number": 65,
+    "issue_node_id": "I_kwDOTpqUf88AAAABM-aINQ",
+    "body_sha256": "158ab5918c20802658b2c6649a63e6fb25511c0c0d745efcb170cf3577a022db"
+  },
+  "source": {
+    "repository": "JTJ07/scriptops",
+    "commit": "daa6e5dc210e09171a530eeffe5601e0e74ae041",
+    "tree": "ba0b99bd99682dcc7a942537b502a7a72151fa09"
+  },
+  "prompt_sha256": "33e875991fe51752121eec45439911284d8723e6cf5638f7c99652cac91dce1c",
+  "human_solution_edits": 0,
+  "effect_capability": "NONE",
+  "derivation": "REGENERATED_AFTER_HUMAN_REQUEST",
+  "historical_candidate_relation": "SAME_FIX_REDERIVED"
+}
