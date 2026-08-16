@@ -9,6 +9,8 @@ PR #61 remains the sole active Executor implementation path and is under correct
 
 The latest rejected exact candidate is `d11f3dd9d6c484a9c554cd562db46c30e0a333fe` (`FALSE-COMPLETION`, decision-freshness TOCTOU). Earlier rejected/blocked exact candidates remain historical as recorded in `evidence/p4/PILOT_CANDIDATE_MANIFEST.json` and `evidence/phase-c/PHASE_C_HANDOFF.md`.
 
+The corrective branch now requires both a post-precondition local freshness check and GitHub provider-time enforcement: decision expiry is bound as `not_after`, provider reservation time is read from the GitHub reservation commit, and an expired/unverifiable provider-time reservation is spent fail-closed without local effect consumption or target mutation. This remains implementation under proof, not a P4 completion claim.
+
 ## Active completion path
 
 - `JTJ07/Executor#61` — active Phase B completion candidate; draft; not authorized to merge.
@@ -49,6 +51,8 @@ refs/heads/executor-authority/<sha256(authority_key)>
 These refs are **durable one-shot authority receipts**, not implementation branches. They are part of origin-to-result evidence and must not be deleted as repository cleanup. Their presence does not represent unfinished critical-path work.
 
 Deleting, force-moving, or reusing an authority receipt ref is outside the supported Executor operator workflow and invalidates the affected evidence chain.
+
+An authority ref created at/after its bound expiry remains intentionally retained as spent fail-closed evidence; it must not be deleted to make the decision appear reusable.
 
 ## Current rule
 
