@@ -2,7 +2,7 @@
 
 ## Status model
 
-`EXACT-CANDIDATE EVIDENCE GATED / P4 NOT CLAIMED / FINAL HUMAN ACCEPTANCE PENDING`
+`CORRECTIVE REWORK / FRESH HUMAN AUTHORITY REQUIRED / P4 NOT CLAIMED`
 
 This committed document deliberately does **not** encode a transient post-commit workflow state such as `EXECUTION PENDING` or `READY`.
 
@@ -29,11 +29,14 @@ A mutable PR-body statement is never sufficient evidence by itself.
 - External effects: dedicated branch, commit and draft PR only.
 - Forbidden without separate authorization: merge, deploy, release, tag, new secrets, new credentials and new paid services.
 
-## Historical rejected candidate
+## Historical rejected candidates
 
-Independent Phase C rejected candidate `24107bc8a8186ed1928e098118982efb9d62ffaa` as `FALSE-COMPLETION`.
+Independent Phase C has rejected multiple exact candidates. All associated runs, artifacts, provider receipts and consumed human decisions are historical evidence only and may not satisfy a later exact-candidate gate.
 
-That candidate and its artifacts are historical evidence only. They may not satisfy any exact-candidate gate for a later SHA.
+- `24107bc8a8186ed1928e098118982efb9d62ffaa` — `FALSE-COMPLETION`: global authority/replay boundary was insufficient.
+- `7f662cd487c14d62a4838be8c43cef1358869d50` — `BLOCKED`: G-02 canonical truth and G-14 exact-head CI binding.
+- `fdf876e0e2af6d9e4ecea2301ecb686a471037bd` — `FALSE-COMPLETION`: app-mediated GitHub events were not fail-closed as non-human.
+- `d11f3dd9d6c484a9c554cd562db46c30e0a333fe` — `FALSE-COMPLETION`: decision freshness TOCTOU. `PilotRuntime.execute()` sampled time before preconditions and the later effect authorization reused that stale time, so a decision could expire during a legal precondition and still authorize the first consequential effect.
 
 The rejected failure classes are mandatory regression targets:
 
@@ -43,23 +46,15 @@ The rejected failure classes are mandatory regression targets:
 4. workflow and resolved image identity must be bound into execution evidence;
 5. `unittest discover` reporting zero tests must fail closed;
 6. P4 repeatability evidence must match the approved map and policy;
-7. canonical state must not contradict live exact-candidate evidence.
+7. canonical state must not contradict live exact-candidate evidence;
+8. request and decision direct-human provenance must fail closed on app-mediated or provider-unverifiable events;
+9. decision freshness must be evaluated after preconditions at the effect-authorization boundary, and a decision that expires during a precondition must block before AAP/effect reservation, mutation or review-required success reporting.
 
-## Latest independent false-completion finding
-
-Independent Phase C rejected candidate `fdf876e0e2af6d9e4ecea2301ecb686a471037bd` as `FALSE-COMPLETION` because the GitHub actor verifier accepted app-mediated issue/comment events attributed to the allowed user. GitHub exposes `performed_via_github_app`, but that candidate did not enforce it.
-
-For every later candidate, direct-human origin is fail-closed for both request and decision events:
-
-- `performed_via_github_app` must be present in provider evidence;
-- its value must be exactly `null`;
-- a non-null app object or a missing provider signal must block before request/decision verification, contract freezing or consequential execution.
-
-This is a mandatory G-04 regression target. Concrete historical direct-human comments remain provenance only after they are consumed by a rejected exact candidate.
+Concrete human ACCEPT events consumed by any rejected exact candidate remain provenance only and must not be reused.
 
 ## Corrective architecture to verify
 
-The candidate implements:
+The candidate architecture must implement and independently prove:
 
 - deterministic GitHub provider-backed authority receipt refs as the global one-shot uniqueness boundary;
 - stable decision/effect identities independent of caller-controlled `run_id` and local ledger path;
@@ -67,7 +62,9 @@ The candidate implements:
 - exact GitHub Actions workflow identity and resolved Docker image identity in action/result evidence;
 - post-request External Intelligence provenance with model/provider/prompt hash, zero human solution edits and no effect capability;
 - fail-closed zero-test discovery handling;
-- bounded retry/failure/model/dependency policy in `docs/product/P4_REPEATABILITY_POLICY.md`.
+- bounded retry/failure/model/dependency policy in `docs/product/P4_REPEATABILITY_POLICY.md`;
+- provider-verifiable direct-human request and decision origin with `performed_via_github_app` present and exactly `null`;
+- a real UTC freshness sample at effect authorization after preconditions, with no caller-supplied or precondition-start authority clock.
 
 ## Corrected series contract
 
@@ -92,7 +89,10 @@ A fresh Phase C may report technical PASS only if it independently confirms, for
 - foundation CI checked out and asserted the **exact PR head SHA**, not `refs/pull/*/merge`;
 - GP001 replay is green on the exact head;
 - the corrected real-pilot series is green on the exact head;
-- the six human decision events used by that exact series are direct `JTJ07` owner comments, unedited, fresh at consumption, exact-bound and each consumed at most once;
+- the six human decision events used by that exact series are new direct `JTJ07` owner comments, unedited, fresh at consumption, exact-bound and each consumed at most once;
+- request and decision provider evidence has `performed_via_github_app` present and exactly `null`;
+- a dedicated adversarial regression proves that a decision which expires during a precondition is BLOCKED before effect authority and cannot produce `ACTION_COMPLETED_REVIEW_REQUIRED`;
+- the runtime public/effect-authorization interfaces expose no caller-supplied authority clock capable of recreating the stale-time path;
 - both pilot artifacts contain raw run reports, identical per-objective patches, exact source/head/tree/workflow/image identities and the local SQLite ledgers;
 - provider-backed decision/effect receipt refs exist live and their FINAL commits match artifact/local result bindings;
 - same-run, cross-run, cross-ledger, concurrent, crash/replay, proposal-substitution and result-substitution attacks fail closed;
