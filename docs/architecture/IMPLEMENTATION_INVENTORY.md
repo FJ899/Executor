@@ -1,196 +1,135 @@
 ---
 document: "Executor Implementation Inventory"
-version: "0.2"
-status: "PHASE B CANDIDATE / GITHUB TRUST AND BOUNDED PILOT RUNTIME"
-date: "2026-08-09"
-scope: "current implementation mapped to Executor Build Map and next product slice"
+version: "0.3"
+status: "PHASE C REJECTED / CORRECTIVE PHASE B ACTIVE"
+date: "2026-08-16"
+scope: "current PR #61 implementation state; no P4 completion claim"
 repository: "JTJ07/Executor"
-baseline: "Phase B work branch from main@5e254811; no P4 or merge claim"
+baseline: "Phase B work branch from main@5e254811; current head must be resolved from PR #61"
 ---
 
-# Executor Implementation Inventory v0.2
+# Executor Implementation Inventory v0.3
 
-## 1. Purpose
+## 1. Reading rule
 
-This inventory answers:
+This inventory is a current implementation snapshot for the open Phase-B candidate. It is not canonical `main`, not a maturity claim, and not product acceptance.
 
-> What from the Build Map actually exists today, and what is the next missing product boundary?
+Independent Phase C rejected historical candidate `24107bc8a8186ed1928e098118982efb9d62ffaa` as `FALSE-COMPLETION`. All successful runs and artifacts tied to that SHA are historical rejected-candidate evidence only.
 
-It is not a maturity claim and does not promote any P-level.
+## 2. Current state
 
-## 2. Status vocabulary
+| Boundary | Current PR #61 state | Remaining proof |
+|---|---|---|
+| GitHub request origin | direct-human issues #62/#63 were observed and exact actor/body/source binding was independently verified | corrected final series needs fresh direct-human request/decision events where required |
+| GitHub decision/freeze | ACCEPT/MODIFY/REJECT verification exists; old local-only one-shot design was rejected | corrective branch now requires provider-backed global GitHub consumption; adversarial proof still required |
+| Atomic authority | SQLite WAL/`BEGIN IMMEDIATE` still provides local crash-safe binding | local DB is no longer allowed to be the sole uniqueness boundary; cross-runner/cross-ledger replay must be proven impossible |
+| Solution proposal | bounded authority-free proposal interface exists | post-request External Intelligence provenance, model and prompt hash are now required and must be proven on final pilots |
+| Execution environment | Docker isolation, no network/secrets and cleanup exist | exact workflow SHA and resolved Docker image ID are now explicit effect evidence and must be verified on the final candidate |
+| Runtime | exact source, precondition, postcondition, regressions, scope and patch-budget enforcement exist | zero-test unittest discovery now fails closed; corrected Reconstructor request/evidence is still required |
+| Result | only review-required/blocked/failed are legal; merge remains false | global authority receipt and complete exact-environment binding must appear in final durable artifacts |
+| Real pilots | ScriptOps PR #8 and Reconstructor PR #4 exist, remain draft/unmerged, and were human-approved | both belong to a rejected Executor candidate; they do not prove corrected P4 completion |
+| Value evidence | two human reviews and bounded human-time comparison are recorded | P4 requires a larger real-task series, repeatability/failure taxonomy, model/dependency policy and bounded cost/latency disclosure |
+| Repository closure | obsolete Executor PRs were closed; issue #35 closed; PR #61 is the active completion path | provider authority refs are durable evidence refs, not unfinished implementation branches, and must not be deleted as cleanup |
 
-- `EXISTS` — implemented on `main` in a meaningful bounded form;
-- `PARTIAL` — some required behavior exists but the Build Map element is incomplete;
-- `SKELETON` — structure exists without a usable bounded flow;
-- `MISSING` — no implementation evidence found for the required product behavior;
-- `LOCKED / LATER` — intentionally outside the current product slice;
-- `OPEN DRAFT` — work exists outside accepted `main` and is not counted as canonical implementation.
+## 3. Phase-C falsification that constrains the current implementation
 
-## 3. Main-branch inventory
+### FC-01 — same-ledger replay by changing `run_id`
 
-| Build Map element | Status | Current evidence | Product implication |
-|---|---|---|---|
-| F0 Request-to-Contract Boundary | IMPLEMENTED CANDIDATE | phase-1 formation plus GitHub issue/comment verification, exact draft binding and freeze exist with adversarial tests | Real direct-human events remain required |
-| F1 Contract Interpretation Boundary | EXISTS (bounded) | GP001 machine-readable contract, contract validation and action-boundary revalidation are accepted on `main` | Kernel can execute a frozen bounded contract; it does not yet form one from user language |
-| F2 Source & Workspace Access | EXISTS (bounded) | Controlled External Fixture authority pins exact repository + commit; real GP001 E2E acquired and checked exact source identity | Proven for one controlled fixture, not arbitrary repositories |
-| F3 Execution State Model | IMPLEMENTED CANDIDATE | formation, GitHub decision, frozen contract, atomic authority and bound terminal pilot result remain distinct | Real pilot evidence pending |
-| F4 Evidence Boundary | EXISTS (bounded) | GP001 real E2E records input identity, authority binding, pre/post test state, regression state, scope and review-required status | Evidence is usable for the bounded vertical slice; still not a general product/maturity claim |
-| S0 Contract Formation Flow | IMPLEMENTED CANDIDATE | bounded formation and exact GitHub decision-to-freeze path exist | Direct-human GitHub events pending |
-| S1 Runtime Engine | EXISTS (GP001 bounded) | accepted GP001 runtime performs pinned failure reproduction, authorized mutation, verification and report | First execution vertical slice exists |
-| S2 Planning Layer | PARTIAL | GP001 E2E produces a deterministic bounded plan, but no general AI planning layer is claimed | Enough for GP001 execution; formation/planning must stay separate |
-| S3 Action Execution Layer | EXISTS (GP001 bounded) | one exact `WRITE_REPOSITORY` mutation is policy/AAP bound and executed in sandbox | Proven only for the accepted fixture/action class |
-| S4 Verification Loop | EXISTS (GP001 bounded) | target FAIL before, target PASS after, 13-test regression PASS, compileall PASS, exact scope and protected-material checks | First real verification loop exists |
-| I1 Execution State & Working Memory | EXISTS (bounded) | run state, checkpoints, execution artifacts and replay observations exist | Do not add strategic/user-goal memory to Executor |
-| I2 Context Management | PARTIAL | execution context is pinned and bounded; formation context does not yet distinguish user facts from AI inference in a runtime artifact | Request-to-contract must introduce provenance/assumption separation |
-| I3 Tool Management | EXISTS (bounded) | policy, action authorization, exact fixture binding, no generic external-project capability | Preserve capability/authority separation during formation work |
-| I4 Sandbox & Isolation | EXISTS (GP001 bounded) | real hosted-runner Docker execution, immutable image identity and cleanup checks passed | Proven for one bounded fixture |
-| C1 Software Engineering Capability | PARTIAL / FIRST SLICE WORKS | GP001 real E2E and repeatability prove one failing-test repair path | Capability is real but still narrow and not user-accessible from natural language |
-| C2 Analysis Capability | LOCKED / LATER | not required for current slice | Do not build now |
-| C3 Research Capability | LOCKED / LATER | not required for `REQUEST_TO_CONTRACT_001` | Do not build unless a measured formation blocker requires it |
-| C4 Operational Capability | LOCKED / LATER | not required for current slice | Defer |
-| UX1 Request Surface | IMPLEMENTED CANDIDATE | CLI verifies a governed GitHub issue and emits an exact non-executable draft | Publish and observe real requests |
-| UX2 Contract Decision Surface | IMPLEMENTED CANDIDATE | CLI consumes exact fresh GitHub `ACCEPT/MODIFY/REJECT`; only ACCEPT freezes | Publish and observe real decisions |
-| UX3 Execution Interaction Model | PARTIAL | GP001 report is concise and review-oriented, but user does not yet enter through request formation | Reuse after contract authorization |
-| UX4 Result Report | EXISTS (GP001 bounded) | real GP001 ends in `ACTION_COMPLETED_REVIEW_REQUIRED` with evidence and human decision required | Preserve terminal semantics |
-| LEVEL 6 Extensions | LOCKED / LATER | multi-agent, marketplace, broad integrations not required | Explicitly defer |
+Rejected behavior: effect `packet_id` depended on caller-controlled `run_id`, so another run ID created a new legal AAP key.
 
-## 4. Accepted vertical-slice evidence
-
-The following sequence has been accepted on the product critical path:
+Current corrective invariant:
 
 ```text
-PRODUCT / BUILD BASELINE
-      -> DOCUMENT AUTHORITY RECONCILIATION
-      -> GP001 MACHINE-READABLE CONTRACT
-      -> CONTROLLED EXTERNAL FIXTURE AUTHORITY
-      -> FIRST VERTICAL RUNTIME SLICE
-      -> ADVERSARIAL GP001 VALIDATION
-      -> REAL GP001 E2E
-      -> REPEATABILITY / REPLAY
+ONE HUMAN DECISION EVIDENCE REF + ONE FROZEN CONTRACT
+  -> ONE STABLE EFFECT AUTHORITY KEY
 ```
 
-Observed bounded result:
+`run_id` may identify an execution attempt; it may not create new effect authority.
+
+### FC-02 — cross-ledger replay
+
+Rejected behavior: an arbitrary fresh SQLite file created an empty authority namespace.
+
+Current corrective invariant:
 
 ```text
-exact input identity: MATCH
-controlled fixture authority: BOUND
-pre-change target test: FAIL
-post-change target test: PASS
-regression checks: PASS
-scope: ALLOWED
-protected material: UNCHANGED
-terminal status: ACTION_COMPLETED_REVIEW_REQUIRED
-human decision required: true
-replay contractual equivalence: EQUIVALENT
-replay ephemeral identity: DISTINCT
+GITHUB PROVIDER AUTHORITY RECEIPT = GLOBAL ONE-SHOT NAMESPACE
+LOCAL SQLITE = LOCAL CRASH-SAFE MIRROR / RESULT EVIDENCE
 ```
 
-This establishes a repeatable bounded execution slice. It does not establish general product maturity.
+A different runner or local ledger path must observe the same consumed global authority.
 
-## 5. Falsification history that now constrains implementation
+### FC-03 — missing solution provenance
 
-### F-1 — Caller-forged authority
+Rejected behavior: full replacement candidates existed without durable proof that External Intelligence produced/re-derived them after the human request.
 
-Closed by removing caller-owned authority context from the public GP001 path.
+Current corrective invariant:
 
-### F-2 — Implementation-level policy bypass
+- producer role = `EXTERNAL_INTELLIGENCE`;
+- provider/model recorded;
+- exact request + target source bound;
+- prompt SHA-256 recorded;
+- generation time later than the human request;
+- `human_solution_edits = 0`;
+- proposer effect capability = `NONE`.
 
-Closed by moving Controlled External Fixture authority into verified policy binding rather than runtime hard-code.
+### FC-04 — environment identity only in logs
 
-### F-3 — Post-validation authority drift
+Rejected behavior: workflow/image identity could be reconstructed from hosted-runner logs but was absent from action/result integrity.
 
-Closed by revalidating frozen contract-derived authority-critical state before consequential actions.
+Current corrective invariant:
 
-Formation work must preserve the same discipline:
+- exact Executor commit;
+- exact workflow path and workflow file SHA-256;
+- exact GitHub run/attempt/job;
+- exact resolved Docker `sha256:` image ID;
+- environment digest bound into the action authorization payload and full identity copied into terminal evidence.
 
-> A generated interpretation or draft must not become authority merely because it exists in memory or was produced by an AI component.
+### FC-05 — silent zero-test regression
 
-## 6. Current primary product gap
+Rejected behavior: `unittest discover` returned exit 0 while running zero tests and the aggregate report said regressions PASS.
 
-The largest remaining gap is external proof:
+Current corrective invariant:
+
+> A declared unittest-discovery regression is PASS only if its output proves that at least one test ran.
+
+A zero-test result is `BLOCKED`, never PASS.
+
+## 4. Supported candidate scope
+
+The human-selected product endpoint and semantic constraints remain unchanged:
+
+- endpoint: `P4 — REPEATABLE EXECUTOR 1.0`;
+- trusted intake: GitHub;
+- solution owner: External Intelligence, without effect authority;
+- authorized external repositories: `JTJ07/scriptops` and `JTJ07/creative-os-project-reconstructor`;
+- result endpoint: dedicated branch/commit/draft PR only;
+- merge/deploy/release/new secrets/new credentials/new paid services: forbidden unless separately authorized.
+
+## 5. What exists on canonical main
+
+Canonical `main` remains the pre-Phase-B baseline. M0/M1/M2 bounded governance, state, policy, Docker isolation, GP001 controlled execution/replay and request-formation foundations remain the accepted baseline. PR #61 is non-canonical candidate work until a later explicit merge decision.
+
+## 6. Current critical path
 
 ```text
-DIRECT-HUMAN GITHUB REQUEST
-  -> EXACT DRAFT
-  -> DIRECT-HUMAN GITHUB ACCEPT
-  -> FROZEN PILOT CONTRACT
-  -> EXTERNAL SOLUTION PROPOSAL
-  -> ATOMIC AAP + BOUNDED PILOT RUNTIME
-  -> TWO REAL DRAFT PRS
-  -> INDEPENDENT PHASE C
+PHASE C FALSE-COMPLETION
+  -> GLOBAL ONE-SHOT AUTHORITY REWORK
+  -> PROVENANCE + ENVIRONMENT BINDING
+  -> ZERO-TEST FAIL-CLOSED
+  -> FOUNDATION / ADVERSARIAL CI
+  -> CORRECTED DIRECT-HUMAN PILOT REQUESTS
+  -> FRESH ACCEPTS
+  -> NEW EXACT-HEAD REAL PILOT SERIES
+  -> HUMAN REVIEWS + P4 SERIES METRICS
+  -> FRESH INDEPENDENT PHASE C
+  -> FINAL HUMAN ACCEPTANCE
 ```
 
-This is the boundary between ordinary AI assistance and governed execution.
+The pilot execution workflow remains intentionally disabled during corrective commits so historical/expired authority cannot fire.
 
-## 7. Immediate implementation targets
+## 7. Stop rule
 
-### GAP-008 — Governed contract formation
+Do not claim P4, merge PR #61, merge pilot PRs, release or deploy while any selected G-01–G-18 gate remains unproven.
 
-Implement formation states that cannot directly execute:
-
-```text
-REQUEST_RECEIVED
-INTERPRETATION_PROPOSED
-DRAFT_CONTRACT_CREATED
-DRAFT_CRITIQUED
-AWAITING_HUMAN_AUTHORIZATION
-```
-
-Only an explicit authorization transition may create `AUTHORIZED_AND_FROZEN`.
-
-### GAP-009 — User/AI provenance
-
-The draft must distinguish at least:
-
-- what the user actually supplied;
-- what the system inferred;
-- what remains unresolved;
-- what was discovered but remains out of scope.
-
-### GAP-010 — Contract critique
-
-Before authorization, detect/report:
-
-- silent scope expansion;
-- unsupported target/repository/commit inference;
-- weakened success criteria;
-- hidden out-of-scope work.
-
-Critique cannot authorize its own correction.
-
-### GAP-011 — Human contract decision surface
-
-Expose:
-
-```text
-ACCEPT
-MODIFY
-REJECT
-```
-
-and ensure a draft remains non-executable until `ACCEPT` or an equivalent superior-authority action.
-
-### GAP-012 — GP001 semantic compatibility
-
-The first authorized formation output must freeze into a task contract semantically compatible with the already accepted GP001 contract/runtime, without changing GP001's execution authority or success criteria.
-
-## 8. Stop rule
-
-Until `REQUEST_TO_CONTRACT_001` is proven end to end, do not implement:
-
-- generalized natural-language contract generation;
-- separate multi-agent services;
-- autonomous contract authorization;
-- long-term Executor-owned project memory;
-- GP002 merely to add breadth;
-- generalized research capability;
-- marketplace;
-- enterprise integrations;
-- autonomous deployment.
-
-The next product question is not whether Executor can do more.
-
-It is:
-
-> Can Executor translate one bounded human request into a truthful draft, keep interpretation separate from authority, obtain human authorization, and hand the frozen contract to the already proven execution kernel?
+Do not weaken the approved DONE definition to make the rejected candidate pass.
