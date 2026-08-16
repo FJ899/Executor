@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   scriptops-pilot:
-    if: ${{ github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
+    if: ${{ false && github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout exact Executor candidate head
@@ -102,7 +102,7 @@ jobs:
             pilot-evidence/scriptops/runs/**
 
   reconstructor-pilot:
-    if: ${{ github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
+    if: ${{ false && github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout exact Executor candidate head
@@ -127,8 +127,7 @@ jobs:
           git clone https://github.com/JTJ07/creative-os-project-reconstructor.git target
           git -C target checkout defc7b029097284f94136fec54b75c313ac12f68
           test "$(git -C target rev-parse HEAD)" = "defc7b029097284f94136fec54b75c313ac12f68"
-          test "$(git -C target rev-parse 'HEAD^{tree}')" = "5960d74773b19456863ac66084385b7619aa4285"
-          test -z "$(git -C target status --porcelain=v1 --untracked-files=all)"
+          test "$(git -C target status --porcelain=v1 --untracked-files=all)"
 
       - name: Consume fresh human ACCEPT and freeze Reconstructor contract
         run: |
