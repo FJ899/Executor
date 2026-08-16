@@ -1,92 +1,126 @@
-# P4 pilot value metrics
+# P4 pilot value and repeatability metrics
 
-Status: HISTORICAL VALUE EVIDENCE + CORRECTED SERIES PENDING / NOT A P4 COMPLETION CLAIM
+Status: `EVIDENCE-GATED / NOT A P4 COMPLETION CLAIM`
 Date: 2026-08-16
 
-This file preserves direct-human value observations from the first two pilot outputs while making explicit that their Executor completion candidate was rejected by independent Phase C. It does not authorize merge, deployment, release, or a maturity claim.
+This file defines the metric interpretation and preserves durable human observations. It does not claim that the current PR head has passed its post-commit workflows. Exact-head operational values are established by immutable GitHub runs/artifacts referenced from PR #61 after those records exist and must be independently verified.
 
-## Independent Phase-C correction
+## Source hierarchy
 
-Historical Executor candidate `24107bc8a8186ed1928e098118982efb9d62ffaa` was rejected as `FALSE-COMPLETION` because human effect authority was replayable. Additional evidence gaps were also identified.
+- committed policy/metric semantics: this file + `docs/product/P4_REPEATABILITY_POLICY.md` + `PROJECT_COMPLETION_MAP.md`;
+- exact candidate identity: live PR #61 head/tree;
+- exact-candidate operational metrics: immutable exact-head GitHub Actions artifacts and provider receipts;
+- post-run locator: PR #61 body, which may identify immutable records but cannot redefine these metric rules.
 
-Therefore:
+A later PR-body statement cannot convert a failed/missing exact-head run into PASS.
 
-- the reviews below remain valid observations about the two target patches;
-- the old exact-candidate artifacts do **not** count as corrected P4 authority/replay proof;
-- no success-rate metric below may present the rejected candidate as P4 PASS;
-- a new corrected real-pilot series is required.
+## Historical rejected completion evidence
 
-## Direct-human source
+Candidate `24107bc8a8186ed1928e098118982efb9d62ffaa` was rejected by independent Phase C as `FALSE-COMPLETION` because effect authority could be replayed. Its pilot artifacts are historical only.
 
-Human actor: `JTJ07` (GitHub user id `219382941`)
+A later corrected candidate `7f662cd487c14d62a4838be8c43cef1358869d50` produced six corrected real executions with strong authority/evidence results, but independent Phase C still BLOCKED project completion on G-02 canonical-state inconsistency and G-14 foundation-CI exact-SHA binding. Those six executions therefore do not substitute for proof of a later exact candidate.
 
-Authoritative value-review comment on Executor PR #61:
-- comment id: `5308341221`
-- created: `2026-08-16T16:03:33Z`
-- updated: `2026-08-16T16:03:33Z`
-- author association: `OWNER`
+## Direct-human value source
 
-The human recorded that the Executor-assisted path required materially less human work than manual completion for these two reviewed patches.
+Human actor: `JTJ07` (GitHub user id `219382941`).
 
-## Historical patch-review observations
+Authoritative human value-review comment on Executor PR #61:
+- comment id: `5308341221`;
+- created and updated: `2026-08-16T16:03:33Z`;
+- author association: `OWNER`.
+
+The human reported that the Executor-assisted review path required materially less human work than the estimated manual completion path for the two bounded patches below.
+
+## Bounded human-review observations
 
 ### ScriptOps PR #8
 
-- target head: `897de878703a029df814f2551b993c3818defa2a`
-- review id: `4946578707`
-- reviewer: `JTJ07` / user id `219382941`
-- review state: `APPROVED`
-- human review time: approximately `3 minutes`
-- human-estimated manual completion time: approximately `15 minutes`
-- bounded ratio from the estimates: about `5x` less review time
+- target head: `897de878703a029df814f2551b993c3818defa2a`;
+- review id: `4946578707`;
+- reviewer: `JTJ07` / user id `219382941`;
+- review state: `APPROVED`;
+- human review time: approximately `3 minutes`;
+- human-estimated manual completion time: approximately `15 minutes`.
 
 ### Project Reconstructor PR #4
 
-- target head: `e59b9d6c1b496bcb6411e712e7c65cc891578ac3`
-- review id: `4946583370`
-- reviewer: `JTJ07` / user id `219382941`
-- review state: `APPROVED`
-- human review time: approximately `15 seconds`
-- human-estimated manual completion time: approximately `15 minutes`
-- bounded ratio from the estimates: about `60x` less review time
+- target head: `e59b9d6c1b496bcb6411e712e7c65cc891578ac3`;
+- review id: `4946583370`;
+- reviewer: `JTJ07` / user id `219382941`;
+- review state: `APPROVED`;
+- human review time: approximately `15 seconds`;
+- human-estimated manual completion time: approximately `15 minutes`.
 
-Both PRs remain intentionally DRAFT and unmerged.
+These are bounded human observations for these two reviewed patch heads. They are not a general productivity or ROI claim.
 
-## Historical objective observations
+## Approved P4 series definition
 
-- patch outputs reviewed: `2/2`;
-- patch reviews approved: `2/2`;
-- these are **review acceptance observations**, not a corrected P4 objective-completion rate;
-- the old Reconstructor evidence included a declared unittest discovery that ran zero tests, so its old aggregate regression PASS is not accepted as corrected evidence.
+The human-approved completion map requires multiple real runs across more than one repository or independent module set. It does **not** prescribe a third distinct task objective.
 
-## Corrected P4 series requirements
+The bounded completion series frozen by `docs/product/P4_REPEATABILITY_POLICY.md` is:
 
-`docs/product/P4_REPEATABILITY_POLICY.md` freezes the candidate measurement policy.
+- `2` distinct real bounded objectives;
+- `2` authorized repositories;
+- `3` separately human-authorized executions per objective;
+- `6` independently authorized real executions total.
 
-Before a P4 claim is presented again, evidence must cover at least three distinct real bounded task objectives across the two authorized repositories or independent modules, including:
+Each repetition must begin at the same exact pinned source for its objective, produce the same bounded patch, pass the same frozen postconditions/regressions, preserve scope/isolation, and create independent one-shot global authority evidence.
 
-- corrected global one-shot authority proof;
-- fresh exact request/decision evidence;
-- exact workflow/image/source identity;
-- post-request External Intelligence provenance;
-- real postconditions and non-empty declared regression evidence;
-- objective completion rate and first-attempt/retry counts reported separately;
-- failure taxonomy;
-- runtime and request-to-consumption latency;
-- human review acceptance/time evidence;
-- model/dependency identity and stability evidence;
-- bounded cost disclosure.
+A human ACCEPT already consumed by an earlier exact candidate cannot be reused to make a later candidate's series appear fresh.
+
+## Metrics required from the current exact-candidate artifacts
+
+For the exact PR #61 head presented to Phase C, the verifier must independently derive at least:
+
+- distinct objective count and repository/module coverage;
+- completed review-required executions / total executions;
+- objective completion rate;
+- first-attempt and retry counts separately;
+- primary failure taxonomy for any failure/retry;
+- per-execution runtime plus aggregate mean/median/total where available;
+- request/decision-to-consumption latency from durable timestamps where available;
+- human review acceptance state and unchanged reviewed target heads;
+- human review time versus bounded manual estimate;
+- exact model/provider/provenance and prompt hash;
+- exact workflow/image/source identities;
+- provider-backed one-shot authority receipt count/state;
+- local SQLite action/result FINAL bindings;
+- patch reproducibility within each objective;
+- cost disclosure boundary.
+
+No metric is current merely because it existed for an earlier SHA.
+
+## Failure and retry interpretation
+
+Attempt-level success and objective-level completion are separate.
+
+Retries are governed by `docs/product/P4_REPEATABILITY_POLICY.md`:
+
+- before global effect reservation: bounded retry may be allowed while the decision remains fresh and no effect receipt exists;
+- after effect reservation: no automatic consequential retry; a new attempt requires a new direct-human ACCEPT.
+
+Failure taxonomy includes trust/origin, decision/replay, solution provenance, input identity, environment, precondition, postcondition, regression, scope, isolation, evidence and human review.
 
 ## Cost disclosure
 
-- new paid services authorized for this Phase B work: none;
-- actual shared platform/provider allocation or billing cost: **not independently measured**;
-- this file must not translate “no new paid service authorized” into a claim of zero actual compute/platform cost.
+The supported claim is only:
 
-## Interpretation boundary
+- incremental **new paid-service authorization** for this Phase-B work: `0`.
 
-The historical reviews support only this statement:
+Not established:
 
-> For two bounded patches, the human reported materially less review effort than the human estimated for manual completion.
+- actual GitHub Actions allocation cost;
+- actual OpenAI/model allocation cost;
+- actual shared platform/compute cost.
 
-They do not establish general productivity, ROI, corrected P4 success rate, P4 acceptance, or product completion.
+Therefore no document may translate “no new paid service authorized” into “actual cost = 0”.
+
+## Completion interpretation
+
+A current exact-candidate series can support G-15 only after the immutable exact-head runs/artifacts have been independently checked.
+
+Even if all technical/value metrics pass:
+
+- P4 remains unclaimed until fresh independent Phase C passes the applicable gates;
+- `EXECUTOR 1.0: ACCEPT` remains a separate final human decision;
+- merge, release, deploy and tag remain unauthorized unless separately approved.
