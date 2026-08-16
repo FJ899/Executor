@@ -7,7 +7,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from executor.authority_ledger import AtomicAuthorityLedger, AuthorityReplayError
+from executor.github_authority import GlobalAuthorityReplayError
 from executor.github_trust import (
     GitHubTrustError,
     GitHubTrustProfile,
@@ -20,6 +20,7 @@ from executor.pilot_contract import (
     build_pilot_draft,
     pilot_draft_sha256,
 )
+from tests.p4_test_support import governed_ledger
 
 
 NOW = datetime(2026, 8, 16, 0, 2, tzinfo=timezone.utc)
@@ -161,23 +162,27 @@ class GitHubTrustTests(unittest.TestCase):
         )
         return source, request, draft, verified
 
-    def test_exact_github_accept_freezes_once(self):
+    def test_exact_github_accept_freezes_once_globally(self):
         _, _, draft, decision = self.verified_pair()
         with tempfile.TemporaryDirectory() as directory:
-            ledger = AtomicAuthorityLedger(Path(directory) / "ledger.sqlite3")
+            shared = {}
             result = apply_github_decision(
                 draft=draft,
                 decision=decision,
-                ledger=ledger,
+                ledger=governed_ledger(Path(directory) / "ledger-a.sqlite3", shared=shared),
             )
             self.assertEqual(result["status"], "AUTHORIZED_AND_FROZEN")
             self.assertTrue(result["executable"])
             self.assertEqual(result["contract"]["status"], "AUTHORIZED_AND_FROZEN")
-            with self.assertRaises(AuthorityReplayError):
+            self.assertEqual(result["decision_consumption"]["global"]["state"], "FINAL")
+            with self.assertRaises(GlobalAuthorityReplayError):
                 apply_github_decision(
                     draft=draft,
                     decision=decision,
-                    ledger=ledger,
+                    ledger=governed_ledger(
+                        Path(directory) / "different-ledger.sqlite3",
+                        shared=shared,
+                    ),
                 )
 
     def test_accept_uses_provider_created_at_without_payload_prediction(self):
@@ -201,7 +206,6 @@ class GitHubTrustTests(unittest.TestCase):
         provider_comment["created_at"] = "2026-08-16T00:01:37Z"
         provider_comment["updated_at"] = provider_comment["created_at"]
         source.values[COMMENT_URL] = provider_comment
-
         verified = verify_github_decision(
             source,
             profile=profile(),
@@ -210,21 +214,17 @@ class GitHubTrustTests(unittest.TestCase):
             draft_sha256=pilot_draft_sha256(draft),
             now=NOW,
         )
-
         self.assertEqual(verified.created_at, "2026-08-16T00:01:37Z")
         self.assertEqual(verified.expires_at, "2026-08-16T00:31:37Z")
 
     def test_modify_and_reject_never_freeze(self):
-        for choice, status in (
-            ("MODIFY", "MODIFICATION_REQUIRED"),
-            ("REJECT", "REJECTED"),
-        ):
+        for choice, status in (("MODIFY", "MODIFICATION_REQUIRED"), ("REJECT", "REJECTED")):
             with self.subTest(choice=choice), tempfile.TemporaryDirectory() as directory:
                 _, _, draft, decision = self.verified_pair(decision=choice)
                 result = apply_github_decision(
                     draft=draft,
                     decision=decision,
-                    ledger=AtomicAuthorityLedger(Path(directory) / "ledger.sqlite3"),
+                    ledger=governed_ledger(Path(directory) / "ledger.sqlite3"),
                 )
                 self.assertEqual(result["status"], status)
                 self.assertFalse(result["executable"])
@@ -257,12 +257,7 @@ class GitHubTrustTests(unittest.TestCase):
             }
         )
         with self.assertRaisesRegex(GitHubTrustError, "commit/tree"):
-            verify_github_request(
-                source,
-                profile=profile(),
-                issue_number=61,
-                now=NOW,
-            )
+            verify_github_request(source, profile=profile(), issue_number=61, now=NOW)
 
     def test_observation_time_does_not_change_draft_identity(self):
         payload = request_payload()
@@ -272,19 +267,13 @@ class GitHubTrustTests(unittest.TestCase):
                 commit_url(payload): commit_evidence(payload),
             }
         )
-        first = verify_github_request(
-            source,
-            profile=profile(),
-            issue_number=61,
-            now=NOW,
-        )
+        first = verify_github_request(source, profile=profile(), issue_number=61, now=NOW)
         second = verify_github_request(
             source,
             profile=profile(),
             issue_number=61,
             now=NOW + timedelta(minutes=10),
         )
-
         self.assertNotEqual(first.observed_at, second.observed_at)
         self.assertEqual(
             pilot_draft_sha256(build_pilot_draft(first)),
@@ -292,19 +281,13 @@ class GitHubTrustTests(unittest.TestCase):
         )
 
     def test_wrong_issue_or_request_hash_blocks(self):
-        for field, value in (
-            ("issue_number", 62),
-            ("body_sha256", "f" * 64),
-        ):
+        for field, value in (("issue_number", 62), ("body_sha256", "f" * 64)):
             with self.subTest(field=field):
                 source, request, draft, _ = self.verified_pair()
                 invalid = decision_payload(request, pilot_draft_sha256(draft))
                 invalid["request"][field] = value
                 source.values[COMMENT_URL] = comment(invalid)
-                with self.assertRaisesRegex(
-                    GitHubTrustError,
-                    "stale or mismatched",
-                ):
+                with self.assertRaisesRegex(GitHubTrustError, "stale or mismatched"):
                     verify_github_decision(
                         source,
                         profile=profile(),
@@ -320,20 +303,12 @@ class GitHubTrustTests(unittest.TestCase):
         changed["task"]["problem_statement"] = "changed after approval"
         source.values[ISSUE_URL] = issue(json.dumps(changed, sort_keys=True))
         source.values[commit_url(changed)] = commit_evidence(changed)
-        current = verify_github_request(
-            source,
-            profile=profile(),
-            issue_number=61,
-            now=NOW,
-        )
+        current = verify_github_request(source, profile=profile(), issue_number=61, now=NOW)
         self.assertNotEqual(
             pilot_draft_sha256(draft),
             pilot_draft_sha256(build_pilot_draft(current)),
         )
-        with self.assertRaisesRegex(
-            GitHubTrustError,
-            "different draft|stale or mismatched",
-        ):
+        with self.assertRaisesRegex(GitHubTrustError, "different draft|stale or mismatched"):
             verify_github_decision(
                 source,
                 profile=profile(),
