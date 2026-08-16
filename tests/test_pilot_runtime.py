@@ -8,8 +8,9 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from executor.authority_ledger import AtomicAuthorityLedger, AuthorityReplayError
-from executor.github_trust import verify_github_decision, verify_github_request
+from executor.authority_ledger import AtomicAuthorityLedger
+from executor.github_authority import GlobalAuthorityReplayError
+from executor.github_trust import canonical_json, verify_github_decision, verify_github_request
 from executor.pilot_contract import (
     apply_github_decision,
     build_pilot_draft,
@@ -23,6 +24,7 @@ from executor.pilot_runtime import (
 from executor.sandbox.policy_snapshot import load_execution_policy_snapshot
 from executor.sandbox.spec import SandboxExecutionContext, SandboxResult
 from executor.solution_proposal import validate_solution_proposal
+from tests.p4_test_support import execution_environment, governed_ledger, provenance_for
 from tests.test_github_trust import (
     COMMENT_URL,
     ISSUE_URL,
@@ -39,21 +41,28 @@ from tests.test_github_trust import (
 
 
 class SequenceBackend:
-    def __init__(self, exit_codes):
+    def __init__(self, exit_codes, *, zero_test_discovery=False):
         self.exit_codes = list(exit_codes)
         self.calls = []
+        self.zero_test_discovery = zero_test_discovery
 
     def run(self, *, spec, context, output_dir, argv, container_name=None):
         del spec, container_name
         self.calls.append((context, list(argv)))
         exit_code = self.exit_codes.pop(0)
+        is_discovery = "unittest" in argv and "discover" in argv
+        if exit_code == 0 and is_discovery:
+            count = 0 if self.zero_test_discovery else 1
+            stdout = f"Ran {count} test{'s' if count != 1 else ''} in 0.001s\n\nOK\n"
+        else:
+            stdout = "ok\n" if exit_code == 0 else ""
         return SandboxResult(
             container_name="fake",
             execution_id=f"{len(self.calls):032x}",
             policy_sha256="b" * 64,
             argv=tuple(argv),
             exit_code=exit_code,
-            stdout="ok\n" if exit_code == 0 else "",
+            stdout=stdout,
             stderr="counterexample\n" if exit_code else "",
             timed_out=False,
             duration_seconds=0.01,
@@ -122,10 +131,11 @@ class PilotRuntimeTests(unittest.TestCase):
             now=NOW,
         )
         self.ledger_path = root / "authority.sqlite3"
+        self.global_shared = {}
         self.frozen = apply_github_decision(
             draft=draft,
             decision=self.decision,
-            ledger=AtomicAuthorityLedger(self.ledger_path),
+            ledger=governed_ledger(self.ledger_path, shared=self.global_shared),
         )
         before = (self.fixture.root / "phase6/scriptops-v2-hardening.py").read_bytes()
         replacement = "VALUE = 2\n"
@@ -141,9 +151,7 @@ class PilotRuntimeTests(unittest.TestCase):
                     "path": "phase6/scriptops-v2-hardening.py",
                     "expected_before_sha256": hashlib.sha256(before).hexdigest(),
                     "replacement_text": replacement,
-                    "expected_after_sha256": hashlib.sha256(
-                        replacement.encode()
-                    ).hexdigest(),
+                    "expected_after_sha256": hashlib.sha256(replacement.encode()).hexdigest(),
                 }
             ],
             "rationale": "Repair the observed counterexample.",
@@ -151,17 +159,17 @@ class PilotRuntimeTests(unittest.TestCase):
                 ["python", "-c", "raise SystemExit(0)"],
                 ["python", "-m", "unittest", "discover", "-s", "tests"],
             ],
+            "provenance": provenance_for(self.frozen),
         }
-        self.validated = validate_solution_proposal(
-            proposal,
-            frozen_result=self.frozen,
-        )
+        self.validated = validate_solution_proposal(proposal, frozen_result=self.frozen)
         self.root = root
+        self.image = "sha256:" + "1" * 64
+        self.environment = execution_environment(image=self.image)
 
     def tearDown(self):
         self.temp.cleanup()
 
-    def runtime(self, exit_codes):
+    def runtime(self, exit_codes, *, zero_test_discovery=False, ledger_path=None):
         runtime = object.__new__(PilotRuntime)
         runtime.executor_commit = "e" * 40
         runtime.policy_snapshot = SimpleNamespace(
@@ -176,13 +184,20 @@ class PilotRuntimeTests(unittest.TestCase):
         runtime.proposal = self.validated
         runtime.verified_request = self.request
         runtime.verified_decision = self.decision
-        runtime.ledger = AtomicAuthorityLedger(self.ledger_path)
-        runtime.runs_root = self.root / "runs"
-        runtime.backend = SequenceBackend(exit_codes)
-        runtime.spec = build_pilot_sandbox_spec(
-            runtime.contract,
-            "sha256:" + "1" * 64,
+        runtime.ledger = governed_ledger(
+            ledger_path or self.ledger_path,
+            shared=self.global_shared,
         )
+        runtime.runs_root = self.root / "runs"
+        runtime.backend = SequenceBackend(
+            exit_codes,
+            zero_test_discovery=zero_test_discovery,
+        )
+        runtime.spec = build_pilot_sandbox_spec(runtime.contract, self.image)
+        runtime.execution_environment = self.environment
+        runtime.execution_environment_sha256 = hashlib.sha256(
+            canonical_json(self.environment).encode("utf-8")
+        ).hexdigest()
         return runtime
 
     def test_observed_failure_then_fix_produces_review_required_draft_request(self):
@@ -193,18 +208,21 @@ class PilotRuntimeTests(unittest.TestCase):
             now=NOW,
         )
         self.assertEqual(report["status"], "ACTION_COMPLETED_REVIEW_REQUIRED")
-        self.assertEqual(
-            report["changed_paths"],
-            ["phase6/scriptops-v2-hardening.py"],
-        )
+        self.assertEqual(report["changed_paths"], ["phase6/scriptops-v2-hardening.py"])
         self.assertTrue(report["human_review_required"])
         self.assertFalse(report["merge_allowed"])
         self.assertTrue(report["draft_pr_request"]["draft"])
         self.assertFalse(report["draft_pr_request"]["merge_allowed"])
         self.assertEqual(report["authority_consumption"]["state"], "FINAL")
+        self.assertEqual(report["authority_consumption"]["global"]["state"], "FINAL")
+        self.assertEqual(AtomicAuthorityLedger(self.ledger_path).unresolved(), ())
         self.assertEqual(
-            AtomicAuthorityLedger(self.ledger_path).unresolved(),
-            (),
+            report["terminal_result"]["execution_environment_sha256"],
+            runtime.execution_environment_sha256,
+        )
+        self.assertEqual(
+            report["terminal_result"]["solution_provenance_sha256"],
+            self.validated.provenance_sha256,
         )
         persisted = json.loads(Path(report["report_path"]).read_text())
         self.assertIn("draft_pr_request", persisted)
@@ -224,11 +242,35 @@ class PilotRuntimeTests(unittest.TestCase):
             "VALUE = 1\n",
         )
 
-    def test_same_exact_action_authority_cannot_be_consumed_twice(self):
+    def test_same_human_accept_cannot_mint_second_effect_with_different_run_id(self):
         runtime = self.runtime([])
-        runtime._authorize_action(run_id="pilot-replay-001", now=NOW)
-        with self.assertRaises(AuthorityReplayError):
-            runtime._authorize_action(run_id="pilot-replay-001", now=NOW)
+        first_packet, _ = runtime._authorize_action(run_id="pilot-replay-001", now=NOW)
+        second = self.runtime([])
+        with self.assertRaises(GlobalAuthorityReplayError):
+            second._authorize_action(run_id="pilot-replay-002", now=NOW)
+        # packet identity is independent of caller-controlled run_id
+        self.assertTrue(first_packet["packet_id"].startswith("pilot-"))
+
+    def test_different_local_ledger_cannot_bypass_global_consumption(self):
+        runtime = self.runtime([])
+        runtime._authorize_action(run_id="pilot-ledger-a", now=NOW)
+        second = self.runtime(
+            [],
+            ledger_path=self.root / "different-authority.sqlite3",
+        )
+        with self.assertRaises(GlobalAuthorityReplayError):
+            second._authorize_action(run_id="pilot-ledger-b", now=NOW)
+
+    def test_zero_test_unittest_discovery_is_not_regression_pass(self):
+        runtime = self.runtime([1, 0, 0], zero_test_discovery=True)
+        report = runtime.execute(
+            workspace=self.fixture.root,
+            run_id="pilot-zero-tests",
+            now=NOW,
+        )
+        self.assertEqual(report["status"], "BLOCKED")
+        self.assertIn("ran zero tests", report["error"])
+        self.assertNotEqual(report["evidence"]["regressions"], "PASS")
 
     def test_real_policy_authorizes_only_the_bound_pilot_checkout(self):
         executor_root = Path(__file__).resolve().parents[1]
@@ -238,10 +280,7 @@ class PilotRuntimeTests(unittest.TestCase):
             capture_output=True,
             check=True,
         ).stdout.strip()
-        policy = load_execution_policy_snapshot(
-            executor_root,
-            commit=executor_commit,
-        )
+        policy = load_execution_policy_snapshot(executor_root, commit=executor_commit)
         backend = PilotDockerSandboxBackend(
             policy_snapshot=policy,
             contract=self.frozen["contract"],
