@@ -1,0 +1,175 @@
+name: P4 real pilots one-shot
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  scriptops-pilot:
+    if: github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact Executor candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Pull isolated pilot image
+        run: docker pull python:3.11-slim-bookworm
+
+      - name: Resolve exact image ID
+        run: echo "EXECUTOR_SANDBOX_IMAGE=$(docker image inspect --format='{{.Id}}' python:3.11-slim-bookworm)" >> "$GITHUB_ENV"
+
+      - name: Acquire exact ScriptOps source
+        run: |
+          git clone https://github.com/JTJ07/scriptops.git target
+          git -C target checkout daa6e5dc210e09171a530eeffe5601e0e74ae041
+          test "$(git -C target rev-parse HEAD)" = "daa6e5dc210e09171a530eeffe5601e0e74ae041"
+          test "$(git -C target rev-parse 'HEAD^{tree}')" = "ba0b99bd99682dcc7a942537b502a7a72151fa09"
+          test -z "$(git -C target status --porcelain=v1 --untracked-files=all)"
+
+      - name: Consume fresh human ACCEPT and freeze ScriptOps contract
+        run: |
+          python -m executor.cli github-pilot-decide \
+            --profile trust_profiles/github-p4-pilots.json \
+            --issue 62 \
+            --comment 5307670667 \
+            --ledger .executor/scriptops-authority.sqlite3 \
+            > scriptops-frozen.json
+
+      - name: Materialize authority-free ScriptOps proposal
+        run: |
+          python -m executor.cli materialize-pilot-proposal \
+            --candidate evidence/p4/candidates/scriptops-solution-candidate.json \
+            --frozen scriptops-frozen.json \
+            > scriptops-proposal.json
+
+      - name: Execute governed ScriptOps pilot
+        run: |
+          python -m executor.cli run-pilot \
+            --profile trust_profiles/github-p4-pilots.json \
+            --issue 62 \
+            --comment 5307670667 \
+            --frozen scriptops-frozen.json \
+            --proposal scriptops-proposal.json \
+            --ledger .executor/scriptops-authority.sqlite3 \
+            --workspace target \
+            --runs-root pilot-evidence/scriptops/runs \
+            --run-id p4-scriptops-real-001 \
+            --image "$EXECUTOR_SANDBOX_IMAGE" \
+            --executor-root . \
+            --executor-commit "$GITHUB_SHA" \
+            > scriptops-result.json
+          grep -q '"status": "ACTION_COMPLETED_REVIEW_REQUIRED"' scriptops-result.json
+          git -C target diff --no-ext-diff --no-textconv --binary daa6e5dc210e09171a530eeffe5601e0e74ae041 > scriptops-pilot.patch
+          git -C target status --porcelain=v1 --untracked-files=all > scriptops-status.txt
+
+      - name: Verify ScriptOps sandbox cleanup
+        if: always()
+        run: test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=p4-bounded-real-pilot)"
+
+      - name: Upload ScriptOps pilot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p4-scriptops-real-pilot-evidence
+          if-no-files-found: warn
+          path: |
+            scriptops-frozen.json
+            scriptops-proposal.json
+            scriptops-result.json
+            scriptops-pilot.patch
+            scriptops-status.txt
+            .executor/scriptops-authority.sqlite3*
+            pilot-evidence/scriptops/runs/**
+
+  reconstructor-pilot:
+    if: github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact Executor candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Pull isolated pilot image
+        run: docker pull python:3.11-slim-bookworm
+
+      - name: Resolve exact image ID
+        run: echo "EXECUTOR_SANDBOX_IMAGE=$(docker image inspect --format='{{.Id}}' python:3.11-slim-bookworm)" >> "$GITHUB_ENV"
+
+      - name: Acquire exact Reconstructor source
+        run: |
+          git clone https://github.com/JTJ07/creative-os-project-reconstructor.git target
+          git -C target checkout defc7b029097284f94136fec54b75c313ac12f68
+          test "$(git -C target rev-parse HEAD)" = "defc7b029097284f94136fec54b75c313ac12f68"
+          test "$(git -C target rev-parse 'HEAD^{tree}')" = "5960d74773b19456863ac66084385b7619aa4285"
+          test -z "$(git -C target status --porcelain=v1 --untracked-files=all)"
+
+      - name: Consume fresh human ACCEPT and freeze Reconstructor contract
+        run: |
+          python -m executor.cli github-pilot-decide \
+            --profile trust_profiles/github-p4-pilots.json \
+            --issue 63 \
+            --comment 5307672258 \
+            --ledger .executor/reconstructor-authority.sqlite3 \
+            > reconstructor-frozen.json
+
+      - name: Materialize authority-free Reconstructor proposal
+        run: |
+          python -m executor.cli materialize-pilot-proposal \
+            --candidate evidence/p4/candidates/reconstructor-solution-candidate.json \
+            --frozen reconstructor-frozen.json \
+            > reconstructor-proposal.json
+
+      - name: Execute governed Reconstructor pilot
+        run: |
+          python -m executor.cli run-pilot \
+            --profile trust_profiles/github-p4-pilots.json \
+            --issue 63 \
+            --comment 5307672258 \
+            --frozen reconstructor-frozen.json \
+            --proposal reconstructor-proposal.json \
+            --ledger .executor/reconstructor-authority.sqlite3 \
+            --workspace target \
+            --runs-root pilot-evidence/reconstructor/runs \
+            --run-id p4-reconstructor-real-001 \
+            --image "$EXECUTOR_SANDBOX_IMAGE" \
+            --executor-root . \
+            --executor-commit "$GITHUB_SHA" \
+            > reconstructor-result.json
+          grep -q '"status": "ACTION_COMPLETED_REVIEW_REQUIRED"' reconstructor-result.json
+          git -C target diff --no-ext-diff --no-textconv --binary defc7b029097284f94136fec54b75c313ac12f68 > reconstructor-pilot.patch
+          git -C target status --porcelain=v1 --untracked-files=all > reconstructor-status.txt
+
+      - name: Verify Reconstructor sandbox cleanup
+        if: always()
+        run: test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=p4-bounded-real-pilot)"
+
+      - name: Upload Reconstructor pilot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p4-reconstructor-real-pilot-evidence
+          if-no-files-found: warn
+          path: |
+            reconstructor-frozen.json
+            reconstructor-proposal.json
+            reconstructor-result.json
+            reconstructor-pilot.patch
+            reconstructor-status.txt
+            .executor/reconstructor-authority.sqlite3*
+            pilot-evidence/reconstructor/runs/**
