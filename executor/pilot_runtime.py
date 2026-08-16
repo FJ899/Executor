@@ -26,6 +26,7 @@ from executor.execution_environment import (
 )
 from executor.github_authority import (
     GlobalAuthorityError,
+    GlobalAuthorityExpiredError,
     GovernedAuthorityConsumption,
     GovernedAuthorityLedger,
 )
@@ -528,13 +529,17 @@ class PilotRuntime:
         )
         if result.status != ValidationStatus.VALID or decision is None:
             raise PilotBlocked(f"pilot AAP rejected: {result.to_dict()}")
-        consumption = self.ledger.consume(
-            authority_key=f"aap:{decision.packet_id}",
-            payload_sha256=decision.payload_sha256,
-            action_kind=decision.action_kind,
-            run_id=run_id,
-            now=now,
-        )
+        try:
+            consumption = self.ledger.consume(
+                authority_key=f"aap:{decision.packet_id}",
+                payload_sha256=decision.payload_sha256,
+                action_kind=decision.action_kind,
+                run_id=run_id,
+                now=now,
+                not_after=self.verified_decision.expires_at,
+            )
+        except GlobalAuthorityExpiredError as exc:
+            raise PilotBlocked(str(exc)) from exc
         return packet, consumption
 
     def _apply_mutations(self, root: Path) -> None:

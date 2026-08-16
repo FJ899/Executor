@@ -7,6 +7,7 @@ import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Protocol
 from urllib.parse import quote
 
@@ -22,6 +23,10 @@ class GlobalAuthorityReplayError(GlobalAuthorityError):
     pass
 
 
+class GlobalAuthorityExpiredError(GlobalAuthorityError):
+    pass
+
+
 class GlobalAuthorityHttpError(GlobalAuthorityError):
     def __init__(self, status: int, body: str):
         super().__init__(f"GitHub authority API returned HTTP {status}: {body[:500]}")
@@ -33,6 +38,16 @@ _AUTHORITY_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,255}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _SAFE_VALUE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}$")
 _RECEIPT_PREFIX = "EXECUTOR_GLOBAL_AUTHORITY_RECEIPT_V1\n"
+
+
+def _parse_provider_timestamp(value: str, *, label: str) -> datetime:
+    if not isinstance(value, str) or not value.endswith("Z"):
+        raise GlobalAuthorityError(f"{label} must be a UTC Z timestamp")
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError as exc:
+        raise GlobalAuthorityError(f"{label} is invalid") from exc
+    return parsed.astimezone(timezone.utc)
 
 
 class GitHubAuthorityTransport(Protocol):
@@ -99,6 +114,8 @@ class GlobalAuthorityReservation:
     run_id: str
     ref: str
     reservation_sha: str
+    not_after: str | None = None
+    provider_created_at: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -109,6 +126,8 @@ class GlobalAuthorityReservation:
             "run_id": self.run_id,
             "ref": self.ref,
             "reservation_sha": self.reservation_sha,
+            "not_after": self.not_after,
+            "provider_created_at": self.provider_created_at,
         }
 
 
@@ -208,7 +227,13 @@ class GitHubGlobalAuthority:
         payload_sha256: str,
         action_kind: str,
         run_id: str,
+        not_after: str | None = None,
     ) -> GlobalAuthorityReservation:
+        deadline = (
+            _parse_provider_timestamp(not_after, label="not_after")
+            if not_after is not None
+            else None
+        )
         self._validate(
             authority_key=authority_key,
             payload_sha256=payload_sha256,
@@ -225,6 +250,7 @@ class GitHubGlobalAuthority:
             "payload_sha256": payload_sha256,
             "action_kind": action_kind,
             "run_id": run_id,
+            "not_after": not_after,
             "result_sha256": None,
         }
         tree_sha, parent_sha = self._base_tree_and_parent()
@@ -252,6 +278,23 @@ class GitHubGlobalAuthority:
                     f"global authority already consumed: {authority_key}"
                 ) from exc
             raise
+        provider_created_at = None
+        if deadline is not None:
+            provider_commit = self._get_commit(commit_sha)
+            committer = provider_commit.get("committer")
+            if not isinstance(committer, dict):
+                raise GlobalAuthorityError("provider reservation commit has no committer time")
+            provider_created_at = committer.get("date")
+            provider_time = _parse_provider_timestamp(
+                provider_created_at,
+                label="provider reservation time",
+            )
+            if provider_time >= deadline:
+                # The one-shot ref is intentionally left spent. No local consumption or
+                # consequential effect is allowed after the provider proves expiry.
+                raise GlobalAuthorityExpiredError(
+                    "global authority reservation occurred at or after authority expiry"
+                )
         return GlobalAuthorityReservation(
             authority_key=authority_key,
             payload_sha256=payload_sha256,
@@ -259,6 +302,8 @@ class GitHubGlobalAuthority:
             run_id=run_id,
             ref=ref,
             reservation_sha=commit_sha,
+            not_after=not_after,
+            provider_created_at=provider_created_at,
         )
 
     def finalize(
@@ -282,6 +327,7 @@ class GitHubGlobalAuthority:
             "payload_sha256": reservation.payload_sha256,
             "action_kind": reservation.action_kind,
             "run_id": reservation.run_id,
+            "not_after": reservation.not_after,
         }
         for key, value in expected.items():
             if current_receipt.get(key) != value:
@@ -382,12 +428,14 @@ class GovernedAuthorityLedger:
         action_kind: str,
         run_id: str,
         now: Any = None,
+        not_after: str | None = None,
     ) -> GovernedAuthorityConsumption:
         reservation = self.global_authority.reserve(
             authority_key=authority_key,
             payload_sha256=payload_sha256,
             action_kind=action_kind,
             run_id=run_id,
+            not_after=not_after,
         )
         local = self.local.consume(
             authority_key=authority_key,

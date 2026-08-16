@@ -8,6 +8,7 @@ from urllib.parse import unquote
 
 from executor.authority_ledger import AtomicAuthorityLedger
 from executor.github_authority import (
+    GlobalAuthorityExpiredError,
     GlobalAuthorityHttpError,
     GlobalAuthorityReplayError,
     GitHubGlobalAuthority,
@@ -16,7 +17,8 @@ from executor.github_authority import (
 
 
 class FakeGitHubTransport:
-    def __init__(self):
+    def __init__(self, *, provider_time="2026-08-16T18:00:00Z"):
+        self.provider_time = provider_time
         self.refs = {"refs/heads/main": "1" * 40}
         self.commits = {
             "1" * 40: {
@@ -54,6 +56,7 @@ class FakeGitHubTransport:
                 "message": payload["message"],
                 "tree": {"sha": payload["tree"]},
                 "parents": list(payload["parents"]),
+                "committer": {"date": self.provider_time},
             }
             return {"sha": sha}
         if method == "POST" and url.endswith("/git/refs"):
@@ -141,6 +144,38 @@ class GitHubGlobalAuthorityTests(unittest.TestCase):
                 action_kind="EXTERNAL_PROJECT_EXECUTION",
                 run_id="race-run-a",
             )
+
+    def test_provider_server_time_after_deadline_spends_authority_but_fails_closed(self):
+        transport = FakeGitHubTransport(provider_time="2026-08-16T18:02:00Z")
+        authority = GitHubGlobalAuthority(
+            repository="JTJ07/Executor",
+            transport=transport,
+        )
+        key = "aap:provider-expiry"
+        with self.assertRaises(GlobalAuthorityExpiredError):
+            authority.reserve(
+                authority_key=key,
+                payload_sha256="d" * 64,
+                action_kind="EXTERNAL_PROJECT_EXECUTION",
+                run_id="expiry-run",
+                not_after="2026-08-16T18:01:00Z",
+            )
+        self.assertIn(GitHubGlobalAuthority._ref_for(key), transport.refs)
+
+    def test_provider_server_time_before_deadline_is_bound_into_receipt_evidence(self):
+        authority = GitHubGlobalAuthority(
+            repository="JTJ07/Executor",
+            transport=FakeGitHubTransport(provider_time="2026-08-16T18:00:00Z"),
+        )
+        reservation = authority.reserve(
+            authority_key="aap:provider-fresh",
+            payload_sha256="e" * 64,
+            action_kind="EXTERNAL_PROJECT_EXECUTION",
+            run_id="fresh-run",
+            not_after="2026-08-16T18:01:00Z",
+        )
+        self.assertEqual(reservation.not_after, "2026-08-16T18:01:00Z")
+        self.assertEqual(reservation.provider_created_at, "2026-08-16T18:00:00Z")
 
     def test_global_ref_name_depends_only_on_authority_key_not_run_id(self):
         key = "github-decision:IC_example"

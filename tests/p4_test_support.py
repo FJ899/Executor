@@ -17,7 +17,7 @@ class FakeGlobalAuthority:
     def __init__(self, shared: dict[str, dict[str, Any]] | None = None):
         self.shared = shared if shared is not None else {}
 
-    def reserve(self, *, authority_key, payload_sha256, action_kind, run_id):
+    def reserve(self, *, authority_key, payload_sha256, action_kind, run_id, not_after=None):
         if authority_key in self.shared:
             raise GlobalAuthorityReplayError(
                 f"global authority already consumed: {authority_key}"
@@ -35,6 +35,8 @@ class FakeGlobalAuthority:
             run_id=run_id,
             ref=ref,
             reservation_sha=reservation_sha,
+            not_after=not_after,
+            provider_created_at="2026-08-16T00:01:00Z" if not_after else None,
         )
         self.shared[authority_key] = {
             "reservation": reservation,

@@ -80,6 +80,7 @@ def apply_github_decision(
         payload_sha256=decision.body_sha256,
         action_kind=f"CONTRACT_{decision.decision}",
         run_id=str(draft.get("request_id", "")),
+        not_after=decision.expires_at,
     )
     if decision.decision == "MODIFY":
         result = {
