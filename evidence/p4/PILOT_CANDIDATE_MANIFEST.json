@@ -1,6 +1,6 @@
 {
-  "schema_version": "executor-p4-pilot-candidate-evidence/1.3",
-  "status": "EVIDENCE_GATED_EXACT_CANDIDATE",
+  "schema_version": "executor-p4-pilot-candidate-evidence/1.4",
+  "status": "CORRECTIVE_REWORK_FRESH_HUMAN_AUTHORITY_REQUIRED",
   "updated_at": "2026-08-16",
   "state_model": {
     "rule": "Committed state defines the evidence contract; immutable GitHub runs/artifacts/receipts establish post-commit facts for the exact PR head; PR body may provide locators but cannot override committed policy.",
@@ -8,11 +8,29 @@
     "p4_claimed": false,
     "final_human_acceptance_recorded": false
   },
-  "historical_rejected_candidate": {
-    "executor_sha": "24107bc8a8186ed1928e098118982efb9d62ffaa",
-    "verdict": "FALSE-COMPLETION",
-    "meaning": "Historical runs and artifacts are retained as provenance only and never satisfy a later exact-candidate gate."
-  },
+  "historical_rejected_candidates": [
+    {
+      "executor_sha": "24107bc8a8186ed1928e098118982efb9d62ffaa",
+      "verdict": "FALSE-COMPLETION",
+      "cause": "effect authority replay/global uniqueness gap"
+    },
+    {
+      "executor_sha": "7f662cd487c14d62a4838be8c43cef1358869d50",
+      "verdict": "BLOCKED",
+      "cause": "G-02 canonical truth and G-14 exact-head CI binding"
+    },
+    {
+      "executor_sha": "fdf876e0e2af6d9e4ecea2301ecb686a471037bd",
+      "verdict": "FALSE-COMPLETION",
+      "cause": "G-04 direct-human origin did not fail closed against app-mediated GitHub events"
+    },
+    {
+      "executor_sha": "d11f3dd9d6c484a9c554cd562db46c30e0a333fe",
+      "verdict": "FALSE-COMPLETION",
+      "cause": "decision freshness TOCTOU: precondition-start time could be reused at later effect authorization after real expiry"
+    }
+  ],
+  "historical_rule": "All runs, artifacts, SQLite rows, provider receipts and human ACCEPT events consumed by a rejected candidate are provenance only and cannot satisfy a later exact-candidate gate.",
   "corrected_requests": [
     {
       "repository": "JTJ07/scriptops",
@@ -28,18 +46,17 @@
       "external_intelligence_provenance": "evidence/p4/intelligence/scriptops-provenance.json",
       "external_intelligence_prompt": "evidence/p4/intelligence/scriptops-prompt.txt",
       "required_executions_per_exact_candidate": 3,
-      "active_fresh_human_accept_comments": [
-        5309431944,
-        5309432744,
-        5309433932
-      ],
+      "active_fresh_human_accept_comments": [],
       "historical_consumed_human_accept_comments": [
         5309032642,
         5309033360,
         5309034120,
         5309233904,
         5309234306,
-        5309234972
+        5309234972,
+        5309431944,
+        5309432744,
+        5309433932
       ]
     },
     {
@@ -56,18 +73,17 @@
       "external_intelligence_provenance": "evidence/p4/intelligence/reconstructor-provenance.json",
       "external_intelligence_prompt": "evidence/p4/intelligence/reconstructor-prompt.txt",
       "required_executions_per_exact_candidate": 3,
-      "active_fresh_human_accept_comments": [
-        5309439844,
-        5309440490,
-        5309441091
-      ],
+      "active_fresh_human_accept_comments": [],
       "historical_consumed_human_accept_comments": [
         5309040666,
         5309041408,
         5309042154,
         5309241731,
         5309242858,
-        5309243169
+        5309243169,
+        5309439844,
+        5309440490,
+        5309441091
       ]
     }
   ],
@@ -88,22 +104,24 @@
     "post-request external-intelligence provenance with prompt hash and zero human solution edits",
     "zero-test unittest discovery fails closed",
     "three independently authorized executions required per real objective",
-    "provider-verifiable direct-human origin requires performed_via_github_app to be present and null; app-mediated or missing signals fail closed"
+    "provider-verifiable direct-human origin requires performed_via_github_app to be present and null; app-mediated or missing signals fail closed",
+    "decision freshness is re-sampled at the effect-authorization boundary after preconditions; caller-supplied or precondition-start clocks cannot authorize an effect"
   ],
   "post_commit_evidence_requirements": [
     "Foundation CI must assert exact PR head SHA.",
     "GP001 replay must pass on the same exact PR head.",
-    "Corrected six-execution pilot series must pass on the same exact PR head.",
+    "Corrected six-execution pilot series must pass on the same exact PR head using six new fresh direct-human ACCEPT events.",
     "Artifacts must include raw evidence and SQLite ledgers.",
     "Provider decision/effect receipt refs must exist live and match FINAL bindings.",
     "Target PRs must remain OPEN, DRAFT, UNMERGED with reviewed unchanged heads.",
     "PR #61 body may list immutable run/artifact locators only after the runs exist; the verifier must resolve them independently.",
-    "Direct-human request and decision verification must reject non-null or missing performed_via_github_app before any freeze or consequential effect."
+    "Direct-human request and decision verification must reject non-null or missing performed_via_github_app before any freeze or consequential effect.",
+    "A decision that expires during any precondition must block before AAP/effect authority reservation, mutation and review-required success reporting."
   ],
   "completion_boundary": {
     "p4": "NOT_CLAIMED",
     "executor_1_0_human_acceptance": "NOT_RECORDED",
     "merge_release_deploy_tag": "NOT_AUTHORIZED"
   },
-  "current_rule": "Resolve the exact current PR #61 head/tree and exact-head immutable evidence. Direct-human request/decision origin is provider-verifiable only when performed_via_github_app is present and null. Never infer current PASS from historical runs, consumed decisions, mutable prose, or a different SHA."
+  "current_rule": "Resolve the exact current PR #61 head/tree and exact-head immutable evidence. Never reuse human ACCEPT events consumed by a rejected candidate. Freshness must hold at effect authorization after preconditions. Never infer current PASS from historical runs, consumed decisions, mutable prose, or a different SHA."
 }
