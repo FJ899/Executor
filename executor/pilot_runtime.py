@@ -18,18 +18,22 @@ from executor.action_authorization import (
     packet_payload_sha256,
     validate_action_authorization_packet,
 )
-from executor.authority_ledger import (
-    AtomicAuthorityLedger,
-    AuthorityConsumption,
-    AuthorityLedgerError,
-)
+from executor.authority_ledger import AuthorityLedgerError
 from executor.contracts import ValidationStatus
+from executor.execution_environment import (
+    ExecutionEnvironmentError,
+    validate_execution_environment,
+)
+from executor.github_authority import (
+    GlobalAuthorityError,
+    GovernedAuthorityConsumption,
+    GovernedAuthorityLedger,
+)
 from executor.github_trust import VerifiedGitHubDecision, VerifiedGitHubRequest, canonical_json
 from executor.repository_access import canonical_repository_path, validate_scope_pattern
 from executor.repository_identity import (
     RepositoryIdentityError,
     repository_identity_from_remote,
-    verify_repository_checkout,
 )
 from executor.repository_snapshot import RepositorySnapshotError, verify_source_tree
 from executor.sandbox.docker import (
@@ -64,6 +68,7 @@ class PilotBlocked(PilotRuntimeError):
 
 
 _RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+_UNITTEST_COUNT = re.compile(r"\bRan\s+(\d+)\s+tests?\b")
 
 
 def _git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -144,9 +149,7 @@ def _verify_pilot_checkout(
     if identity is None or identity[0] != "github.com" or (
         identity[1].lower() != repository.lower()
     ):
-        raise RepositoryIdentityError(
-            f"pilot repository origin mismatch: {identity!r}"
-        )
+        raise RepositoryIdentityError(f"pilot repository origin mismatch: {identity!r}")
     actual_tree = _git(root, "rev-parse", "HEAD^{tree}").stdout.strip()
     if actual_tree != source_tree:
         raise RepositoryIdentityError(
@@ -166,6 +169,17 @@ def _result_payload(result: SandboxResult) -> dict[str, Any]:
         "execution_id": result.execution_id,
         "policy_sha256": result.policy_sha256,
     }
+
+
+def _assert_nonempty_regression(argv: list[str], result: SandboxResult) -> None:
+    if "unittest" not in argv or "discover" not in argv:
+        return
+    text = f"{result.stdout}\n{result.stderr}"
+    match = _UNITTEST_COUNT.search(text)
+    if match is None:
+        raise PilotBlocked("unittest discovery produced no countable test evidence")
+    if int(match.group(1)) == 0:
+        raise PilotBlocked("unittest discovery ran zero tests")
 
 
 def _write_json(path: Path, value: dict[str, Any]) -> None:
@@ -296,7 +310,7 @@ class PilotDockerSandboxBackend(DockerSandboxBackend):
 
 
 class PilotRuntime:
-    """Execute one exact externally proposed fix under GitHub-bound authority."""
+    """Execute one exact externally proposed fix under globally one-shot GitHub authority."""
 
     def __init__(
         self,
@@ -307,9 +321,10 @@ class PilotRuntime:
         proposal: dict[str, Any],
         verified_request: VerifiedGitHubRequest,
         verified_decision: VerifiedGitHubDecision,
-        ledger_path: str | Path,
+        ledger: GovernedAuthorityLedger,
         runs_root: str | Path,
         image: str,
+        execution_environment: dict[str, Any],
         docker_binary: str = "docker",
     ) -> None:
         if frozen_result.get("status") != "AUTHORIZED_AND_FROZEN":
@@ -325,15 +340,9 @@ class PilotRuntime:
             raise PilotBlocked("current GitHub decision evidence differs from frozen evidence")
         if verified_decision.decision != "ACCEPT":
             raise PilotBlocked("only an exact current GitHub ACCEPT can execute")
-        validated = validate_solution_proposal(
-            proposal,
-            frozen_result=frozen_result,
-        )
+        validated = validate_solution_proposal(proposal, frozen_result=frozen_result)
         try:
-            policy = load_execution_policy_snapshot(
-                executor_root,
-                commit=executor_commit,
-            )
+            policy = load_execution_policy_snapshot(executor_root, commit=executor_commit)
         except ExecutionPolicyError as exc:
             raise PilotBlocked(f"cannot load authoritative pilot policy: {exc}") from exc
         profile = policy.bounded_pilot_profile(
@@ -349,6 +358,14 @@ class PilotRuntime:
             raise PilotBlocked("Executor policy does not authorize this bounded pilot")
         if len(validated.mutations) > profile.max_production_files:
             raise PilotBlocked("proposal exceeds the policy production-file limit")
+        try:
+            environment = validate_execution_environment(
+                execution_environment,
+                executor_commit=executor_commit,
+                image_id=image,
+            )
+        except ExecutionEnvironmentError as exc:
+            raise PilotBlocked(f"execution environment is not authoritative: {exc}") from exc
         backend = PilotDockerSandboxBackend(
             policy_snapshot=policy,
             contract=contract,
@@ -362,10 +379,11 @@ class PilotRuntime:
         self.proposal = validated
         self.verified_request = verified_request
         self.verified_decision = verified_decision
-        self.ledger = AtomicAuthorityLedger(ledger_path)
+        self.ledger = ledger
         self.runs_root = Path(runs_root)
         self.backend = backend
         self.spec = build_pilot_sandbox_spec(contract, image)
+        self.execution_environment = environment
 
     def _run(
         self,
@@ -394,7 +412,7 @@ class PilotRuntime:
         *,
         run_id: str,
         now: datetime,
-    ) -> tuple[dict[str, Any], AuthorityConsumption]:
+    ) -> tuple[dict[str, Any], GovernedAuthorityConsumption]:
         task = self.contract["task"]
         target = self.contract["target"]
         test_contract_sha = hashlib.sha256(
@@ -439,11 +457,17 @@ class PilotRuntime:
         expires = min(now + timedelta(minutes=10), decision_expiry)
         if expires <= now:
             raise PilotBlocked("GitHub ACCEPT expired before effect authorization")
+        effect_identity = canonical_json(
+            {
+                "decision_evidence_ref": self.verified_decision.evidence_ref,
+                "contract_sha256": self.contract_sha256,
+                "proposal_sha256": self.proposal.payload_sha256,
+            }
+        )
+        packet_id = "pilot-" + hashlib.sha256(effect_identity.encode("utf-8")).hexdigest()[:48]
         packet = {
             "schema_version": "executor-action-authorization/1.0",
-            "packet_id": "pilot-" + hashlib.sha256(
-                f"{run_id}:{self.proposal.proposal_id}".encode("utf-8")
-            ).hexdigest()[:48],
+            "packet_id": packet_id,
             "run_id": run_id,
             "issued_at": now.isoformat().replace("+00:00", "Z"),
             "expires_at": expires.isoformat().replace("+00:00", "Z"),
@@ -462,6 +486,7 @@ class PilotRuntime:
                 "task_contract_sha256": context.task_contract_sha256,
                 "test_contract_sha256": context.test_contract_sha256,
                 "repository_commits": context.repository_commits,
+                "execution_environment": self.execution_environment,
             },
             "action": {
                 "kind": "EXTERNAL_PROJECT_EXECUTION",
@@ -480,6 +505,7 @@ class PilotRuntime:
                 "reasons": [
                     "exact fresh GitHub ACCEPT binds the current frozen contract",
                     "repository and write scope match the bounded P4 pilot policy",
+                    "global GitHub authority receipt enforces one effect per human decision",
                     "merge, deploy and release remain forbidden",
                 ],
             },
@@ -512,11 +538,7 @@ class PilotRuntime:
         for mutation in self.proposal.mutations:
             path = root / mutation.path
             meta = path.lstat()
-            if (
-                path.is_symlink()
-                or not stat.S_ISREG(meta.st_mode)
-                or meta.st_nlink != 1
-            ):
+            if path.is_symlink() or not stat.S_ISREG(meta.st_mode) or meta.st_nlink != 1:
                 raise PilotBlocked("pilot mutation target must be a regular non-linked file")
             if _file_sha256(path) != mutation.expected_before_sha256:
                 raise PilotBlocked(f"pilot before hash mismatch: {mutation.path}")
@@ -545,7 +567,7 @@ class PilotRuntime:
             raise PilotBlocked("run_id is invalid")
         current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
         run_dir = self.runs_root / run_id
-        consumption: AuthorityConsumption | None = None
+        consumption: GovernedAuthorityConsumption | None = None
         report: dict[str, Any] = {
             "schema_version": "executor-p4-pilot-result/1.0",
             "run_id": run_id,
@@ -554,6 +576,7 @@ class PilotRuntime:
             "source_tree": self.proposal.source_tree,
             "contract_sha256": self.contract_sha256,
             "proposal_sha256": self.proposal.payload_sha256,
+            "execution_environment": self.execution_environment,
             "status": "FAILED",
             "error": None,
             "changed_paths": [],
@@ -568,6 +591,7 @@ class PilotRuntime:
                 "scope": "UNKNOWN",
                 "isolation": "UNKNOWN",
                 "authority": "UNKNOWN",
+                "execution_environment": "BOUND",
             },
             "human_review_required": True,
             "merge_allowed": False,
@@ -602,7 +626,7 @@ class PilotRuntime:
 
             packet, consumption = self._authorize_action(run_id=run_id, now=current)
             report["authorization_packet"] = packet
-            report["evidence"]["authority"] = "ATOMICALLY_CONSUMED"
+            report["evidence"]["authority"] = "GLOBAL_GITHUB_RESERVED_AND_LOCAL_ATOMIC_CONSUMED"
             self._apply_mutations(root)
 
             for index, command in enumerate(self.contract["task"]["postcondition_argv"], 1):
@@ -617,6 +641,7 @@ class PilotRuntime:
                 if not result.ok:
                     raise PilotRuntimeError("pilot postcondition failed")
             report["evidence"]["postcondition"] = "PASS"
+
             for index, command in enumerate(self.contract["task"]["regression_argv"], 1):
                 result = self._run(
                     root,
@@ -628,6 +653,7 @@ class PilotRuntime:
                 report["commands"].append(_result_payload(result))
                 if not result.ok:
                     raise PilotRuntimeError(f"pilot regression {index} failed")
+                _assert_nonempty_regression(command, result)
             report["evidence"]["regressions"] = "PASS"
 
             changed = _changed_paths(root)
@@ -664,6 +690,8 @@ class PilotRuntime:
             SandboxUnavailable,
             RepositoryIdentityError,
             AuthorityLedgerError,
+            GlobalAuthorityError,
+            ExecutionEnvironmentError,
             OSError,
             ValueError,
         ) as exc:
@@ -680,6 +708,7 @@ class PilotRuntime:
                 "source_tree",
                 "contract_sha256",
                 "proposal_sha256",
+                "execution_environment",
                 "status",
                 "error",
                 "changed_paths",
@@ -691,13 +720,21 @@ class PilotRuntime:
         if "patch" in report:
             terminal["patch_sha256"] = report["patch"]["sha256"]
         if consumption is not None:
-            bound = self.ledger.bind_result(
-                execution_token=consumption.execution_token,
-                result=terminal,
-            )
-            report["authority_consumption"] = bound.to_dict()
+            try:
+                report["authority_consumption"] = self.ledger.bind_result(
+                    consumption=consumption,
+                    result=terminal,
+                )
+            except (AuthorityLedgerError, GlobalAuthorityError) as exc:
+                report["status"] = "FAILED"
+                report["error"] = f"authority result binding failed: {exc}"
+                report["evidence"]["authority"] = "RESULT_BINDING_FAILED"
+                terminal["status"] = "FAILED"
+                terminal["error"] = report["error"]
+                terminal["evidence"] = report["evidence"]
         report["terminal_result"] = terminal
         if report["status"] == "ACTION_COMPLETED_REVIEW_REQUIRED":
+            global_receipt = report["authority_consumption"]["global"]
             report["draft_pr_request"] = {
                 "schema_version": "executor-draft-pr-request/1.0",
                 "repository": self.proposal.repository,
@@ -709,9 +746,11 @@ class PilotRuntime:
                     "contract_sha256": self.contract_sha256,
                     "proposal_sha256": self.proposal.payload_sha256,
                     "patch_sha256": report["patch"]["sha256"],
-                    "authority_result_sha256": report["authority_consumption"][
-                        "result_sha256"
-                    ],
+                    "authority_result_sha256": report["authority_consumption"]["result_sha256"],
+                    "global_authority_ref": global_receipt["ref"],
+                    "global_authority_final_sha": global_receipt["final_sha"],
+                    "workflow_sha256": self.execution_environment["workflow_sha256"],
+                    "sandbox_image_id": self.execution_environment["sandbox_image_id"],
                 },
                 "draft": True,
                 "merge_allowed": False,
