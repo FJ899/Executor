@@ -74,6 +74,21 @@ class FakeGitHubTransport:
         raise AssertionError((method, url, payload))
 
 
+class LoseCreateRefRaceTransport(FakeGitHubTransport):
+    """Simulate another runner atomically creating the authority ref first."""
+
+    def __init__(self):
+        super().__init__()
+        self.inject_race = True
+
+    def request_json(self, method, url, payload=None):
+        if method == "POST" and url.endswith("/git/refs") and self.inject_race:
+            self.inject_race = False
+            self.refs[payload["ref"]] = payload["sha"]
+            raise GlobalAuthorityHttpError(422, "reference already exists")
+        return super().request_json(method, url, payload)
+
+
 class GitHubGlobalAuthorityTests(unittest.TestCase):
     def test_same_key_is_global_across_instances_and_local_database_files(self):
         transport = FakeGitHubTransport()
@@ -114,12 +129,29 @@ class GitHubGlobalAuthorityTests(unittest.TestCase):
             self.assertEqual(final["state"], "FINAL")
             self.assertEqual(final["global"]["state"], "FINAL")
 
-    def test_global_ref_name_depends_only_on_authority_key(self):
+    def test_atomic_provider_ref_creation_loses_race_fail_closed(self):
+        authority = GitHubGlobalAuthority(
+            repository="JTJ07/Executor",
+            transport=LoseCreateRefRaceTransport(),
+        )
+        with self.assertRaises(GlobalAuthorityReplayError):
+            authority.reserve(
+                authority_key="aap:race-effect",
+                payload_sha256="c" * 64,
+                action_kind="EXTERNAL_PROJECT_EXECUTION",
+                run_id="race-run-a",
+            )
+
+    def test_global_ref_name_depends_only_on_authority_key_not_run_id(self):
         key = "github-decision:IC_example"
         expected = "refs/heads/executor-authority/" + hashlib.sha256(
             key.encode("utf-8")
         ).hexdigest()
         self.assertEqual(GitHubGlobalAuthority._ref_for(key), expected)
+        self.assertEqual(
+            GitHubGlobalAuthority._ref_for(key),
+            GitHubGlobalAuthority._ref_for(key),
+        )
 
 
 if __name__ == "__main__":
