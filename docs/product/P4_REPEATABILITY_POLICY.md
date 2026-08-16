@@ -108,7 +108,7 @@ The completion series records at minimum:
 - incremental new paid-service authorization and whether actual shared platform/provider billing was independently measurable;
 - exact model/provenance and exact workflow/image/source identities.
 
-Two pilots are treated as preliminary evidence, not automatically as the required P4 series. The completion candidate must contain at least three distinct real bounded task objectives across the authorized repositories/modules before a repeatability claim is presented to Phase C.
+The approved completion map requires multiple real runs across more than one repository or independent module set; it does not prescribe a third task objective. For this bounded completion candidate, the repeatability series is two distinct real objectives across the two authorized repositories, each executed three times under three separate fresh direct-human ACCEPT events (six independently authorized real executions total). Each repetition must start from the same exact pinned source, produce the same bounded patch for its objective, pass the frozen postconditions/regressions, and preserve independent one-shot authority evidence. This is the series presented to Phase C; it does not generalize beyond the supported class or repositories.
 
 ## Completion boundary
 
