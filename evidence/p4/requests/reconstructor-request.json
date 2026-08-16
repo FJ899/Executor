@@ -1,6 +1,6 @@
 {
   "schema_version": "executor-github-request/1.0",
-  "request_id": "p4-reconstructor-symlink-boundary-001",
+  "request_id": "p4-reconstructor-symlink-boundary-002",
   "target": {
     "repository": "JTJ07/creative-os-project-reconstructor",
     "commit": "defc7b029097284f94136fec54b75c313ac12f68",
@@ -8,7 +8,7 @@
   },
   "task": {
     "class": "BOUNDED_CORRECTNESS_OR_QUALITY_FIX",
-    "problem_statement": "Reject required-file symlinks that make the deterministic Project Reconstructor validator read outside the repository root.",
+    "problem_statement": "Reject required-file symlinks that make the deterministic Project Reconstructor validator read outside the repository root, with a meaningful non-empty regression set.",
     "allowed_paths": [
       "scripts/verify_reconstructor.py"
     ],
@@ -41,18 +41,14 @@
       [
         "python",
         "-m",
-        "unittest",
-        "discover",
-        "-s",
-        "tests",
-        "-p",
-        "test_*.py",
-        "-v"
+        "compileall",
+        "-q",
+        "scripts/verify_reconstructor.py"
       ]
     ],
     "max_production_files": 1,
     "max_patch_lines": 180
   },
   "expires_at": "2026-08-23T00:00:00Z",
-  "nonce": "p4-reconstructor-request-001"
+  "nonce": "p4-reconstructor-request-002"
 }
