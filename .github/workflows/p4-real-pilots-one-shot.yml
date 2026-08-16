@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   scriptops-pilot-series:
-    if: false
+    if: ${{ github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
     runs-on: ubuntu-latest
     env:
       EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: JTJ07/Executor
@@ -68,7 +68,7 @@ jobs:
       - name: Execute three independently authorized ScriptOps pilots
         run: |
           set -euo pipefail
-          SCRIPTOPS_COMMENTS=(5309431944 5309432744 5309433932)
+          SCRIPTOPS_COMMENTS=(5309764334 5309764985 5309765548)
           for idx in 1 2 3; do
             comment="${SCRIPTOPS_COMMENTS[$((idx-1))]}"
             git -C target reset --hard daa6e5dc210e09171a530eeffe5601e0e74ae041
@@ -159,7 +159,7 @@ jobs:
             pilot-evidence/scriptops/runs/**
 
   reconstructor-pilot-series:
-    if: false
+    if: ${{ github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
     runs-on: ubuntu-latest
     env:
       EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: JTJ07/Executor
@@ -204,7 +204,7 @@ jobs:
       - name: Execute three independently authorized Reconstructor pilots
         run: |
           set -euo pipefail
-          RECONSTRUCTOR_COMMENTS=(5309439844 5309440490 5309441091)
+          RECONSTRUCTOR_COMMENTS=(5309777153 5309777822 5309778702)
           for idx in 1 2 3; do
             comment="${RECONSTRUCTOR_COMMENTS[$((idx-1))]}"
             git -C target reset --hard defc7b029097284f94136fec54b75c313ac12f68
