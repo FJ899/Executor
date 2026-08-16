@@ -1,0 +1,4 @@
+Act as External Intelligence with no effect authority.
+Using human request JTJ07/Executor#65 and exact target source JTJ07/scriptops@daa6e5dc210e09171a530eeffe5601e0e74ae041 (tree ba0b99bd99682dcc7a942537b502a7a72151fa09), independently derive the smallest correction for the numeric candidate-ordering bug.
+Preserve the frozen scope. Do not authorize, merge, deploy, release, request secrets, or widen network access.
+Return only a bounded mutation proposal and the evidence plan needed to prove the requested behavior.
