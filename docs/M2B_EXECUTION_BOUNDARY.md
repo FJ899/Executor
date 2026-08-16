@@ -10,7 +10,7 @@ Each execution therefore requires a `SandboxExecutionContext` containing:
 - source directory contained in that root;
 - an explicit purpose: `EXECUTOR_FIXTURE` or `PROJECT`.
 
-With `EXECUTOR_POLICY.yaml execution.external_projects=false`, only `EXECUTOR_FIXTURE` executions from `litrgratis-pixel/Executor` are allowed. The gate runs before Docker preflight or container creation. Enabling external projects later requires an explicit policy change and still requires a verified GitHub checkout and exact `HEAD`.
+With `EXECUTOR_POLICY.yaml execution.external_projects=false`, generic external execution remains forbidden. The Phase B policy additionally permits only the two named `bounded_pilot_repositories`, with exact GitHub request/commit/tree authority and draft-PR-only output. The gate runs before Docker preflight or container creation.
 
 The source directory is checked lexically before symlink resolution and physically afterwards. This prevents a symlink in any parent component from disappearing during `resolve()`.
 

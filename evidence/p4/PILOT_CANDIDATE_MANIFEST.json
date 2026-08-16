@@ -1,0 +1,57 @@
+{
+  "schema_version": "executor-p4-pilot-candidate-evidence/1.0",
+  "status": "PREPARED_AWAITING_GITHUB_REQUEST_AND_DECISION_EVENTS",
+  "created_at": "2026-08-16",
+  "pilots": [
+    {
+      "repository": "JTJ07/scriptops",
+      "base_commit": "daa6e5dc210e09171a530eeffe5601e0e74ae041",
+      "base_tree": "ba0b99bd99682dcc7a942537b502a7a72151fa09",
+      "problem": "Lexicographic candidate selection chose v9 over v10.",
+      "before": {
+        "command_exit": 1,
+        "observation": "SCN-001-v9-candidate.fountain"
+      },
+      "after": {
+        "command_exit": 0,
+        "observation": "SCN-001-v10-candidate.fountain",
+        "tests": "4/4 PASS",
+        "repository_verifier": "PASS"
+      },
+      "production_files": [
+        "phase6/scriptops-v2-hardening.py"
+      ],
+      "test_evidence_files": [
+        "tests/test_phase6_scriptops_smoke.py"
+      ]
+    },
+    {
+      "repository": "JTJ07/creative-os-project-reconstructor",
+      "base_commit": "defc7b029097284f94136fec54b75c313ac12f68",
+      "base_tree": "5960d74773b19456863ac66084385b7619aa4285",
+      "problem": "The deterministic validator followed a required-file symlink outside the repository.",
+      "before": {
+        "command_exit": 1,
+        "observation": "FOLLOWED_SYMLINK"
+      },
+      "after": {
+        "command_exit": 0,
+        "observation": "BLOCKED",
+        "repository_verifier": "PASS",
+        "tests": "2/2 PASS"
+      },
+      "production_files": [
+        "scripts/verify_reconstructor.py"
+      ],
+      "test_evidence_files": [
+        "tests/test_verify_reconstructor.py",
+        ".github/workflows/verify-reconstructor.yml"
+      ]
+    }
+  ],
+  "blockers": [
+    "No direct-human GitHub request issues exist yet.",
+    "No exact direct-human GitHub ACCEPT comments exist yet.",
+    "GitHub write approval for branch/PR publication timed out in the current environment."
+  ]
+}

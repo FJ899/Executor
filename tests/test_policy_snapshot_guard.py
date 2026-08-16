@@ -191,6 +191,54 @@ class PolicySnapshotGuardTest(unittest.TestCase):
         with self.assertRaisesRegex(ExecutionPolicyError, "owner/name"):
             load_execution_policy_snapshot(root, commit=commit)
 
+    def test_bounded_pilot_profile_is_exact_and_draft_only(self):
+        execution = {
+            "external_projects": False,
+            "controlled_external_fixtures": [],
+            "bounded_pilot_repositories": [
+                {
+                    "repository": "JTJ07/scriptops",
+                    "max_production_files": 3,
+                    "draft_pr_only": True,
+                }
+            ],
+            "auto_merge": False,
+            "default_network": False,
+            "default_secrets": [],
+        }
+        temp, root, commit = self.make_policy_repo(execution)
+        self.addCleanup(temp.cleanup)
+        snapshot = load_execution_policy_snapshot(root, commit=commit)
+        profile = snapshot.bounded_pilot_profile(repository="JTJ07/scriptops")
+        self.assertIsNotNone(profile)
+        self.assertEqual(profile.max_production_files, 3)
+        self.assertTrue(profile.draft_pr_only)
+        self.assertIsNone(
+            snapshot.bounded_pilot_profile(repository="JTJ07/not-authorized")
+        )
+
+    def test_bounded_pilot_cannot_enable_more_than_three_files_or_merge(self):
+        for maximum, draft_only in ((4, True), (3, False)):
+            with self.subTest(maximum=maximum, draft_only=draft_only):
+                execution = {
+                    "external_projects": False,
+                    "controlled_external_fixtures": [],
+                    "bounded_pilot_repositories": [
+                        {
+                            "repository": "JTJ07/scriptops",
+                            "max_production_files": maximum,
+                            "draft_pr_only": draft_only,
+                        }
+                    ],
+                    "auto_merge": False,
+                    "default_network": False,
+                    "default_secrets": [],
+                }
+                temp, root, commit = self.make_policy_repo(execution)
+                self.addCleanup(temp.cleanup)
+                with self.assertRaises(ExecutionPolicyError):
+                    load_execution_policy_snapshot(root, commit=commit)
+
 
 if __name__ == "__main__":
     unittest.main()

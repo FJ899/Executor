@@ -1,21 +1,21 @@
 ---
 document: "Executor Project Completion Map"
 version: "1.0"
-status: "PHASE A CANDIDATE / HUMAN SEMANTIC APPROVAL REQUIRED"
-date: "2026-08-15"
+status: "HUMAN SEMANTICALLY APPROVED / PHASE B ACTIVE"
+date: "2026-08-16"
 target_repository: "JTJ07/Executor"
 baseline_branch: "main"
-baseline_sha: "728d23e56ec9f76fb7a37673ceb20efccf91e03d"
+baseline_sha: "5e254811023553d1abe8bdbb3535b8150aaf19ad"
 protocol: "JTJ07/Saddle/evidence/PROJECT_COMPLETION_AUTONOMY_TEST_PROTOCOL_2026-08-15.md"
-phase: "A / COMPLETION MAP ONLY"
-implementation_changes: "NONE"
+phase: "B / IMPLEMENTATION AND EVIDENCE"
+implementation_changes: "AUTHORIZED ON A WORK BRANCH / REVIEW REQUIRED"
 ---
 
 # PROJECT COMPLETION MAP — Executor
 
 ## 0. Status and reading rules
 
-This document is the Phase-A completion map. It is a proposal for one human semantic review, not an implementation authorization, product acceptance, maturity claim, provider selection, merge decision, or release decision.
+This document is the human-approved completion map. `PHASE_B_AUTHORIZATION.md` freezes the selected semantic forks and activates work on a review branch. It is not product acceptance, a maturity claim, an implementation merge decision or a release decision.
 
 Semantic labels used below:
 
@@ -35,7 +35,7 @@ EXECUTION != PROOF
 AI RECOMMENDATION != HUMAN DECISION
 ```
 
-No `HUMAN_REQUIRED` option is selected by this map. `DONE` is deliberately conditional on the human choosing the completion endpoint and the semantic forks in section 7.
+The human selected HR-1 C, HR-2 A, HR-3 GitHub, HR-4 A and HR-5 C on 2026-08-16. The exact authority limits are recorded in `PHASE_B_AUTHORIZATION.md`. Final acceptance and release remain human-owned.
 
 ### 0.1 Adaptive completion control
 

@@ -1,11 +1,11 @@
 ---
 document: "Executor Implementation Inventory"
 version: "0.2"
-status: "OBSERVATIONAL BASELINE / CURRENT THROUGH GP001 REPLAY"
+status: "PHASE B CANDIDATE / GITHUB TRUST AND BOUNDED PILOT RUNTIME"
 date: "2026-08-09"
 scope: "current implementation mapped to Executor Build Map and next product slice"
-repository: "litrgratis-pixel/Executor"
-baseline: "main after accepted GP001 real E2E and replay repeatability work"
+repository: "JTJ07/Executor"
+baseline: "Phase B work branch from main@5e254811; no P4 or merge claim"
 ---
 
 # Executor Implementation Inventory v0.2
@@ -31,12 +31,12 @@ It is not a maturity claim and does not promote any P-level.
 
 | Build Map element | Status | Current evidence | Product implication |
 |---|---|---|---|
-| F0 Request-to-Contract Boundary | MISSING | no accepted runtime yet converts a user request into a governed draft contract and human-authorized frozen contract | **Primary next product gap** |
+| F0 Request-to-Contract Boundary | IMPLEMENTED CANDIDATE | phase-1 formation plus GitHub issue/comment verification, exact draft binding and freeze exist with adversarial tests | Real direct-human events remain required |
 | F1 Contract Interpretation Boundary | EXISTS (bounded) | GP001 machine-readable contract, contract validation and action-boundary revalidation are accepted on `main` | Kernel can execute a frozen bounded contract; it does not yet form one from user language |
 | F2 Source & Workspace Access | EXISTS (bounded) | Controlled External Fixture authority pins exact repository + commit; real GP001 E2E acquired and checked exact source identity | Proven for one controlled fixture, not arbitrary repositories |
-| F3 Execution State Model | PARTIAL | explicit execution lifecycle, action-boundary state revalidation and replay evidence exist; contract-formation lifecycle is not implemented | Formation states must be added without collapsing them into execution state |
+| F3 Execution State Model | IMPLEMENTED CANDIDATE | formation, GitHub decision, frozen contract, atomic authority and bound terminal pilot result remain distinct | Real pilot evidence pending |
 | F4 Evidence Boundary | EXISTS (bounded) | GP001 real E2E records input identity, authority binding, pre/post test state, regression state, scope and review-required status | Evidence is usable for the bounded vertical slice; still not a general product/maturity claim |
-| S0 Contract Formation Flow | MISSING | no accepted `INTERPRET -> PROPOSE -> CRITIQUE -> HUMAN AUTHORIZATION -> FREEZE` implementation | `REQUEST_TO_CONTRACT_001` owns this gap |
+| S0 Contract Formation Flow | IMPLEMENTED CANDIDATE | bounded formation and exact GitHub decision-to-freeze path exist | Direct-human GitHub events pending |
 | S1 Runtime Engine | EXISTS (GP001 bounded) | accepted GP001 runtime performs pinned failure reproduction, authorized mutation, verification and report | First execution vertical slice exists |
 | S2 Planning Layer | PARTIAL | GP001 E2E produces a deterministic bounded plan, but no general AI planning layer is claimed | Enough for GP001 execution; formation/planning must stay separate |
 | S3 Action Execution Layer | EXISTS (GP001 bounded) | one exact `WRITE_REPOSITORY` mutation is policy/AAP bound and executed in sandbox | Proven only for the accepted fixture/action class |
@@ -49,8 +49,8 @@ It is not a maturity claim and does not promote any P-level.
 | C2 Analysis Capability | LOCKED / LATER | not required for current slice | Do not build now |
 | C3 Research Capability | LOCKED / LATER | not required for `REQUEST_TO_CONTRACT_001` | Do not build unless a measured formation blocker requires it |
 | C4 Operational Capability | LOCKED / LATER | not required for current slice | Defer |
-| UX1 Request Surface | MISSING | accepted product path still begins from a prepared contract/harness rather than a normal user request | **Primary user-facing gap** |
-| UX2 Contract Decision Surface | MISSING | no accepted draft-contract review surface with accept/modify/reject | Build in `REQUEST_TO_CONTRACT_001` |
+| UX1 Request Surface | IMPLEMENTED CANDIDATE | CLI verifies a governed GitHub issue and emits an exact non-executable draft | Publish and observe real requests |
+| UX2 Contract Decision Surface | IMPLEMENTED CANDIDATE | CLI consumes exact fresh GitHub `ACCEPT/MODIFY/REJECT`; only ACCEPT freezes | Publish and observe real decisions |
 | UX3 Execution Interaction Model | PARTIAL | GP001 report is concise and review-oriented, but user does not yet enter through request formation | Reuse after contract authorization |
 | UX4 Result Report | EXISTS (GP001 bounded) | real GP001 ends in `ACTION_COMPLETED_REVIEW_REQUIRED` with evidence and human decision required | Preserve terminal semantics |
 | LEVEL 6 Extensions | LOCKED / LATER | multi-agent, marketplace, broad integrations not required | Explicitly defer |
@@ -108,18 +108,17 @@ Formation work must preserve the same discipline:
 
 ## 6. Current primary product gap
 
-The largest gap is no longer the execution vertical slice.
-
-It is the missing front door:
+The largest remaining gap is external proof:
 
 ```text
-USER REQUEST
-  -> INTERPRETATION
-  -> DRAFT TASK CONTRACT
-  -> CONTRACT CRITIQUE
-  -> HUMAN AUTHORIZATION
-  -> FROZEN TASK CONTRACT
-  -> EXISTING GP001 RUNTIME
+DIRECT-HUMAN GITHUB REQUEST
+  -> EXACT DRAFT
+  -> DIRECT-HUMAN GITHUB ACCEPT
+  -> FROZEN PILOT CONTRACT
+  -> EXTERNAL SOLUTION PROPOSAL
+  -> ATOMIC AAP + BOUNDED PILOT RUNTIME
+  -> TWO REAL DRAFT PRS
+  -> INDEPENDENT PHASE C
 ```
 
 This is the boundary between ordinary AI assistance and governed execution.

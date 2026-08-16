@@ -10,7 +10,7 @@ Executor nie jest właścicielem celu. Aktualny pierwszy produktowy pion to wyko
 
 Zabezpieczenia, sandbox i dowód są fundamentami uczciwego wykonania, ale nie stanowią głównego celu produktu.
 
-Aktualny zakres implementacji fundamentów obejmuje:
+Zakres na kanonicznym `main` obejmuje:
 
 - **M0 — Test Contract Validator**;
 - **M1 — Project Contract + Policy Engine**;
@@ -19,13 +19,14 @@ Aktualny zakres implementacji fundamentów obejmuje:
 
 Sandbox używa backendu Docker bez fallbacku do wykonania na hoście. Profil wymusza: read-only root, read-only source, osobny tmpfs workspace, brak sieci, brak sekretów, niedostępny HOME, non-root, usunięte capabilities, limity CPU/RAM/dysku/procesów/czasu oraz cleanup po runie. Polityka, source, obraz i własność kontenera są wiązane z niezmiennymi identyfikatorami oraz weryfikowane fail-closed.
 
-M2B jest zweryfikowany wyłącznie na fixtures należących do repo Executora. Uruchamianie kodu z COS, ScriptOps, BPM:160 i innych repozytoriów nadal jest zabronione.
+Kandydat Phase B rozwija ten rdzeń bez włączania generycznego external execution. Polityka utrzymuje `external_projects: false` i dopuszcza wyłącznie dwa nazwane repozytoria pilotażowe, maksymalnie trzy pliki produkcyjne oraz draft PR bez merge. Dopóki implementacyjny PR nie zostanie zaakceptowany i scalony, jest to praca review-branch, a nie kanon `main`.
 
 ## Start
 
 ```bash
 python -m unittest discover -s tests -v
 python -m compileall -q executor
+python -m executor.cli --help
 python -m executor.cli validate-project project_contracts/executor-self.yaml --policy EXECUTOR_POLICY.yaml --base-dir .
 python -m executor.cli validate-test test_contracts/examples/valid_test.yaml --base-dir tests/fixtures --holdout-evidence tests/fixtures/holdout_evidence.json
 ```
@@ -50,6 +51,8 @@ Pliki `.yaml` używają składni JSON, która jest poprawnym podzbiorem YAML 1.2
 - `EXECUTOR_POLICY.yaml` — deterministyczna polityka wykonania;
 - `CREATIVE_OS_EXECUTOR_BUILD_INSTRUCTION_v0.2.md` — kontrakt implementacyjny;
 - `CREATIVE_OS_EXECUTOR_WORK_AND_AUDIT_PROTOCOL_v1.0.md` — zasady pracy i audytu.
+- `PHASE_B_AUTHORIZATION.md` — wybrane przez człowieka DONE, trust domain i granice pilotów;
+- `docs/product/P4_GITHUB_PILOT_OPERATOR_GUIDE.md` — powtarzalny operator path i fail-closed states.
 
 Otwarty draft PR, branch-only dokument albo komentarz review nie zmienia kanonu `main` przed merge.
 
@@ -63,7 +66,7 @@ Poprawny pakiet oznacza wyłącznie:
 READY_FOR_ATOMIC_CONSUMPTION
 ```
 
-Nie jest dowodem wykonania. Atomowy ledger konsumpcji i związanie wyniku akcji nie są obecnie claimowane jako wdrożone na `main`.
+Nie jest dowodem wykonania. Kandydat Phase B dodaje trwały, atomowy ledger SQLite oraz dokładne związanie terminalnego wyniku. Claim pozostaje kandydatem do czasu pełnego CI, dwóch pilotów i niezależnej weryfikacji.
 
 ## Build status versus maturity
 
@@ -74,8 +77,10 @@ ARCHITECTURE / PRODUCT BUILD BASELINE: ACCEPTED
 PR #42 MATURITY ADVANCEMENT: NONE
 PR #42 RUNTIME IMPLEMENTATION CLAIM: NONE
 
-CURRENT BUILD TARGET: GP001 — FIX A FAILING TEST VERTICAL PATH
-NEXT BUILD ARTIFACT AFTER AUTHORITY RECONCILIATION: GP001 MACHINE-READABLE CONTRACT
+CURRENT HUMAN-SELECTED TARGET: P4 — REPEATABLE EXECUTOR 1.0
+TRUST DOMAIN: GITHUB / EXTERNAL GOVERNED INTAKE
+SOLUTION OWNER: EXTERNAL INTELLIGENCE
+PILOT CLASS: JTJ07/scriptops + JTJ07/creative-os-project-reconstructor / DRAFT PR ONLY
 
 CURRENT PROVEN PRODUCT LEVEL: P0 — FOUNDATION / ACHIEVED IN DECLARED SCOPE
 P0 ACHIEVED SHA: b092a85e82eb81ec6dc7db4a7064409c6c383359
@@ -83,8 +88,7 @@ P0 EVIDENCE PR: #16
 P0 EVIDENCE RUN ID: 30755381646
 P0 HUMAN DECISION: ACCEPTED THROUGH MERGE OF PR #16
 
-NEXT UNACHIEVED LADDER LEVEL: P1 — CONTROLLED PILOT RUNTIME
-ACTIVE MATURITY CLAIM: NONE — ASSESS ONLY AFTER PRODUCT RUN
+ACTIVE MATURITY CLAIM: NONE — P4 REQUIRES BOTH REAL PILOTS, INDEPENDENT PHASE C AND FINAL HUMAN ACCEPTANCE
 FIRST TRUE PRODUCT MVP IN LADDER: P3 — REAL VALUE MVP
 ```
 
@@ -102,10 +106,18 @@ M2B: IMPLEMENTED / FIXTURES VERIFIED
 M3+: NOT CLAIMED ON MAIN
 PRODUCT PURPOSE: USER APPROVED / DOCUMENTED
 BUILD BASELINE: ACCEPTED THROUGH PR #42
-GP001 PRODUCT PATH: DEFINED / NOT YET END-TO-END IMPLEMENTED
-POTENTIAL AND DECISION PACKET: LOGICAL CONTRACT / NOT IMPLEMENTED
-ACTION AUTHORIZATION PACKET: CONTRACT FROZEN / VALIDATOR IMPLEMENTED / ATOMIC LEDGER NOT CLAIMED ON MAIN
+GP001 PRODUCT PATH: REAL FIXTURE E2E + REPLAY ACCEPTED IN DECLARED SCOPE
+REQUEST TO CONTRACT: PHASE 1 IMPLEMENTED / CLI SURFACE IN PHASE B CANDIDATE
+GITHUB REQUEST + DECISION TRUST: IMPLEMENTED CANDIDATE / REAL DIRECT-HUMAN EVENTS PENDING
+ACTION AUTHORIZATION PACKET: VALIDATOR + ATOMIC LEDGER + RESULT BINDING IMPLEMENTED CANDIDATE
+EXTERNAL SOLUTION INTERFACE: IMPLEMENTED CANDIDATE / NO EFFECT AUTHORITY
+BOUNDED PILOT RUNTIME: IMPLEMENTED CANDIDATE / REAL PILOTS PENDING
 WORK AND AUDIT PROTOCOL: DOCUMENTED / RUNTIME ENFORCEMENT NOT CLAIMED
-EXTERNAL PROJECT EXECUTION: FORBIDDEN
+GENERIC EXTERNAL PROJECT EXECUTION: FORBIDDEN
+BOUNDED PILOT REPOSITORIES: EXACTLY TWO / DRAFT PR ONLY
 AUTO MERGE: DISABLED
+
+P4: NOT CLAIMED
+INDEPENDENT PHASE C: NOT YET RUN
+FINAL HUMAN ACCEPTANCE: OPEN
 ```

@@ -3,7 +3,7 @@ version: 1.0
 status: USER APPROVED / AUTHORITATIVE PRODUCT GOVERNANCE
 date: 2026-08-03
 scope: product capability levels, cross-cutting maturity axes, progression gates and PR alignment
-repository: litrgratis-pixel/Executor
+repository: JTJ07/Executor
 
 # Executor Product Capability Ladder v1.0
 
@@ -89,7 +89,8 @@ M0: IMPLEMENTED
 M1: IMPLEMENTED
 M2A: IMPLEMENTED
 M2B: IMPLEMENTED / FIXTURES VERIFIED
-EXTERNAL PROJECT EXECUTION: FORBIDDEN
+GENERIC EXTERNAL PROJECT EXECUTION: FORBIDDEN
+P4 BOUNDED PILOT CANDIDATE: TWO NAMED REPOSITORIES / DRAFT PR ONLY
 ```
 
 ### NON-GOALS

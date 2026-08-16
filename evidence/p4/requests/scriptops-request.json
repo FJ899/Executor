@@ -1,0 +1,56 @@
+{
+  "schema_version": "executor-github-request/1.0",
+  "request_id": "p4-scriptops-numeric-candidate-001",
+  "target": {
+    "repository": "JTJ07/scriptops",
+    "commit": "daa6e5dc210e09171a530eeffe5601e0e74ae041",
+    "tree": "ba0b99bd99682dcc7a942537b502a7a72151fa09"
+  },
+  "task": {
+    "class": "BOUNDED_CORRECTNESS_OR_QUALITY_FIX",
+    "problem_statement": "Select the newest staged ScriptOps candidate by numeric version so v10 is not treated as older than v9.",
+    "allowed_paths": [
+      "phase6/scriptops-v2-hardening.py"
+    ],
+    "protected_paths": [
+      "tests/**",
+      ".github/**",
+      "legacy/**",
+      "sources/**",
+      "evidence/**"
+    ],
+    "precondition_argv": [
+      [
+        "python",
+        "-c",
+        "import importlib.util,tempfile,sys; from pathlib import Path; spec=importlib.util.spec_from_file_location('hardening','phase6/scriptops-v2-hardening.py'); module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); directory=tempfile.TemporaryDirectory(); module.ROOT=Path(directory.name); staging=module.ROOT/'staging'/'scenes'; staging.mkdir(parents=True); (staging/'SCN-001-v9-candidate.fountain').write_text('v9'); (staging/'SCN-001-v10-candidate.fountain').write_text('v10'); sys.exit(0 if module._latest_candidate('SCN-001').name=='SCN-001-v10-candidate.fountain' else 1)"
+      ]
+    ],
+    "postcondition_argv": [
+      [
+        "python",
+        "-c",
+        "import importlib.util,tempfile,sys; from pathlib import Path; spec=importlib.util.spec_from_file_location('hardening','phase6/scriptops-v2-hardening.py'); module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); directory=tempfile.TemporaryDirectory(); module.ROOT=Path(directory.name); staging=module.ROOT/'staging'/'scenes'; staging.mkdir(parents=True); (staging/'SCN-001-v9-candidate.fountain').write_text('v9'); (staging/'SCN-001-v10-candidate.fountain').write_text('v10'); sys.exit(0 if module._latest_candidate('SCN-001').name=='SCN-001-v10-candidate.fountain' else 1)"
+      ]
+    ],
+    "regression_argv": [
+      [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-v"
+      ],
+      [
+        "python",
+        "scripts/verify_repository.py"
+      ]
+    ],
+    "max_production_files": 1,
+    "max_patch_lines": 160
+  },
+  "expires_at": "2026-08-23T00:00:00Z",
+  "nonce": "p4-scriptops-request-001"
+}

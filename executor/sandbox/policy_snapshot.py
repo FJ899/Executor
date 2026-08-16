@@ -41,6 +41,20 @@ class ControlledExternalFixture:
         }
 
 
+@dataclass(frozen=True)
+class BoundedPilotRepository:
+    repository: str
+    max_production_files: int
+    draft_pr_only: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "repository": self.repository,
+            "max_production_files": self.max_production_files,
+            "draft_pr_only": self.draft_pr_only,
+        }
+
+
 @dataclass(frozen=True, init=False)
 class ExecutionPolicySnapshot:
     repository: str
@@ -50,6 +64,7 @@ class ExecutionPolicySnapshot:
     source_sha256: str
     external_projects: bool
     controlled_external_fixtures: tuple[ControlledExternalFixture, ...]
+    bounded_pilot_repositories: tuple[BoundedPilotRepository, ...]
     auto_merge: bool
     default_network: bool
     default_secrets: tuple[str, ...]
@@ -67,6 +82,7 @@ class ExecutionPolicySnapshot:
         auto_merge: bool,
         default_network: bool,
         default_secrets: tuple[str, ...],
+        bounded_pilot_repositories: tuple[BoundedPilotRepository, ...] = (),
         _proof: object | None = None,
     ) -> None:
         if _proof is not _POLICY_SNAPSHOT_PROOF:
@@ -80,6 +96,7 @@ class ExecutionPolicySnapshot:
         object.__setattr__(self, "source_sha256", source_sha256)
         object.__setattr__(self, "external_projects", external_projects)
         object.__setattr__(self, "controlled_external_fixtures", controlled_external_fixtures)
+        object.__setattr__(self, "bounded_pilot_repositories", bounded_pilot_repositories)
         object.__setattr__(self, "auto_merge", auto_merge)
         object.__setattr__(self, "default_network", default_network)
         object.__setattr__(self, "default_secrets", default_secrets)
@@ -103,6 +120,16 @@ class ExecutionPolicySnapshot:
             for fixture in self.controlled_external_fixtures
         )
 
+    def bounded_pilot_profile(
+        self,
+        *,
+        repository: str,
+    ) -> BoundedPilotRepository | None:
+        for profile in self.bounded_pilot_repositories:
+            if profile.repository.lower() == repository.lower():
+                return profile
+        return None
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "repository": self.repository,
@@ -114,6 +141,9 @@ class ExecutionPolicySnapshot:
                 "external_projects": self.external_projects,
                 "controlled_external_fixtures": [
                     fixture.to_dict() for fixture in self.controlled_external_fixtures
+                ],
+                "bounded_pilot_repositories": [
+                    profile.to_dict() for profile in self.bounded_pilot_repositories
                 ],
                 "auto_merge": self.auto_merge,
                 "default_network": self.default_network,
@@ -170,6 +200,52 @@ def _parse_controlled_external_fixtures(value: object) -> tuple[ControlledExtern
     return tuple(fixtures)
 
 
+def _parse_bounded_pilot_repositories(
+    value: object,
+) -> tuple[BoundedPilotRepository, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ExecutionPolicyError(
+            "execution.bounded_pilot_repositories must be a list"
+        )
+    profiles: list[BoundedPilotRepository] = []
+    seen: set[str] = set()
+    for index, item in enumerate(value):
+        path = f"execution.bounded_pilot_repositories[{index}]"
+        if not isinstance(item, dict) or set(item) != {
+            "repository",
+            "max_production_files",
+            "draft_pr_only",
+        }:
+            raise ExecutionPolicyError(
+                f"{path} must contain exactly repository, max_production_files and draft_pr_only"
+            )
+        repository = item.get("repository")
+        maximum = item.get("max_production_files")
+        draft_only = item.get("draft_pr_only")
+        if not isinstance(repository, str) or _REPOSITORY.fullmatch(repository) is None:
+            raise ExecutionPolicyError(f"{path}.repository must use owner/name form")
+        normalized = repository.lower()
+        if normalized in seen:
+            raise ExecutionPolicyError(f"{path} duplicates an existing pilot repository")
+        if type(maximum) is not int or not 1 <= maximum <= 3:
+            raise ExecutionPolicyError(
+                f"{path}.max_production_files must be an integer in 1..3"
+            )
+        if draft_only is not True:
+            raise ExecutionPolicyError(f"{path}.draft_pr_only must be true")
+        seen.add(normalized)
+        profiles.append(
+            BoundedPilotRepository(
+                repository=repository,
+                max_production_files=maximum,
+                draft_pr_only=True,
+            )
+        )
+    return tuple(profiles)
+
+
 def load_execution_policy_snapshot(
     repository_root: str | Path,
     *,
@@ -217,6 +293,9 @@ def load_execution_policy_snapshot(
     fixtures = _parse_controlled_external_fixtures(
         execution.get("controlled_external_fixtures")
     )
+    pilots = _parse_bounded_pilot_repositories(
+        execution.get("bounded_pilot_repositories")
+    )
 
     return ExecutionPolicySnapshot(
         repository=repository,
@@ -226,6 +305,7 @@ def load_execution_policy_snapshot(
         source_sha256=hashlib.sha256(payload).hexdigest(),
         external_projects=execution["external_projects"],
         controlled_external_fixtures=fixtures,
+        bounded_pilot_repositories=pilots,
         auto_merge=execution["auto_merge"],
         default_network=execution["default_network"],
         default_secrets=tuple(secrets),

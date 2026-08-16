@@ -1,10 +1,10 @@
 ---
 document: "Executor v1 Product Spec"
 version: "1.1"
-status: "USER ACCEPTED DIRECTION / ACTIVE PRODUCT BASELINE CANDIDATE"
+status: "USER ACCEPTED DIRECTION / PHASE B P4 IMPLEMENTATION CANDIDATE"
 date: "2026-08-09"
 scope: "first user, request-to-contract front door, first product promise, first end-to-end workflow and explicit non-goals"
-repository: "litrgratis-pixel/Executor"
+repository: "JTJ07/Executor"
 ---
 
 # Executor v1 Product Spec
@@ -81,7 +81,7 @@ The first complete technical scenario remains:
 
 The accepted GP001 runtime has already demonstrated the bounded execution half of the product path.
 
-The next product gap is the front half:
+The front-half candidate now exists through exact GitHub request/decision evidence. The remaining product gap is real external proof:
 
 ```text
 USER REQUEST

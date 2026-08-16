@@ -2,7 +2,7 @@
 
 The Docker backend does not accept a policy dictionary.
 
-It requires an `ExecutionPolicySnapshot` loaded from `EXECUTOR_POLICY.yaml` in a verified `litrgratis-pixel/Executor` checkout. The file must match the blob at the exact checked-out commit. The snapshot records the policy SHA-256 and cannot be constructed through its public dataclass fields. The backend reloads and compares the snapshot before each authorization decision.
+It requires an `ExecutionPolicySnapshot` loaded from `EXECUTOR_POLICY.yaml` in a verified `JTJ07/Executor` checkout. The file must match the blob at the exact checked-out commit. The snapshot records the policy SHA-256 and cannot be constructed through its public dataclass fields. The backend reloads and compares the snapshot before each authorization decision.
 
 For Executor fixtures, the execution repository root and commit must be the same root and commit that produced the policy snapshot. For project execution, the snapshot must explicitly allow external projects.
 

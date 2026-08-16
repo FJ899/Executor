@@ -4,10 +4,16 @@ version: "1.1"
 status: "USER ACCEPTED / ACTIVE ARCHITECTURE-PRODUCT BUILD ORDER CANDIDATE"
 date: "2026-08-09"
 scope: "ordered path from first repeatable execution slice to governed request-to-contract product entry"
-repository: "litrgratis-pixel/Executor"
+repository: "JTJ07/Executor"
 ---
 
 # Executor Build Order v1.1
+
+> Phase B update (2026-08-16): `PROJECT_COMPLETION_MAP.md` and
+> `PHASE_B_AUTHORIZATION.md` supersede this document as the active route.
+> The older sequence below remains historical rationale. Current work targets
+> P4 with GitHub-governed intake, external Intelligence and exactly two bounded
+> draft-PR pilots; P4 remains unclaimed.
 
 ## 1. Goal
 
