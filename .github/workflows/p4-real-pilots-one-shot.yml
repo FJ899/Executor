@@ -68,7 +68,7 @@ jobs:
       - name: Execute three independently authorized ScriptOps pilots
         run: |
           set -euo pipefail
-          SCRIPTOPS_COMMENTS=(5309233904 5309234306 5309234972)
+          SCRIPTOPS_COMMENTS=(5309431944 5309432744 5309433932)
           for idx in 1 2 3; do
             comment="${SCRIPTOPS_COMMENTS[$((idx-1))]}"
             git -C target reset --hard daa6e5dc210e09171a530eeffe5601e0e74ae041
@@ -204,7 +204,7 @@ jobs:
       - name: Execute three independently authorized Reconstructor pilots
         run: |
           set -euo pipefail
-          RECONSTRUCTOR_COMMENTS=(5309241731 5309242858 5309243169)
+          RECONSTRUCTOR_COMMENTS=(5309439844 5309440490 5309441091)
           for idx in 1 2 3; do
             comment="${RECONSTRUCTOR_COMMENTS[$((idx-1))]}"
             git -C target reset --hard defc7b029097284f94136fec54b75c313ac12f68
