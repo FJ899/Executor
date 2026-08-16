@@ -48,7 +48,8 @@ The rejected failure classes are mandatory regression targets:
 6. P4 repeatability evidence must match the approved map and policy;
 7. canonical state must not contradict live exact-candidate evidence;
 8. request and decision direct-human provenance must fail closed on app-mediated or provider-unverifiable events;
-9. decision freshness must be evaluated after preconditions at the effect-authorization boundary, and a decision that expires during a precondition must block before AAP/effect reservation, mutation or review-required success reporting.
+9. decision freshness must be evaluated after preconditions at the effect-authorization boundary, and a decision that expires during a precondition must block before AAP/effect reservation, mutation or review-required success reporting;
+10. the GitHub provider reservation itself must prove freshness using its server-controlled reservation commit timestamp against the exact decision `not_after` deadline.
 
 Concrete human ACCEPT events consumed by any rejected exact candidate remain provenance only and must not be reused.
 
@@ -64,7 +65,8 @@ The candidate architecture must implement and independently prove:
 - fail-closed zero-test discovery handling;
 - bounded retry/failure/model/dependency policy in `docs/product/P4_REPEATABILITY_POLICY.md`;
 - provider-verifiable direct-human request and decision origin with `performed_via_github_app` present and exactly `null`;
-- a real UTC freshness sample at effect authorization after preconditions, with no caller-supplied or precondition-start authority clock.
+- a real UTC freshness sample at effect authorization after preconditions, with no caller-supplied or precondition-start authority clock;
+- the exact decision expiry bound into each GitHub authority receipt as `not_after`, followed by a read-back of the reservation commit whose provider-controlled `committer.date` must be strictly earlier than `not_after`; missing/malformed timestamps or `provider_created_at >= not_after` are fail-closed and may spend the one-shot ref but may not permit local effect consumption or target mutation.
 
 ## Corrected series contract
 
@@ -92,6 +94,8 @@ A fresh Phase C may report technical PASS only if it independently confirms, for
 - the six human decision events used by that exact series are new direct `JTJ07` owner comments, unedited, fresh at consumption, exact-bound and each consumed at most once;
 - request and decision provider evidence has `performed_via_github_app` present and exactly `null`;
 - a dedicated adversarial regression proves that a decision which expires during a precondition is BLOCKED before effect authority and cannot produce `ACTION_COMPLETED_REVIEW_REQUIRED`;
+- provider-time regressions prove that a reservation commit at/after `not_after` fails closed, leaves the one-shot ref spent, and cannot enable local effect consumption or mutation;
+- successful exact-series provider receipts expose both `not_after` and `provider_created_at`, with provider time strictly before expiry;
 - the runtime public/effect-authorization interfaces expose no caller-supplied authority clock capable of recreating the stale-time path;
 - both pilot artifacts contain raw run reports, identical per-objective patches, exact source/head/tree/workflow/image identities and the local SQLite ledgers;
 - provider-backed decision/effect receipt refs exist live and their FINAL commits match artifact/local result bindings;
