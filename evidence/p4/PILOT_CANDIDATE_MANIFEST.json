@@ -1,6 +1,6 @@
 {
-  "schema_version": "executor-p4-pilot-candidate-evidence/1.1",
-  "status": "CORRECTIVE_SERIES_PREPARED_AWAITING_SIX_FRESH_HUMAN_ACCEPTS",
+  "schema_version": "executor-p4-pilot-candidate-evidence/1.2",
+  "status": "SIX_FRESH_HUMAN_ACCEPTS_VALIDATED_CORRECTED_SERIES_EXECUTION_PENDING",
   "updated_at": "2026-08-16",
   "historical_rejected_candidate": {
     "executor_sha": "24107bc8a8186ed1928e098118982efb9d62ffaa",
@@ -21,7 +21,8 @@
       "solution_candidate": "evidence/p4/candidates/scriptops-solution-candidate.json",
       "external_intelligence_provenance": "evidence/p4/intelligence/scriptops-provenance.json",
       "external_intelligence_prompt": "evidence/p4/intelligence/scriptops-prompt.txt",
-      "required_corrected_executions": 3
+      "required_corrected_executions": 3,
+      "human_accept_comments": [5309032642, 5309033360, 5309034120]
     },
     {
       "repository": "JTJ07/creative-os-project-reconstructor",
@@ -36,9 +37,17 @@
       "solution_candidate": "evidence/p4/candidates/reconstructor-solution-candidate-corrected.json",
       "external_intelligence_provenance": "evidence/p4/intelligence/reconstructor-provenance.json",
       "external_intelligence_prompt": "evidence/p4/intelligence/reconstructor-prompt.txt",
-      "required_corrected_executions": 3
+      "required_corrected_executions": 3,
+      "human_accept_comments": [5309040666, 5309041408, 5309042154]
     }
   ],
+  "series_definition": {
+    "distinct_real_objectives": 2,
+    "authorized_repositories": 2,
+    "independent_executions_per_objective": 3,
+    "total_independently_authorized_executions": 6,
+    "basis": "PROJECT_COMPLETION_MAP.md P4 requires multiple real runs across more than one repository or independent module set."
+  },
   "corrective_controls": [
     "GitHub provider-backed global one-shot authority refs",
     "stable effect identity independent of caller run_id",
@@ -46,16 +55,16 @@
     "exact GitHub Actions workflow and Docker image identity binding",
     "post-request external-intelligence provenance with prompt hash and zero human solution edits",
     "zero-test unittest discovery fails closed",
-    "three independently authorized successful executions required per pilot repository"
+    "three independently authorized executions required per real objective"
   ],
   "historical_human_review_outputs": [
     "JTJ07/scriptops#8 remains DRAFT and previously APPROVED; merge unauthorized.",
     "JTJ07/creative-os-project-reconstructor#4 remains DRAFT and previously APPROVED; merge unauthorized."
   ],
   "blockers": [
-    "Three fresh direct-human ACCEPT comments are required on issue #65.",
-    "Three fresh direct-human ACCEPT comments are required on issue #64.",
-    "The corrected series workflow remains disabled until all six comment IDs are validated."
+    "The six independently authorized corrected executions must complete with exact-head evidence.",
+    "Exact-head foundation CI and GP001 replay must be green.",
+    "A fresh independent Phase C must verify the corrected candidate before any final human product acceptance."
   ],
   "current_rule": "Resolve the exact current PR #61 head; never treat historical pilot locators as a P4 PASS claim."
 }
