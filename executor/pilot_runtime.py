@@ -68,6 +68,11 @@ _RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 _UNITTEST_COUNT = re.compile(r"\bRan\s+(\d+)\s+tests?\b")
 
 
+def _utc_now() -> datetime:
+    """Return the real UTC clock at the exact authority-consumption boundary."""
+    return datetime.now(timezone.utc)
+
+
 def _git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         ["git", "-C", str(root), *args],
@@ -402,8 +407,10 @@ class PilotRuntime:
         self,
         *,
         run_id: str,
-        now: datetime,
     ) -> tuple[dict[str, Any], GovernedAuthorityConsumption]:
+        # Freshness is evaluated immediately before provider reservation.
+        # Caller-supplied or precondition-time clocks cannot authorize an effect.
+        now = _utc_now().astimezone(timezone.utc)
         task = self.contract["task"]
         target = self.contract["target"]
         test_contract_sha = hashlib.sha256(
@@ -558,11 +565,9 @@ class PilotRuntime:
         *,
         workspace: str | Path,
         run_id: str,
-        now: datetime | None = None,
     ) -> dict[str, Any]:
         if _RUN_ID.fullmatch(run_id) is None:
             raise PilotBlocked("run_id is invalid")
-        current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
         run_dir = self.runs_root / run_id
         consumption: GovernedAuthorityConsumption | None = None
         report: dict[str, Any] = {
@@ -625,7 +630,7 @@ class PilotRuntime:
                     raise PilotBlocked("approved counterexample is not observable")
             report["evidence"]["precondition"] = "OBSERVED_FAILURE"
 
-            packet, consumption = self._authorize_action(run_id=run_id, now=current)
+            packet, consumption = self._authorize_action(run_id=run_id)
             report["authorization_packet"] = packet
             report["evidence"]["authority"] = "GLOBAL_GITHUB_RESERVED_AND_LOCAL_ATOMIC_CONSUMED"
             self._apply_mutations(root)

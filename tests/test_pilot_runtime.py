@@ -5,8 +5,10 @@ import json
 import subprocess
 import tempfile
 import unittest
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from executor.authority_ledger import AtomicAuthorityLedger
 from executor.github_authority import GlobalAuthorityReplayError
@@ -165,8 +167,11 @@ class PilotRuntimeTests(unittest.TestCase):
         self.root = root
         self.image = "sha256:" + "1" * 64
         self.environment = execution_environment(image=self.image)
+        self.clock_patcher = patch("executor.pilot_runtime._utc_now", return_value=NOW)
+        self.clock_patcher.start()
 
     def tearDown(self):
+        self.clock_patcher.stop()
         self.temp.cleanup()
 
     def runtime(self, exit_codes, *, zero_test_discovery=False, ledger_path=None):
@@ -205,7 +210,6 @@ class PilotRuntimeTests(unittest.TestCase):
         report = runtime.execute(
             workspace=self.fixture.root,
             run_id="pilot-runtime-001",
-            now=NOW,
         )
         self.assertEqual(report["status"], "ACTION_COMPLETED_REVIEW_REQUIRED")
         self.assertEqual(report["changed_paths"], ["phase6/scriptops-v2-hardening.py"])
@@ -232,7 +236,6 @@ class PilotRuntimeTests(unittest.TestCase):
         report = runtime.execute(
             workspace=self.fixture.root,
             run_id="pilot-green-001",
-            now=NOW,
         )
         self.assertEqual(report["status"], "BLOCKED")
         self.assertIn("counterexample is not observable", report["error"])
@@ -244,29 +247,54 @@ class PilotRuntimeTests(unittest.TestCase):
 
     def test_same_human_accept_cannot_mint_second_effect_with_different_run_id(self):
         runtime = self.runtime([])
-        first_packet, _ = runtime._authorize_action(run_id="pilot-replay-001", now=NOW)
+        first_packet, _ = runtime._authorize_action(run_id="pilot-replay-001")
         second = self.runtime([])
         with self.assertRaises(GlobalAuthorityReplayError):
-            second._authorize_action(run_id="pilot-replay-002", now=NOW)
+            second._authorize_action(run_id="pilot-replay-002")
         # packet identity is independent of caller-controlled run_id
         self.assertTrue(first_packet["packet_id"].startswith("pilot-"))
 
     def test_different_local_ledger_cannot_bypass_global_consumption(self):
         runtime = self.runtime([])
-        runtime._authorize_action(run_id="pilot-ledger-a", now=NOW)
+        runtime._authorize_action(run_id="pilot-ledger-a")
         second = self.runtime(
             [],
             ledger_path=self.root / "different-authority.sqlite3",
         )
         with self.assertRaises(GlobalAuthorityReplayError):
-            second._authorize_action(run_id="pilot-ledger-b", now=NOW)
+            second._authorize_action(run_id="pilot-ledger-b")
+
+    def test_decision_expiring_during_precondition_blocks_before_effect_authority(self):
+        runtime = self.runtime([1])
+        with patch(
+            "executor.pilot_runtime._utc_now",
+            return_value=NOW + timedelta(minutes=30),
+        ):
+            report = runtime.execute(
+                workspace=self.fixture.root,
+                run_id="pilot-expiry-crossing",
+            )
+        self.assertEqual(report["status"], "BLOCKED")
+        self.assertIn("expired before effect authorization", report["error"])
+        self.assertEqual(report["evidence"]["precondition"], "OBSERVED_FAILURE")
+        self.assertNotIn("authorization_packet", report)
+        self.assertNotIn("authority_consumption", report)
+        self.assertEqual(
+            (self.fixture.root / "phase6/scriptops-v2-hardening.py").read_text(),
+            "VALUE = 1\n",
+        )
+
+    def test_runtime_exposes_no_caller_supplied_authority_clock(self):
+        import inspect
+
+        self.assertNotIn("now", inspect.signature(PilotRuntime.execute).parameters)
+        self.assertNotIn("now", inspect.signature(PilotRuntime._authorize_action).parameters)
 
     def test_zero_test_unittest_discovery_is_not_regression_pass(self):
         runtime = self.runtime([1, 0, 0], zero_test_discovery=True)
         report = runtime.execute(
             workspace=self.fixture.root,
             run_id="pilot-zero-tests",
-            now=NOW,
         )
         self.assertEqual(report["status"], "BLOCKED")
         self.assertIn("ran zero tests", report["error"])
