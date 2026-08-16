@@ -88,31 +88,18 @@ jobs:
               raise SystemExit('test insertion anchor not found')
           text = text.replace(anchor, regression, 1)
           tests_path.write_text(text, encoding='utf-8')
-
-          workflow_path = Path('.github/workflows/p4-real-pilots-one-shot.yml')
-          lines = workflow_path.read_text(encoding='utf-8').splitlines()
-          changed = 0
-          for index, line in enumerate(lines):
-              if line.lstrip().startswith('if:') and 'github.event.pull_request.number == 61' in line:
-                  indent = line[:len(line) - len(line.lstrip())]
-                  lines[index] = indent + 'if: false'
-                  changed += 1
-          if changed != 2:
-              raise SystemExit(f'expected 2 P4 job gates, found {changed}')
-          workflow_path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
           PY
 
           python -m compileall -q executor
           python -m unittest tests.test_pilot_runtime -v
 
-      - name: Commit corrective implementation and remove one-shot workflow
+      - name: Commit corrective implementation
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'Executor Phase C corrective agent'
           git config user.email 'executor-phase-c@users.noreply.github.com'
-          git rm .github/workflows/phase-c-expiry-toctou-fix.yml
-          git add executor/pilot_runtime.py tests/test_pilot_runtime.py .github/workflows/p4-real-pilots-one-shot.yml
+          git add executor/pilot_runtime.py tests/test_pilot_runtime.py
           git diff --cached --check
           git commit -m 'phase-c: recheck decision freshness at effect reservation'
           git push origin HEAD:phase-b/p4-repeatable-executor-1.0
