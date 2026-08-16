@@ -23,16 +23,19 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Build isolated ScriptOps pilot image with pinned PyYAML
+      - name: Build isolated ScriptOps pilot image with pinned runtime dependencies
         run: |
           cat > "$RUNNER_TEMP/p4-scriptops.Dockerfile" <<'DOCKERFILE'
           FROM python:3.11-slim-bookworm
-          RUN python -m pip install --no-cache-dir PyYAML==6.0.2
+          RUN apt-get update \
+              && apt-get install -y --no-install-recommends git \
+              && rm -rf /var/lib/apt/lists/* \
+              && python -m pip install --no-cache-dir PyYAML==6.0.2
           DOCKERFILE
-          docker build --pull -f "$RUNNER_TEMP/p4-scriptops.Dockerfile" -t executor-scriptops-pilot:pyyaml-6.0.2 .
+          docker build --pull -f "$RUNNER_TEMP/p4-scriptops.Dockerfile" -t executor-scriptops-pilot:pyyaml-git .
 
       - name: Resolve exact image ID
-        run: echo "EXECUTOR_SANDBOX_IMAGE=$(docker image inspect --format='{{.Id}}' executor-scriptops-pilot:pyyaml-6.0.2)" >> "$GITHUB_ENV"
+        run: echo "EXECUTOR_SANDBOX_IMAGE=$(docker image inspect --format='{{.Id}}' executor-scriptops-pilot:pyyaml-git)" >> "$GITHUB_ENV"
 
       - name: Acquire exact ScriptOps source
         run: |
@@ -47,7 +50,7 @@ jobs:
           python -m executor.cli github-pilot-decide \
             --profile trust_profiles/github-p4-pilots.json \
             --issue 62 \
-            --comment 5307731620 \
+            --comment 5307785576 \
             --ledger .executor/scriptops-authority.sqlite3 \
             > scriptops-frozen.json
 
@@ -63,13 +66,13 @@ jobs:
           python -m executor.cli run-pilot \
             --profile trust_profiles/github-p4-pilots.json \
             --issue 62 \
-            --comment 5307731620 \
+            --comment 5307785576 \
             --frozen scriptops-frozen.json \
             --proposal scriptops-proposal.json \
             --ledger .executor/scriptops-authority.sqlite3 \
             --workspace target \
             --runs-root pilot-evidence/scriptops/runs \
-            --run-id p4-scriptops-real-002 \
+            --run-id p4-scriptops-real-003 \
             --image "$EXECUTOR_SANDBOX_IMAGE" \
             --executor-root . \
             --executor-commit "${{ github.event.pull_request.head.sha }}" \
