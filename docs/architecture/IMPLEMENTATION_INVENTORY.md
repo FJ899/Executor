@@ -1,135 +1,104 @@
 ---
 document: "Executor Implementation Inventory"
-version: "0.3"
-status: "PHASE C REJECTED / CORRECTIVE PHASE B ACTIVE"
+version: "0.4"
+status: "PHASE C FALSE-COMPLETION / CORRECTIVE PHASE B ACTIVE"
 date: "2026-08-16"
 scope: "current PR #61 implementation state; no P4 completion claim"
 repository: "JTJ07/Executor"
 baseline: "Phase B work branch from main@5e254811; current head must be resolved from PR #61"
 ---
 
-# Executor Implementation Inventory v0.3
+# Executor Implementation Inventory v0.4
 
 ## 1. Reading rule
 
-This inventory is a current implementation snapshot for the open Phase-B candidate. It is not canonical `main`, not a maturity claim, and not product acceptance.
+This inventory describes the open PR #61 candidate branch. It is not canonical `main`, not a maturity claim and not product acceptance. Exact implementation identity is always the live PR #61 head/tree; immutable runs/artifacts/provider receipts are exact-head evidence only.
 
-Independent Phase C rejected historical candidate `24107bc8a8186ed1928e098118982efb9d62ffaa` as `FALSE-COMPLETION`. All successful runs and artifacts tied to that SHA are historical rejected-candidate evidence only.
+Historical rejected exact candidates must never satisfy a later gate:
 
-## 2. Current state
+- `24107bc8a8186ed1928e098118982efb9d62ffaa` — `FALSE-COMPLETION`, replay/global-uniqueness failure;
+- `7f662cd487c14d62a4838be8c43cef1358869d50` — `BLOCKED`, G-02/G-14;
+- `fdf876e0e2af6d9e4ecea2301ecb686a471037bd` — `FALSE-COMPLETION`, app-mediated GitHub events could be accepted as human;
+- `d11f3dd9d6c484a9c554cd562db46c30e0a333fe` — `FALSE-COMPLETION`, decision-freshness TOCTOU between precondition start and later effect authorization.
 
-| Boundary | Current PR #61 state | Remaining proof |
+All ACCEPT comments consumed by those exact candidates are historical provenance only.
+
+## 2. Current implementation boundaries
+
+| Boundary | Current implementation rule | Remaining exact-candidate proof |
 |---|---|---|
-| GitHub request origin | direct-human issues #62/#63 were observed and exact actor/body/source binding was independently verified | corrected final series needs fresh direct-human request/decision events where required |
-| GitHub decision/freeze | ACCEPT/MODIFY/REJECT verification exists; old local-only one-shot design was rejected | corrective branch now requires provider-backed global GitHub consumption; adversarial proof still required |
-| Atomic authority | SQLite WAL/`BEGIN IMMEDIATE` still provides local crash-safe binding | local DB is no longer allowed to be the sole uniqueness boundary; cross-runner/cross-ledger replay must be proven impossible |
-| Solution proposal | bounded authority-free proposal interface exists | post-request External Intelligence provenance, model and prompt hash are now required and must be proven on final pilots |
-| Execution environment | Docker isolation, no network/secrets and cleanup exist | exact workflow SHA and resolved Docker image ID are now explicit effect evidence and must be verified on the final candidate |
-| Runtime | exact source, precondition, postcondition, regressions, scope and patch-budget enforcement exist | zero-test unittest discovery now fails closed; corrected Reconstructor request/evidence is still required |
-| Result | only review-required/blocked/failed are legal; merge remains false | global authority receipt and complete exact-environment binding must appear in final durable artifacts |
-| Real pilots | ScriptOps PR #8 and Reconstructor PR #4 exist, remain draft/unmerged, and were human-approved | both belong to a rejected Executor candidate; they do not prove corrected P4 completion |
-| Value evidence | two human reviews and bounded human-time comparison are recorded | P4 requires a larger real-task series, repeatability/failure taxonomy, model/dependency policy and bounded cost/latency disclosure |
-| Repository closure | obsolete Executor PRs were closed; issue #35 closed; PR #61 is the active completion path | provider authority refs are durable evidence refs, not unfinished implementation branches, and must not be deleted as cleanup |
+| GitHub request origin | request actor must match allowed login/id/type/association and `performed_via_github_app` must be present and `null` | verify live request provider records on the final exact head |
+| GitHub decision/freeze | ACCEPT/MODIFY/REJECT exact binding plus the same direct-human provider requirement | six new fresh human ACCEPT events are required for the final six-execution series |
+| Decision freshness | runtime re-samples real UTC after preconditions at effect authorization; caller/precondition-start clock is not an authority input | adversarial exact-head regression must prove expiry during precondition blocks before AAP/effect reservation and mutation |
+| Atomic authority | provider-backed GitHub refs are global one-shot uniqueness; SQLite is crash-safe local evidence/result binding | verify new final-series RESERVED→FINAL chains live and against artifacts |
+| Solution proposal | External Intelligence provenance is exact-bound, post-request, zero-human-edit and effect-capability `NONE` | verify in final exact artifacts |
+| Input/environment identity | exact source commit/tree, workflow SHA and resolved Docker image are integrity-bound | verify exact final workflow/image/source evidence |
+| Runtime | precondition, postcondition, regressions, scope, budgets, link safety, isolation and zero-test fail-closed exist | full exact-head foundation + Docker CI and real-series evidence |
+| Result | only review-required/blocked/failed are legal; merge remains false | prove no active false-success path and exact provider/local result binding |
+| Real pilots | ScriptOps #8 and Reconstructor #4 remain the bounded reviewed draft outputs | final exact candidate requires a new six-execution authority/evidence series; target heads may remain unchanged if independently verified |
+| Value evidence | bounded human review observations exist for the two reviewed patches | exact-head series metrics/failure taxonomy/latency/cost disclosure must satisfy G-15 |
+| Repository closure | PR #61 is the implementation path; authority refs are durable receipts | re-check live closure and Saddle at final Phase C |
 
-## 3. Phase-C falsification that constrains the current implementation
+## 3. Mandatory falsification regressions
 
-### FC-01 — same-ledger replay by changing `run_id`
+### FC-01 — run-id replay
 
-Rejected behavior: effect `packet_id` depended on caller-controlled `run_id`, so another run ID created a new legal AAP key.
+One human decision + one frozen contract produces one stable effect authority key. Changing `run_id` must not create a new effect namespace.
 
-Current corrective invariant:
+### FC-02 — cross-ledger / cross-runner replay
 
-```text
-ONE HUMAN DECISION EVIDENCE REF + ONE FROZEN CONTRACT
-  -> ONE STABLE EFFECT AUTHORITY KEY
-```
+Provider-backed GitHub authority is the global uniqueness root. A fresh SQLite file, runner, restart or concurrent consumer must not create another legal effect.
 
-`run_id` may identify an execution attempt; it may not create new effect authority.
+### FC-03 — solution provenance
 
-### FC-02 — cross-ledger replay
+The proposal must bind producer role, provider/model, exact request/source, prompt SHA-256, post-request generation time, `human_solution_edits=0` and `effect_capability=NONE`.
 
-Rejected behavior: an arbitrary fresh SQLite file created an empty authority namespace.
+### FC-04 — exact environment identity
 
-Current corrective invariant:
+Executor SHA, workflow path/SHA, GitHub run/attempt/job and resolved Docker image must be integrity-bound into action/result evidence.
 
-```text
-GITHUB PROVIDER AUTHORITY RECEIPT = GLOBAL ONE-SHOT NAMESPACE
-LOCAL SQLITE = LOCAL CRASH-SAFE MIRROR / RESULT EVIDENCE
-```
+### FC-05 — zero-test regression
 
-A different runner or local ledger path must observe the same consumed global authority.
+A declared unittest-discovery regression is PASS only when output proves at least one test ran. `Ran 0 tests` is BLOCKED.
 
-### FC-03 — missing solution provenance
+### FC-06 — direct-human provider provenance
 
-Rejected behavior: full replacement candidates existed without durable proof that External Intelligence produced/re-derived them after the human request.
+For both request and decision, non-null or missing `performed_via_github_app` must block before verified request/decision, freeze or effect authority.
 
-Current corrective invariant:
+### FC-07 — expiry crossing during precondition
 
-- producer role = `EXTERNAL_INTELLIGENCE`;
-- provider/model recorded;
-- exact request + target source bound;
-- prompt SHA-256 recorded;
-- generation time later than the human request;
-- `human_solution_edits = 0`;
-- proposer effect capability = `NONE`.
+A decision may be fresh when live-verified and then expire while a legal precondition runs. The runtime must evaluate freshness after preconditions at effect authorization. If expiry has passed, it must stop before AAP/effect authority, mutation and `ACTION_COMPLETED_REVIEW_REQUIRED`.
 
-### FC-04 — environment identity only in logs
+The public runtime/effect-authorization interface must not expose a caller-controlled clock that can recreate the stale-time path.
 
-Rejected behavior: workflow/image identity could be reconstructed from hosted-runner logs but was absent from action/result integrity.
+## 4. Supported product scope
 
-Current corrective invariant:
+The human-selected endpoint remains:
 
-- exact Executor commit;
-- exact workflow path and workflow file SHA-256;
-- exact GitHub run/attempt/job;
-- exact resolved Docker `sha256:` image ID;
-- environment digest bound into the action authorization payload and full identity copied into terminal evidence.
-
-### FC-05 — silent zero-test regression
-
-Rejected behavior: `unittest discover` returned exit 0 while running zero tests and the aggregate report said regressions PASS.
-
-Current corrective invariant:
-
-> A declared unittest-discovery regression is PASS only if its output proves that at least one test ran.
-
-A zero-test result is `BLOCKED`, never PASS.
-
-## 4. Supported candidate scope
-
-The human-selected product endpoint and semantic constraints remain unchanged:
-
-- endpoint: `P4 — REPEATABLE EXECUTOR 1.0`;
+- `P4 — REPEATABLE EXECUTOR 1.0`;
 - trusted intake: GitHub;
-- solution owner: External Intelligence, without effect authority;
-- authorized external repositories: `JTJ07/scriptops` and `JTJ07/creative-os-project-reconstructor`;
-- result endpoint: dedicated branch/commit/draft PR only;
-- merge/deploy/release/new secrets/new credentials/new paid services: forbidden unless separately authorized.
+- solution owner: External Intelligence without effect authority;
+- authorized pilot repositories: `JTJ07/scriptops` and `JTJ07/creative-os-project-reconstructor`;
+- external result endpoint: branch/commit/draft PR only;
+- merge/deploy/release/tag/new secrets/new credentials/new paid services: forbidden unless separately authorized.
 
-## 5. What exists on canonical main
-
-Canonical `main` remains the pre-Phase-B baseline. M0/M1/M2 bounded governance, state, policy, Docker isolation, GP001 controlled execution/replay and request-formation foundations remain the accepted baseline. PR #61 is non-canonical candidate work until a later explicit merge decision.
-
-## 6. Current critical path
+## 5. Current critical path
 
 ```text
-PHASE C FALSE-COMPLETION
-  -> GLOBAL ONE-SHOT AUTHORITY REWORK
-  -> PROVENANCE + ENVIRONMENT BINDING
-  -> ZERO-TEST FAIL-CLOSED
-  -> FOUNDATION / ADVERSARIAL CI
-  -> CORRECTED DIRECT-HUMAN PILOT REQUESTS
-  -> FRESH ACCEPTS
-  -> NEW EXACT-HEAD REAL PILOT SERIES
-  -> HUMAN REVIEWS + P4 SERIES METRICS
+D11 FALSE-COMPLETION: EXPIRY TOCTOU
+  -> RE-SAMPLE FRESHNESS AT EFFECT AUTHORIZATION
+  -> ADVERSARIAL EXPIRY-CROSSING REGRESSION
+  -> CANONICAL STATE RECONCILIATION
+  -> FULL FOUNDATION / DOCKER / GP001 PROOF
+  -> SIX NEW DIRECT-HUMAN ACCEPT EVENTS
+  -> ENABLE FINAL EXACT-HEAD P4 SERIES
+  -> VERIFY NEW ARTIFACTS + PROVIDER RECEIPTS + TARGET REVIEWS
   -> FRESH INDEPENDENT PHASE C
-  -> FINAL HUMAN ACCEPTANCE
+  -> FINAL HUMAN ACCEPTANCE ONLY IF TECHNICAL PASS
 ```
 
-The pilot execution workflow remains intentionally disabled during corrective commits so historical/expired authority cannot fire.
+The consequential P4 workflow remains disabled while corrective commits and fresh-authority preparation are in progress.
 
-## 7. Stop rule
+## 6. Stop rule
 
-Do not claim P4, merge PR #61, merge pilot PRs, release or deploy while any selected G-01–G-18 gate remains unproven.
-
-Do not weaken the approved DONE definition to make the rejected candidate pass.
+Do not claim P4, merge PR #61, merge pilot PRs, release, deploy or tag while any selected G-01–G-18 gate remains unproven. Do not weaken the approved DONE definition to make a rejected candidate pass.
