@@ -27,18 +27,18 @@ class FakeSource:
 
 class P4EvidenceArtifactTests(unittest.TestCase):
     CASES = (
-        ("scriptops", 65),
-        ("reconstructor", 64),
+        ("scriptops", 65, "scriptops-solution-candidate.json"),
+        ("reconstructor", 64, "reconstructor-solution-candidate-corrected.json"),
     )
 
     def test_request_candidate_and_intelligence_provenance_are_bound(self):
-        for name, issue_number in self.CASES:
+        for name, issue_number, candidate_name in self.CASES:
             with self.subTest(name=name):
                 request = json.loads(
                     (ROOT / f"evidence/p4/requests/{name}-request.json").read_text()
                 )
                 candidate = json.loads(
-                    (ROOT / f"evidence/p4/candidates/{name}-solution-candidate.json").read_text()
+                    (ROOT / "evidence/p4/candidates" / candidate_name).read_text()
                 )
                 provenance = json.loads(
                     (ROOT / f"evidence/p4/intelligence/{name}-provenance.json").read_text()
