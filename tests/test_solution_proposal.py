@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from executor.github_trust import verify_github_decision, verify_github_request
 from executor.pilot_contract import (
@@ -62,11 +63,14 @@ def frozen_result():
         now=NOW,
     )
     temp = tempfile.TemporaryDirectory()
-    result = apply_github_decision(
-        draft=draft,
-        decision=decision,
-        ledger=governed_ledger(Path(temp.name) / "ledger.sqlite3"),
-    )
+    with patch("executor.pilot_contract._utc_now", return_value=NOW):
+        result = apply_github_decision(
+            draft=draft,
+            decision=decision,
+            source=source,
+            profile=profile(),
+            ledger=governed_ledger(Path(temp.name) / "ledger.sqlite3"),
+        )
     return temp, result
 
 

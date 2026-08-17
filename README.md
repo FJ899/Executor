@@ -39,6 +39,7 @@ Pliki `.yaml` używają składni JSON, poprawnego podzbioru YAML 1.2.
 - `CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md` — cel produktu i granice ekosystemu;
 - `PHASE_B_AUTHORIZATION.md` — human-selected DONE/trust/effect boundaries oraz jawne semantyczne decyzje człowieka;
 - `PROJECT_COMPLETION_MAP.md` — G-01–G-18 i definicja ukończenia;
+- `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md` — kanoniczne definicje poziomów maturity/proof, nie kolejka implementacyjna;
 - `docs/product/P4_REPEATABILITY_POLICY.md` — P4 retry/repeatability oraz rozdział CONTRACT_ACCEPT vs EFFECT;
 - `docs/architecture/IMPLEMENTATION_INVENTORY.md` — datowany obraz kandydata;
 - `docs/product/P4_GITHUB_PILOT_OPERATOR_GUIDE.md` — operator path;
@@ -96,6 +97,10 @@ SOLUTION OWNER: EXTERNAL INTELLIGENCE
 PILOT CLASS: JTJ07/scriptops + JTJ07/creative-os-project-reconstructor / DRAFT PR ONLY
 
 CURRENT PROVEN PRODUCT LEVEL: P0 — FOUNDATION / ACHIEVED IN DECLARED SCOPE
+P0 ACHIEVED SHA: b092a85e82eb81ec6dc7db4a7064409c6c383359
+P0 EVIDENCE PR: #16
+P0 EVIDENCE RUN ID: 30755381646
+P0 HUMAN DECISION: ACCEPTED THROUGH MERGE OF PR #16
 ACTIVE MATURITY CLAIM: NONE
 P4 REQUIRES: ALL APPLICABLE GATES + FRESH CONSEQUENTIAL EVIDENCE + INDEPENDENT PHASE C + FINAL HUMAN ACCEPTANCE
 ```
