@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from executor.github_authority import GlobalAuthorityReplayError
 from executor.github_trust import (
@@ -47,6 +48,8 @@ class FakeSource:
         self.values = values
 
     def fetch_json(self, url):
+        if url not in self.values:
+            raise GitHubTrustError(f"GitHub provider event is unavailable: {url}")
         return copy.deepcopy(self.values[url])
 
 
@@ -164,11 +167,22 @@ class GitHubTrustTests(unittest.TestCase):
         )
         return source, request, draft, verified
 
+    def apply_final(self, *, source, draft, decision, ledger):
+        with patch("executor.pilot_contract._utc_now", return_value=NOW):
+            return apply_github_decision(
+                draft=draft,
+                decision=decision,
+                source=source,
+                profile=profile(),
+                ledger=ledger,
+            )
+
     def test_exact_github_accept_freezes_once_globally(self):
-        _, _, draft, decision = self.verified_pair()
+        source, _, draft, decision = self.verified_pair()
         with tempfile.TemporaryDirectory() as directory:
             shared = {}
-            result = apply_github_decision(
+            result = self.apply_final(
+                source=source,
                 draft=draft,
                 decision=decision,
                 ledger=governed_ledger(Path(directory) / "ledger-a.sqlite3", shared=shared),
@@ -178,7 +192,8 @@ class GitHubTrustTests(unittest.TestCase):
             self.assertEqual(result["contract"]["status"], "AUTHORIZED_AND_FROZEN")
             self.assertEqual(result["decision_consumption"]["global"]["state"], "FINAL")
             with self.assertRaises(GlobalAuthorityReplayError):
-                apply_github_decision(
+                self.apply_final(
+                    source=source,
                     draft=draft,
                     decision=decision,
                     ledger=governed_ledger(
@@ -222,8 +237,9 @@ class GitHubTrustTests(unittest.TestCase):
     def test_modify_and_reject_never_freeze(self):
         for choice, status in (("MODIFY", "MODIFICATION_REQUIRED"), ("REJECT", "REJECTED")):
             with self.subTest(choice=choice), tempfile.TemporaryDirectory() as directory:
-                _, _, draft, decision = self.verified_pair(decision=choice)
-                result = apply_github_decision(
+                source, _, draft, decision = self.verified_pair(decision=choice)
+                result = self.apply_final(
+                    source=source,
                     draft=draft,
                     decision=decision,
                     ledger=governed_ledger(Path(directory) / "ledger.sqlite3"),

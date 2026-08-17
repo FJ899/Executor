@@ -25,6 +25,10 @@ from executor.github_trust import (
     verify_github_request,
 )
 from executor.governance import validate_project_bundle, validate_task_bundle
+from executor.frozen_pilot_authority import (
+    FrozenPilotAuthorityError,
+    validate_frozen_pilot_authority,
+)
 from executor.pilot_contract import (
     PilotContractError,
     apply_github_decision,
@@ -379,26 +383,29 @@ def main(argv: list[str] | None = None) -> int:
             result = apply_github_decision(
                 draft=draft,
                 decision=decision,
+                source=source,
+                profile=profile,
                 ledger=_governed_ledger(args.ledger, profile),
             )
             _print(result)
             return 0 if result["status"] == "AUTHORIZED_AND_FROZEN" else 2
         if args.command == "run-pilot":
             profile = _github_profile(args.profile)
-            source = GitHubRestClient()
-            request = verify_github_request(
-                source,
-                profile=profile,
-                issue_number=args.issue,
-            )
             frozen = load_json_object(args.frozen)
-            decision = verify_github_decision(
-                source,
-                profile=profile,
-                request=request,
-                comment_id=args.comment,
-                draft_sha256=frozen.get("draft_sha256", ""),
-            )
+            # Post-cutoff authority is the immutable frozen snapshot plus its successful
+            # CONTRACT_ACCEPT receipt. The --issue/--comment flags are compatibility
+            # locators only and are deliberately not used to re-read mutable GitHub state.
+            request, decision = validate_frozen_pilot_authority(frozen)
+            contract = frozen.get("contract", {})
+            request_evidence = contract.get("request_evidence", {})
+            decision_evidence = contract.get("decision_evidence", {})
+            if (
+                args.issue != request_evidence.get("issue_number")
+                or args.comment != decision_evidence.get("comment_id")
+            ):
+                raise PilotContractError(
+                    "run-pilot locators differ from the immutable frozen authority"
+                )
             commit = args.executor_commit or _git_head(args.executor_root)
             environment = build_github_actions_environment(
                 image_id=args.image,
@@ -468,6 +475,7 @@ def main(argv: list[str] | None = None) -> int:
         GlobalAuthorityError,
         PilotBlocked,
         PilotContractError,
+        FrozenPilotAuthorityError,
         SolutionProposalError,
         InvalidTransition,
         RunIntegrityError,

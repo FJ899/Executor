@@ -1,21 +1,46 @@
 name: P4 corrected real pilot series
 
 on:
-  pull_request:
-    types: [synchronize]
+  workflow_dispatch:
+    inputs:
+      scriptops_accept_1:
+        description: Fresh direct-human ScriptOps ACCEPT comment ID 1
+        required: true
+        type: string
+      scriptops_accept_2:
+        description: Fresh direct-human ScriptOps ACCEPT comment ID 2
+        required: true
+        type: string
+      scriptops_accept_3:
+        description: Fresh direct-human ScriptOps ACCEPT comment ID 3
+        required: true
+        type: string
+      reconstructor_accept_1:
+        description: Fresh direct-human Reconstructor ACCEPT comment ID 1
+        required: true
+        type: string
+      reconstructor_accept_2:
+        description: Fresh direct-human Reconstructor ACCEPT comment ID 2
+        required: true
+        type: string
+      reconstructor_accept_3:
+        description: Fresh direct-human Reconstructor ACCEPT comment ID 3
+        required: true
+        type: string
 
-# Corrected Phase-C proof workflow.
-# Six fresh direct-human ACCEPT comments are bound below.
+# Consequential P4 proof is deliberately manual. A corrective PR-head push must never
+# reuse historical ACCEPT comments. Each dispatch must supply six fresh direct-human
+# ACCEPT comment IDs for the exact candidate being proved.
 permissions:
   contents: write
 
 concurrency:
-  group: p4-corrected-series-${{ github.event.pull_request.number }}
+  group: p4-corrected-series-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   scriptops-pilot-series:
-    if: ${{ github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
+    if: ${{ github.ref == 'refs/heads/phase-b/p4-repeatable-executor-1.0' }}
     runs-on: ubuntu-latest
     env:
       EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: JTJ07/Executor
@@ -25,7 +50,7 @@ jobs:
       - name: Checkout exact Executor candidate head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -36,10 +61,26 @@ jobs:
 
       - name: Record exact Executor identity
         run: |
-          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          test "$(git rev-parse HEAD)" = "${{ github.sha }}"
           git rev-parse HEAD > scriptops-executor-head.txt
           git rev-parse 'HEAD^{tree}' > scriptops-executor-tree.txt
           sha256sum .github/workflows/p4-real-pilots-one-shot.yml > scriptops-workflow-sha256.txt
+
+      - name: Validate fresh ScriptOps ACCEPT input shape
+        env:
+          ACCEPT_1: ${{ inputs.scriptops_accept_1 }}
+          ACCEPT_2: ${{ inputs.scriptops_accept_2 }}
+          ACCEPT_3: ${{ inputs.scriptops_accept_3 }}
+        run: |
+          set -euo pipefail
+          for value in "$ACCEPT_1" "$ACCEPT_2" "$ACCEPT_3"; do
+            case "$value" in
+              ''|*[!0-9]*) echo "ACCEPT comment IDs must be positive decimal integers" >&2; exit 1 ;;
+            esac
+          done
+          test "$ACCEPT_1" != "$ACCEPT_2"
+          test "$ACCEPT_1" != "$ACCEPT_3"
+          test "$ACCEPT_2" != "$ACCEPT_3"
 
       - name: Build isolated ScriptOps pilot image with pinned runtime dependencies
         run: |
@@ -66,9 +107,13 @@ jobs:
           test -z "$(git -C target status --porcelain=v1 --untracked-files=all)"
 
       - name: Execute three independently authorized ScriptOps pilots
+        env:
+          ACCEPT_1: ${{ inputs.scriptops_accept_1 }}
+          ACCEPT_2: ${{ inputs.scriptops_accept_2 }}
+          ACCEPT_3: ${{ inputs.scriptops_accept_3 }}
         run: |
           set -euo pipefail
-          SCRIPTOPS_COMMENTS=(5309764334 5309764985 5309765548)
+          SCRIPTOPS_COMMENTS=("$ACCEPT_1" "$ACCEPT_2" "$ACCEPT_3")
           for idx in 1 2 3; do
             comment="${SCRIPTOPS_COMMENTS[$((idx-1))]}"
             git -C target reset --hard daa6e5dc210e09171a530eeffe5601e0e74ae041
@@ -102,7 +147,7 @@ jobs:
               --run-id "p4-scriptops-corrected-00$idx" \
               --image "$EXECUTOR_SANDBOX_IMAGE" \
               --executor-root . \
-              --executor-commit "${{ github.event.pull_request.head.sha }}" \
+              --executor-commit "${{ github.sha }}" \
               > "scriptops-result-$idx.json"
 
             grep -q '"status": "ACTION_COMPLETED_REVIEW_REQUIRED"' "scriptops-result-$idx.json"
@@ -125,6 +170,7 @@ jobs:
               out.append({
                   "iteration": idx,
                   "decision_consumption": frozen.get("decision_consumption"),
+                  "authority_snapshot_sha256": frozen.get("authority_snapshot_sha256"),
                   "effect_consumption": result.get("authority_consumption"),
                   "execution_environment": result.get("execution_environment"),
                   "solution_provenance": result.get("solution_provenance"),
@@ -159,7 +205,7 @@ jobs:
             pilot-evidence/scriptops/runs/**
 
   reconstructor-pilot-series:
-    if: ${{ github.event.pull_request.number == 61 && github.event.pull_request.head.ref == 'phase-b/p4-repeatable-executor-1.0' }}
+    if: ${{ github.ref == 'refs/heads/phase-b/p4-repeatable-executor-1.0' }}
     runs-on: ubuntu-latest
     env:
       EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: JTJ07/Executor
@@ -169,7 +215,7 @@ jobs:
       - name: Checkout exact Executor candidate head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -180,10 +226,26 @@ jobs:
 
       - name: Record exact Executor identity
         run: |
-          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          test "$(git rev-parse HEAD)" = "${{ github.sha }}"
           git rev-parse HEAD > reconstructor-executor-head.txt
           git rev-parse 'HEAD^{tree}' > reconstructor-executor-tree.txt
           sha256sum .github/workflows/p4-real-pilots-one-shot.yml > reconstructor-workflow-sha256.txt
+
+      - name: Validate fresh Reconstructor ACCEPT input shape
+        env:
+          ACCEPT_1: ${{ inputs.reconstructor_accept_1 }}
+          ACCEPT_2: ${{ inputs.reconstructor_accept_2 }}
+          ACCEPT_3: ${{ inputs.reconstructor_accept_3 }}
+        run: |
+          set -euo pipefail
+          for value in "$ACCEPT_1" "$ACCEPT_2" "$ACCEPT_3"; do
+            case "$value" in
+              ''|*[!0-9]*) echo "ACCEPT comment IDs must be positive decimal integers" >&2; exit 1 ;;
+            esac
+          done
+          test "$ACCEPT_1" != "$ACCEPT_2"
+          test "$ACCEPT_1" != "$ACCEPT_3"
+          test "$ACCEPT_2" != "$ACCEPT_3"
 
       - name: Pull isolated Reconstructor pilot image
         run: docker pull python:3.11-slim-bookworm
@@ -202,9 +264,13 @@ jobs:
           test -z "$(git -C target status --porcelain=v1 --untracked-files=all)"
 
       - name: Execute three independently authorized Reconstructor pilots
+        env:
+          ACCEPT_1: ${{ inputs.reconstructor_accept_1 }}
+          ACCEPT_2: ${{ inputs.reconstructor_accept_2 }}
+          ACCEPT_3: ${{ inputs.reconstructor_accept_3 }}
         run: |
           set -euo pipefail
-          RECONSTRUCTOR_COMMENTS=(5309777153 5309777822 5309778702)
+          RECONSTRUCTOR_COMMENTS=("$ACCEPT_1" "$ACCEPT_2" "$ACCEPT_3")
           for idx in 1 2 3; do
             comment="${RECONSTRUCTOR_COMMENTS[$((idx-1))]}"
             git -C target reset --hard defc7b029097284f94136fec54b75c313ac12f68
@@ -238,7 +304,7 @@ jobs:
               --run-id "p4-reconstructor-corrected-00$idx" \
               --image "$EXECUTOR_SANDBOX_IMAGE" \
               --executor-root . \
-              --executor-commit "${{ github.event.pull_request.head.sha }}" \
+              --executor-commit "${{ github.sha }}" \
               > "reconstructor-result-$idx.json"
 
             grep -q '"status": "ACTION_COMPLETED_REVIEW_REQUIRED"' "reconstructor-result-$idx.json"
@@ -261,6 +327,7 @@ jobs:
               out.append({
                   "iteration": idx,
                   "decision_consumption": frozen.get("decision_consumption"),
+                  "authority_snapshot_sha256": frozen.get("authority_snapshot_sha256"),
                   "effect_consumption": result.get("authority_consumption"),
                   "execution_environment": result.get("execution_environment"),
                   "solution_provenance": result.get("solution_provenance"),

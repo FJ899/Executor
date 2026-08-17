@@ -13,6 +13,7 @@ from unittest.mock import patch
 from executor.authority_ledger import AtomicAuthorityLedger
 from executor.github_authority import GlobalAuthorityReplayError
 from executor.github_trust import canonical_json, verify_github_decision, verify_github_request
+from executor.frozen_pilot_authority import validate_frozen_pilot_authority
 from executor.pilot_contract import (
     apply_github_decision,
     build_pilot_draft,
@@ -134,10 +135,16 @@ class PilotRuntimeTests(unittest.TestCase):
         )
         self.ledger_path = root / "authority.sqlite3"
         self.global_shared = {}
-        self.frozen = apply_github_decision(
-            draft=draft,
-            decision=self.decision,
-            ledger=governed_ledger(self.ledger_path, shared=self.global_shared),
+        with patch("executor.pilot_contract._utc_now", return_value=NOW):
+            self.frozen = apply_github_decision(
+                draft=draft,
+                decision=self.decision,
+                source=source,
+                profile=profile(),
+                ledger=governed_ledger(self.ledger_path, shared=self.global_shared),
+            )
+        self.frozen_request, self.frozen_decision = validate_frozen_pilot_authority(
+            self.frozen
         )
         before = (self.fixture.root / "phase6/scriptops-v2-hardening.py").read_bytes()
         replacement = "VALUE = 2\n"
@@ -187,8 +194,8 @@ class PilotRuntimeTests(unittest.TestCase):
         runtime.contract = self.frozen["contract"]
         runtime.contract_sha256 = self.frozen["contract_sha256"]
         runtime.proposal = self.validated
-        runtime.verified_request = self.request
-        runtime.verified_decision = self.decision
+        runtime.verified_request = self.frozen_request
+        runtime.verified_decision = self.frozen_decision
         runtime.ledger = governed_ledger(
             ledger_path or self.ledger_path,
             shared=self.global_shared,
