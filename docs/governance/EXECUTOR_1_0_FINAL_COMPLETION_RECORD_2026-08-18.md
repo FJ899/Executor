@@ -1,12 +1,15 @@
 ---
 document: "Executor 1.0 Final Completion Record"
-status: "FINAL HUMAN-ACCEPTED COMPLETION RECORD"
+status: "FINAL HUMAN-ACCEPTED / VERIFIED INTEGRATED ON MAIN"
 date: "2026-08-18"
 repository: "JTJ07/Executor"
 selected_endpoint: "P4 REPEATABLE EXECUTOR 1.0"
 accepted_candidate: "f60829f90ea2f69dc501582daf109b59676be07e"
 accepted_tree: "1c4c141415505dd26e1fe307ca1aba987782cfba"
-implementation_integration_state: "NOT MERGED TO MAIN"
+integration_candidate: "74058cf9b23b334b364d06dccd8fa623df955f48"
+integration_tree: "0b569a5abc432ba17d82cb3387e705adf3eb68e6"
+main_integration_merge: "d3ebe93e9b9d6ec29ff859e931939c89b57ed468"
+implementation_integration_state: "INTEGRATED ON MAIN / VERIFIED EQUIVALENT"
 release_state: "NOT AUTHORIZED"
 ---
 
@@ -14,11 +17,11 @@ release_state: "NOT AUTHORIZED"
 
 ## 1. Purpose
 
-This record preserves the final completion state of the exact Human-accepted Executor 1.0 candidate.
+This record preserves the final completion and post-integration state of the exact Human-accepted Executor 1.0 candidate.
 
-It does not create acceptance by itself. It records already-existing provider facts, independent verification, and the final Human decision.
+It does not create acceptance or verification by itself. It records already-existing provider facts, independent verification, final Human acceptance, subsequent independent integration-equivalence verification, the separate Human merge authorization, and the resulting integration on `main`.
 
-If this file is merged to `main`, it becomes the durable canonical status record for this completed exact candidate while implementation integration remains a separate state and separate authorization.
+The product-acceptance identity remains the exact candidate that was proved and accepted. Integration is recorded as a later operational state and does not rewrite that historical identity.
 
 ## 2. Accepted exact candidate
 
@@ -30,7 +33,7 @@ TREE: 1c4c141415505dd26e1fe307ca1aba987782cfba
 SELECTED ENDPOINT: P4 REPEATABLE EXECUTOR 1.0
 ```
 
-At final acceptance time PR #61 remained:
+At final Human product acceptance time PR #61 remained:
 
 ```text
 OPEN
@@ -38,13 +41,13 @@ DRAFT
 UNMERGED
 ```
 
-Therefore:
+Therefore the accepted identity remains:
 
 ```text
 PRODUCT COMPLETION / ACCEPTANCE != IMPLEMENTATION MERGE
 ```
 
-The accepted exact SHA remains the immutable identity against which the completion evidence and Human decision were made.
+The later integration does not relabel the integration SHA as the historical Human-accepted candidate.
 
 ## 3. Consequential proof
 
@@ -93,7 +96,7 @@ The verifier found no active runtime false-success path in the accepted evidence
 
 ## 5. G-18 — direct Human provider fact
 
-The Human then supplied the final acceptance directly on GitHub PR #61.
+The Human supplied the final acceptance directly on GitHub PR #61.
 
 Provider fact:
 
@@ -107,9 +110,9 @@ Accepted HEAD: f60829f90ea2f69dc501582daf109b59676be07e
 Accepted TREE: 1c4c141415505dd26e1fe307ca1aba987782cfba
 ```
 
-The Human decision explicitly states that it establishes G-18 PASS and final Human acceptance for the selected P4 Repeatable Executor 1.0 claim.
+The Human decision establishes G-18 PASS and final Human acceptance for the selected P4 Repeatable Executor 1.0 claim.
 
-## 6. Final gate state
+## 6. Final product-completion gate state
 
 ```text
 G-01: PASS
@@ -132,7 +135,7 @@ G-17: PASS
 G-18: PASS
 ```
 
-Final accepted state:
+Final accepted product state:
 
 ```text
 TECHNICAL / PHASE-C EVIDENCE: PASS
@@ -142,12 +145,76 @@ P4 REPEATABLE EXECUTOR 1.0: HUMAN ACCEPTED
 FALSE SUCCESS PATHS FOUND IN FINAL ADVERSARIAL EVIDENCE CHAIN: 0
 ```
 
-## 7. Authority and status separation
+## 7. Controlled integration after product acceptance
 
-The final Human acceptance does **not** authorize or imply:
+G-18 did not authorize implementation merge. Integration was handled as a separate operational phase.
+
+Controlled integration candidate:
 
 ```text
-MERGE OF PR #61
+PR: #69
+HEAD: 74058cf9b23b334b364d06dccd8fa623df955f48
+TREE: 0b569a5abc432ba17d82cb3387e705adf3eb68e6
+FIRST PARENT BASE: main@6fbe564c033eb62ca75066dbb31e3794f1af413c
+ACCEPTED IMPLEMENTATION ANCESTOR: f60829f90ea2f69dc501582daf109b59676be07e
+```
+
+The integration candidate preserved the accepted implementation history rather than rewriting it. Relative to the accepted candidate, the endpoint tree differed only in five later governance/evidence files; the Executor runtime, tests, workflows, trust profiles, policy implementation and P4 evidence-input subtree remained byte-equivalent.
+
+Exact-head integration CI passed:
+
+```text
+Verify Executor foundations: 32165217420 — SUCCESS
+GP001 replay repeatability: 32165217464 — SUCCESS
+```
+
+A fresh independent Integration Equivalence Verifier then returned:
+
+```text
+INTEGRATION EQUIVALENCE: PASS
+RUNTIME EQUIVALENCE: PASS
+GOVERNANCE PRESERVATION: PASS
+EXACT-HEAD CI: PASS
+NEW SIX-PILOT SERIES: NOT REQUIRED
+PR #69: VERIFIED FOR HUMAN-AUTHORIZED MERGE
+```
+
+The Human had separately authorized merge only after verification with:
+
+```text
+AKCEPTUJĘ MERGE VERIFIED EXECUTOR 1.0 INTEGRATION
+```
+
+PR #69 was then merged to `main`.
+
+Final integration fact:
+
+```text
+MAIN MERGE SHA: d3ebe93e9b9d6ec29ff859e931939c89b57ed468
+MAIN TREE: 0b569a5abc432ba17d82cb3387e705adf3eb68e6
+```
+
+The final `main` tree is exactly the verified integration tree, so the merge introduced no post-verification tree change.
+
+GitHub subsequently reports PR #61 as merged because its accepted history is contained in the integrated history. No separate direct merge action for PR #61 was required to produce the final `main` state.
+
+## 8. Authority and status separation
+
+Current state:
+
+```text
+PRODUCT / COMPLETION: HUMAN ACCEPTED
+PROJECT COMPLETION: PASS
+EXACT ACCEPTED CANDIDATE: f60829f90ea2f69dc501582daf109b59676be07e
+VERIFIED INTEGRATION CANDIDATE: 74058cf9b23b334b364d06dccd8fa623df955f48
+IMPLEMENTATION ON MAIN: INTEGRATED
+MAIN: d3ebe93e9b9d6ec29ff859e931939c89b57ed468
+MAIN TREE: 0b569a5abc432ba17d82cb3387e705adf3eb68e6
+```
+
+Neither product acceptance nor integration merge authorizes or implies:
+
+```text
 MERGE OF TARGET PILOT PRs
 RELEASE
 DEPLOYMENT
@@ -159,17 +226,7 @@ BROADER EXTERNAL EFFECTS
 
 Those remain separately Human-authorized decisions.
 
-The current implementation integration state is therefore intentionally distinct:
-
-```text
-PRODUCT / COMPLETION: HUMAN ACCEPTED
-EXACT ACCEPTED CANDIDATE: f60829f90ea2f69dc501582daf109b59676be07e
-IMPLEMENTATION ON MAIN: NOT YET INTEGRATED
-PR #61 MERGE AUTHORITY: NOT GRANTED BY G-18
-RELEASE / DEPLOY / TAG AUTHORITY: NOT GRANTED
-```
-
-## 8. Evidence lineage
+## 9. Evidence lineage
 
 Key durable lineage:
 
@@ -188,12 +245,31 @@ Human-selected P4 goal and Phase-B authority
   -> direct-Human GitHub comment 5323994511
   -> G-18 PASS
   -> PROJECT COMPLETION: PASS
+  -> final completion record PR #68 / merge 6fbe564c...
+  -> controlled integration candidate 74058cf9...
+  -> exact-head foundations + replay CI PASS
+  -> fresh independent integration-equivalence PASS
+  -> Human MERGE VERIFIED EXECUTOR 1.0 INTEGRATION authorization
+  -> integration PR #69 / main merge d3ebe93e...
+  -> post-integration closure
 ```
 
 Historical or superseded evidence remains historical and is not erased. Earlier consumed ACCEPT events must never be reused.
 
-## 9. Next phase boundary
+## 10. Post-integration closure
 
-A future controlled integration of the accepted implementation into `main` is a new operational phase, not a missing completion gate.
+Executor 1.0 is both Human-accepted and integrated on `main` under the verified-equivalence path.
 
-Any integration candidate must preserve the accepted semantics and be verified for equivalence before merge. This record does not authorize that work's merge, release, deployment, or tag.
+```text
+EXECUTOR 1.0: ACCEPT
+PROJECT COMPLETION: PASS
+IMPLEMENTATION INTEGRATION: COMPLETE
+MAIN: d3ebe93e9b9d6ec29ff859e931939c89b57ed468
+TREE: 0b569a5abc432ba17d82cb3387e705adf3eb68e6
+RELEASE: NOT AUTHORIZED
+DEPLOYMENT: NOT AUTHORIZED
+TAG: NOT AUTHORIZED
+TARGET PILOT PR MERGES: NOT AUTHORIZED
+```
+
+Further release, deployment, tagging, target-pilot merge or new product-development work is outside this completed integration phase and requires its own Human authorization.
