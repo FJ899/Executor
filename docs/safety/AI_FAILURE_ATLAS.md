@@ -4,7 +4,7 @@ version: "0.1"
 status: "INITIAL FAILURE-DRIVEN ENGINEERING BASELINE / PENDING REVIEW"
 date: "2026-08-08"
 scope: "failure classes used to attack Executor architecture before implementation"
-repository: "litrgratis-pixel/Executor"
+repository: "JTJ07/Executor"
 ---
 
 # AI Failure Atlas v0.1

@@ -1,10 +1,10 @@
 ---
 document: "REQUEST_TO_CONTRACT_001"
 version: "0.2"
-status: "FORMATION PHASE 1 CANDIDATE / VERIFIED HUMAN AUTHORITY PENDING"
+status: "FORMATION PHASE 1 IMPLEMENTED / GITHUB AUTHORITY CANDIDATE"
 date: "2026-08-09"
 scope: "first governed request-to-contract formation slice for existing GP001"
-repository: "litrgratis-pixel/Executor"
+repository: "JTJ07/Executor"
 ---
 
 # REQUEST_TO_CONTRACT_001

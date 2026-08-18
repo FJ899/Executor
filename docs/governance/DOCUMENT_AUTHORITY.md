@@ -1,13 +1,13 @@
 ---
 document: "Executor Document Authority"
-version: "1.0"
-status: "PROPOSED AUTHORITY RECONCILIATION / PENDING HUMAN REVIEW"
-date: "2026-08-09"
+version: "1.1"
+status: "ACTIVE / HUMAN GOVERNANCE RECONCILED"
+date: "2026-08-17"
 scope: "source-of-truth ownership, precedence and status semantics"
-repository: "litrgratis-pixel/Executor"
+repository: "JTJ07/Executor"
 ---
 
-# Executor Document Authority v1
+# Executor Document Authority v1.1
 
 ## 1. Purpose
 
@@ -15,7 +15,7 @@ This document answers one question:
 
 > When two repository documents appear to disagree, which document is authoritative for which kind of claim?
 
-No single document owns every dimension of Executor. Authority is assigned by subject so that architecture, implementation status and maturity do not silently overwrite one another.
+No single document owns every dimension of Executor. Authority is assigned by subject so architecture, implementation status, human authorization semantics and maturity do not silently overwrite one another.
 
 ## 2. Authority by subject
 
@@ -25,114 +25,92 @@ Authoritative source:
 
 - `CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md`
 
-Owns:
+Owns why Executor exists, its ecosystem responsibility and the boundary that Executor does not own user goals or strategic decisions. It does not own current implementation inventory, current build sequence, maturity proof or later dedicated authority semantics.
 
-- why Executor exists;
-- relationship to Human, Ginseng, Creative OS / canon and deliberation;
-- the boundary that Executor does not own user goals or strategic decisions.
+### Human Phase-B authority semantics
 
-Does not own:
+Authoritative source:
 
-- current implementation inventory;
-- current build sequence after the accepted Build Order baseline;
-- maturity proof status;
-- detailed semantics of a component that received a later dedicated frozen contract.
+- `PHASE_B_AUTHORIZATION.md`.
+
+Owns the human-selected DONE/trust/solution/effect boundaries and later explicit human semantic decisions made inside Phase B, including the 2026-08-17 revocation cutoff:
+
+`FINAL LIVE VERIFICATION AS REVOCATION CUTOFF BOUND INTO SUCCESSFUL GLOBAL CONTRACT_ACCEPT CONSUMPTION`.
+
+Operational implementation/policy may realize this meaning but may not weaken or silently reinterpret it.
+
+### Completion gates
+
+Authoritative source:
+
+- `PROJECT_COMPLETION_MAP.md`.
+
+Owns the selected DONE gates G-01–G-18 and the distinction between implementation evidence, independent verification and final human acceptance. Where a later explicit human decision in `PHASE_B_AUTHORIZATION.md` refines a gate's semantics, the completion map must record that refinement and the explicit human decision wins over older ambiguous wording.
+
+### P4 operational semantics
+
+Authoritative operational policy:
+
+- `docs/product/P4_REPEATABILITY_POLICY.md`.
+
+Owns bounded P4 retry, repeatability, `CONTRACT_ACCEPT`/EFFECT separation, revocation-cutoff execution semantics, failure classification and series requirements. It does not itself authorize human decisions or consequential effects.
 
 ### Architecture / Build Map
 
 Authoritative source:
 
-- `docs/architecture/EXECUTOR_BUILD_MAP.md`
+- `docs/architecture/EXECUTOR_BUILD_MAP.md`.
 
-Owns:
-
-- architectural classification of Executor components;
-- Foundation, Core Structure, Execution Infrastructure, Capability Modules, UX and Extensions;
-- the distinction between architecture and maturity.
-
-Does not prove that any component is implemented.
+Owns architectural classification of Executor components and the distinction between architecture and maturity. It does not prove implementation.
 
 ### Current build sequence
 
 Authoritative source:
 
-- `docs/EXECUTOR_BUILD_ORDER.md`
+- `docs/EXECUTOR_BUILD_ORDER.md`.
 
-Owns:
-
-- the current critical implementation path;
-- GP001-first sequencing;
-- which work is deferred from the critical path.
-
-If an older document describes a different historical implementation order, `EXECUTOR_BUILD_ORDER.md` wins for current work order.
+Owns the current critical implementation path when consistent with later human authorization and the current implementation inventory. A stale historical build-order statement cannot override a later human semantic decision or exact implementation evidence.
 
 ### Implementation reality
 
-Primary snapshot:
+Primary dated snapshot:
 
-- `docs/architecture/IMPLEMENTATION_INVENTORY.md`
+- `docs/architecture/IMPLEMENTATION_INVENTORY.md`.
 
 Supporting truth:
 
-- merged code and tests on `main`;
-- exact merged PR / commit evidence.
+- exact code/tests at the candidate SHA;
+- exact GitHub PR/commit/workflow evidence.
 
-Inventory is a dated snapshot, not permanent authority. A claim that something is implemented must be supported by merged repository state. Open branches and draft PRs do not change `main` implementation status.
+The inventory is a dated snapshot. Open branches and PRs remain non-canonical relative to `main`, but they are the authoritative implementation candidate state when an exact open PR head is explicitly under review. A technical claim must still be supported by the exact code/tests/evidence for that SHA.
 
 ### Product maturity and proof
 
 Authoritative source:
 
-- `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md`
+- `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md`.
 
-Owns:
-
-- definitions of P0, P1, P2, P3 and later maturity levels;
-- evidence required to claim those levels;
-- maturity/proof terminology.
-
-The ladder does **not** select the current implementation task. Build order and maturity are separate concerns.
-
-Current critical path may therefore work on GP001 while no new maturity level is being claimed.
+Owns P-level definitions/evidence terminology. The ladder does not select current implementation work and cannot turn CI success into human acceptance.
 
 ### Human-AI deliberation
 
 Authoritative pattern:
 
-- `docs/philosophy/HUMAN_AI_DELIBERATION_MODEL.md`
+- `docs/philosophy/HUMAN_AI_DELIBERATION_MODEL.md`.
 
-Owns:
-
-- recommendation / critique / synthesis role boundaries;
-- deliberation invariants.
-
-It is a cross-cutting working model, not a maturity axis and not proof.
+It is a cross-cutting working model, not a maturity axis or proof source.
 
 ### Action Authorization Packet
 
 Authoritative semantic contract:
 
-- `ACTION_AUTHORIZATION_PACKET_v1.0.md`
+- `ACTION_AUTHORIZATION_PACKET_v1.0.md`.
 
-Current authoritative status:
+A valid AAP means only that an exact action packet is ready for governed atomic consumption. It is not proof that the action happened, product acceptance or permission to merge/deploy/release.
 
-```text
-CONTRACT: FROZEN
-VALIDATOR: IMPLEMENTED ON MAIN
-POSITIVE VALIDATION RESULT: READY_FOR_ATOMIC_CONSUMPTION
-ATOMIC CONSUMPTION LEDGER: NOT CLAIMED ON MAIN
-ACTION-RESULT BINDING: NOT CLAIMED ON MAIN
-```
+## 3. Technical PASS versus product acceptance
 
-The dedicated AAP contract and merged PR #15 supersede older statements that described AAP as `CONTRACT NOT FROZEN / NOT IMPLEMENTED`.
-
-A valid AAP is not proof that the action occurred.
-
-### Technical PASS versus product acceptance
-
-`PASS` may occur as the result of a test or as an internal technical run-state concept where specifically defined.
-
-It never means, by itself:
+`PASS` may be a test result or specifically defined internal technical state. It never means by itself:
 
 ```text
 HUMAN ACCEPTED
@@ -141,99 +119,46 @@ MERGED
 MATURITY LEVEL ACHIEVED
 ```
 
-Product/maturity acceptance requires the exact evidence and human decision defined by the governing contract or maturity ladder.
+Product/maturity acceptance requires the exact evidence and human decision defined by the governing completion map and maturity contract.
 
-### Golden Path 001
+## 4. Historical evidence versus current evidence
 
-Product scenario definition:
-
-- `docs/product/GOLDEN_PATH_001_FIX_FAILING_TEST.md`
-
-Owns the first user-visible vertical scenario.
-
-The future machine-readable GP001 contract may constrain execution further, but may not silently change the product promise or expand authority.
-
-## 3. Status hierarchy
-
-Always distinguish these questions:
+Exact-SHA evidence remains valid historical evidence for the SHA that produced it even when a later finding supersedes the verdict.
 
 ```text
-ARCHITECTURE
-What belongs in the system?
-
-IMPLEMENTATION
-What exists on main?
-
-BUILD PRIORITY
-What do we build next?
-
-MATURITY / PROOF
-What have we proved?
+VERDICT SUPERSEDED != EVIDENCE ERASED
 ```
 
-A positive answer in one dimension is not a positive answer in another.
+Historical runs, artifacts, provider receipts and consumed human decisions cannot silently satisfy a later exact-candidate gate. In particular, the P4 series executed for `eca7eebbb4bead819cfd35ecd81b3200cc6e461a` is historical-only after the later G-04 revocation-cutoff finding.
 
-Examples:
+## 5. Repository-state rule
 
-```text
-BUILD MAP: ACCEPTED
-MATURITY: NONE
-IMPLEMENTATION: NOT CLAIMED
-```
+Canonical repository state comes from merged `main`. The following are non-canonical until merged:
 
-and:
-
-```text
-AAP CONTRACT: FROZEN
-AAP VALIDATOR: IMPLEMENTED
-AAP ATOMIC LEDGER: NOT IMPLEMENTED ON MAIN
-```
-
-are both valid states.
-
-## 4. Repository-state rule
-
-Canonical runtime/document state comes from merged `main`.
-
-The following are non-canonical until merged:
-
-- draft PRs;
-- open PRs;
+- draft/open PR content;
 - branch-only documents;
-- review comments;
-- generated candidate artifacts;
-- proposed status text in a PR description.
+- mutable PR descriptions/comments;
+- generated candidate artifacts.
 
-They may contain valuable evidence or future decisions, but they do not silently override `main`.
+For an explicitly reviewed candidate such as PR #61, the live exact head/tree defines candidate implementation identity, while immutable exact-head workflows/artifacts/provider receipts establish post-commit facts. Mutable PR prose is locator/status metadata only.
 
-This specifically means that the Product Contract carried by open draft PR #34 is not current canonical repository state.
+## 6. README rule
 
-## 5. README rule
+`README.md` is navigation and current-status summary. It points to authoritative sources but does not override them. If README conflicts with a dedicated authority source, the dedicated source wins and README must be corrected.
 
-`README.md` is a navigation and current-status summary.
+## 7. Naming rule: v1 versus maturity P-levels
 
-It must point to authoritative sources but does not override them. If README conflicts with a dedicated authoritative contract, the dedicated contract wins and README must be corrected.
+`v1` in a filename identifies a document/product-slice version. It does not mean `Executor 1.0`, P4 or production readiness. Maturity is claimed only through the applicable evidence gates and final human acceptance.
 
-## 6. Naming rule: v1 versus maturity P-levels
-
-`v1` in filenames such as `EXECUTOR_V1_PRODUCT_SPEC.md` identifies the version of that document/product slice.
-
-It does not mean:
-
-- `Executor 1.0` maturity;
-- `P4 — REPEATABLE EXECUTOR 1.0`;
-- production readiness.
-
-Maturity is claimed only through `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md` evidence gates.
-
-## 7. Current baseline after PR #42
+## 8. Current candidate boundary
 
 ```text
-ARCHITECTURE / PRODUCT BUILD BASELINE: ACCEPTED
-MATURITY ADVANCEMENT FROM PR #42: NONE
-RUNTIME IMPLEMENTATION CLAIM FROM PR #42: NONE
-CURRENT BUILD TARGET: GP001 VERTICAL PRODUCT PATH
-NEXT CHANGE: DOCUMENT AUTHORITY RECONCILIATION
+CURRENT HUMAN-SELECTED TARGET: P4 REPEATABLE EXECUTOR 1.0
+ACTIVE IMPLEMENTATION PATH: PR #61 / DRAFT / OPEN / UNMERGED
+REVOCATION CUTOFF: HUMAN-APPROVED / FINAL LIVE VERIFIED SNAPSHOT + SUCCESSFUL GLOBAL CONTRACT_ACCEPT
+OLD eca7eeb P4 SERIES: HISTORICAL EVIDENCE ONLY
+NEW CONSEQUENTIAL SERIES: REQUIRES FRESH HUMAN AUTHORITY LATER
+P4: NOT CLAIMED
+PHASE C: REQUIRED AFTER NEW CONSEQUENTIAL EVIDENCE
+FINAL HUMAN ACCEPTANCE: NOT AVAILABLE
 ```
-
-After this reconciliation is accepted, the next critical-path artifact is the machine-readable GP001 contract.

@@ -1,197 +1,128 @@
 ---
 document: "Executor Implementation Inventory"
-version: "0.2"
-status: "OBSERVATIONAL BASELINE / CURRENT THROUGH GP001 REPLAY"
-date: "2026-08-09"
-scope: "current implementation mapped to Executor Build Map and next product slice"
-repository: "litrgratis-pixel/Executor"
-baseline: "main after accepted GP001 real E2E and replay repeatability work"
+version: "0.6"
+status: "CORRECTIVE PHASE B / REVOCATION CUTOFF IMPLEMENTATION"
+date: "2026-08-17"
+scope: "current PR #61 implementation state; no P4 completion claim"
+repository: "JTJ07/Executor"
+baseline: "corrective candidate descends from eca7eebbb4bead819cfd35ecd81b3200cc6e461a"
 ---
 
-# Executor Implementation Inventory v0.2
+# Executor Implementation Inventory v0.6
 
-## 1. Purpose
+## 1. Reading rule
 
-This inventory answers:
+This inventory describes the open PR #61 candidate branch. It is not canonical `main`, not a maturity claim and not product acceptance. Exact implementation identity is always the live PR #61 head/tree. Immutable runs/artifacts/provider receipts are evidence only for the exact SHA that produced them.
 
-> What from the Build Map actually exists today, and what is the next missing product boundary?
+Historical or superseded exact candidates do not satisfy a later exact-candidate gate. Their raw evidence is preserved rather than erased.
 
-It is not a maturity claim and does not promote any P-level.
+- `24107bc8a8186ed1928e098118982efb9d62ffaa` — `FALSE-COMPLETION`, replay/global-uniqueness failure;
+- `7f662cd487c14d62a4838be8c43cef1358869d50` — `BLOCKED`, G-02/G-14;
+- `fdf876e0e2af6d9e4ecea2301ecb686a471037bd` — `FALSE-COMPLETION`, app-mediated GitHub events could be accepted as human;
+- `d11f3dd9d6c484a9c554cd562db46c30e0a333fe` — `FALSE-COMPLETION`, effect-freshness TOCTOU;
+- `eca7eebbb4bead819cfd35ecd81b3200cc6e461a` — the six-run P4 series DID execute and produced raw exact-SHA evidence, but the later G-04 finding showed that mutable GitHub request/comment currentness did not yet have the now-approved contract-freeze revocation cutoff. The old technical evidence remains historical evidence for `eca7eeb...`; its prior completion verdict is superseded and it cannot satisfy a new candidate.
 
-## 2. Status vocabulary
+Every human ACCEPT consumed by those exact candidates, including ACCEPT 001–012, is historical/consumed authority only and must not be reused.
 
-- `EXISTS` — implemented on `main` in a meaningful bounded form;
-- `PARTIAL` — some required behavior exists but the Build Map element is incomplete;
-- `SKELETON` — structure exists without a usable bounded flow;
-- `MISSING` — no implementation evidence found for the required product behavior;
-- `LOCKED / LATER` — intentionally outside the current product slice;
-- `OPEN DRAFT` — work exists outside accepted `main` and is not counted as canonical implementation.
+`VERDICT superseded != EVIDENCE erased`.
 
-## 3. Main-branch inventory
+## 2. Current implementation boundaries
 
-| Build Map element | Status | Current evidence | Product implication |
-|---|---|---|---|
-| F0 Request-to-Contract Boundary | MISSING | no accepted runtime yet converts a user request into a governed draft contract and human-authorized frozen contract | **Primary next product gap** |
-| F1 Contract Interpretation Boundary | EXISTS (bounded) | GP001 machine-readable contract, contract validation and action-boundary revalidation are accepted on `main` | Kernel can execute a frozen bounded contract; it does not yet form one from user language |
-| F2 Source & Workspace Access | EXISTS (bounded) | Controlled External Fixture authority pins exact repository + commit; real GP001 E2E acquired and checked exact source identity | Proven for one controlled fixture, not arbitrary repositories |
-| F3 Execution State Model | PARTIAL | explicit execution lifecycle, action-boundary state revalidation and replay evidence exist; contract-formation lifecycle is not implemented | Formation states must be added without collapsing them into execution state |
-| F4 Evidence Boundary | EXISTS (bounded) | GP001 real E2E records input identity, authority binding, pre/post test state, regression state, scope and review-required status | Evidence is usable for the bounded vertical slice; still not a general product/maturity claim |
-| S0 Contract Formation Flow | MISSING | no accepted `INTERPRET -> PROPOSE -> CRITIQUE -> HUMAN AUTHORIZATION -> FREEZE` implementation | `REQUEST_TO_CONTRACT_001` owns this gap |
-| S1 Runtime Engine | EXISTS (GP001 bounded) | accepted GP001 runtime performs pinned failure reproduction, authorized mutation, verification and report | First execution vertical slice exists |
-| S2 Planning Layer | PARTIAL | GP001 E2E produces a deterministic bounded plan, but no general AI planning layer is claimed | Enough for GP001 execution; formation/planning must stay separate |
-| S3 Action Execution Layer | EXISTS (GP001 bounded) | one exact `WRITE_REPOSITORY` mutation is policy/AAP bound and executed in sandbox | Proven only for the accepted fixture/action class |
-| S4 Verification Loop | EXISTS (GP001 bounded) | target FAIL before, target PASS after, 13-test regression PASS, compileall PASS, exact scope and protected-material checks | First real verification loop exists |
-| I1 Execution State & Working Memory | EXISTS (bounded) | run state, checkpoints, execution artifacts and replay observations exist | Do not add strategic/user-goal memory to Executor |
-| I2 Context Management | PARTIAL | execution context is pinned and bounded; formation context does not yet distinguish user facts from AI inference in a runtime artifact | Request-to-contract must introduce provenance/assumption separation |
-| I3 Tool Management | EXISTS (bounded) | policy, action authorization, exact fixture binding, no generic external-project capability | Preserve capability/authority separation during formation work |
-| I4 Sandbox & Isolation | EXISTS (GP001 bounded) | real hosted-runner Docker execution, immutable image identity and cleanup checks passed | Proven for one bounded fixture |
-| C1 Software Engineering Capability | PARTIAL / FIRST SLICE WORKS | GP001 real E2E and repeatability prove one failing-test repair path | Capability is real but still narrow and not user-accessible from natural language |
-| C2 Analysis Capability | LOCKED / LATER | not required for current slice | Do not build now |
-| C3 Research Capability | LOCKED / LATER | not required for `REQUEST_TO_CONTRACT_001` | Do not build unless a measured formation blocker requires it |
-| C4 Operational Capability | LOCKED / LATER | not required for current slice | Defer |
-| UX1 Request Surface | MISSING | accepted product path still begins from a prepared contract/harness rather than a normal user request | **Primary user-facing gap** |
-| UX2 Contract Decision Surface | MISSING | no accepted draft-contract review surface with accept/modify/reject | Build in `REQUEST_TO_CONTRACT_001` |
-| UX3 Execution Interaction Model | PARTIAL | GP001 report is concise and review-oriented, but user does not yet enter through request formation | Reuse after contract authorization |
-| UX4 Result Report | EXISTS (GP001 bounded) | real GP001 ends in `ACTION_COMPLETED_REVIEW_REQUIRED` with evidence and human decision required | Preserve terminal semantics |
-| LEVEL 6 Extensions | LOCKED / LATER | multi-agent, marketplace, broad integrations not required | Explicitly defer |
+| Boundary | Current implementation rule | Remaining exact-candidate proof |
+|---|---|---|
+| GitHub request origin | request actor must match allowed login/id/type/association and `performed_via_github_app` must be present and `null` | re-prove through new final-live snapshot tests and later fresh exact-series evidence |
+| GitHub decision/freeze | `github-pilot-decide` performs final live request+decision verification immediately before `CONTRACT_ACCEPT`; exact provider evidence is snapshotted and SHA-bound into global consumption; only successful binding creates `AUTHORIZED_AND_FROZEN` | FC-09–FC-17 + exact-head non-consequential CI now; fresh real ACCEPT series later |
+| Revocation cutoff | PRE-CUTOFF provider edit/delete/mismatch/expiry blocks. Failed global consumption creates no authority and retry requires new final verification. POST-CUTOFF mutation does not retroactively revoke a successfully frozen contract | verify adversarial matrix and independent replay of snapshot/receipt relationship |
+| Stage-B authority source | `run-pilot` validates immutable frozen request/decision snapshot plus successful FINAL `CONTRACT_ACCEPT` local/global receipts; mutable issue/comment currentness is not a post-cutoff revocation source | prove no live trust re-fetch in run-pilot and replay frozen evidence independently |
+| EFFECT freshness | runtime re-samples UTC after preconditions; frozen decision expiry is effect receipt `not_after`; provider reservation `committer.date` must be `< not_after` | preserve existing expiry/provider-time regressions and later fresh receipts |
+| Atomic authority | provider-backed GitHub refs are global one-shot uniqueness; SQLite is crash-safe local evidence/result binding | preserve concurrent/replay/crash/result-binding tests for both contract and effect authority |
+| Solution proposal | External Intelligence provenance is exact-bound, post-request, zero-human-edit and effect-capability `NONE` | preserve exact-head tests and later fresh artifact verification |
+| Input/environment identity | exact source commit/tree, workflow SHA and resolved Docker image are integrity-bound | exact-head foundation/GP001 now; later fresh P4 workflow/image/source evidence |
+| Runtime | precondition, postcondition, regressions, scope, budgets, link safety, isolation and zero-test fail-closed exist | full foundation + Docker/security CI |
+| Result | only review-required/blocked/failed are legal; merge remains false | preserve no-false-success and exact result binding |
+| Real pilots | ScriptOps #8 and Reconstructor #4 remain bounded reviewed draft outputs | no new consequential series in this corrective step; target heads remain historical/review evidence until fresh proof |
+| Value evidence | bounded human review observations remain historical observations | fresh exact-candidate consequential proof must be generated later before G-15 can pass |
+| Repository closure | PR #61 remains the implementation path; authority refs are durable receipts | re-check PR/pilot/Saddle state after exact-head non-consequential CI |
 
-## 4. Accepted vertical-slice evidence
+## 3. Mandatory falsification regressions
 
-The following sequence has been accepted on the product critical path:
+Existing FC-01–FC-08 remain mandatory:
 
-```text
-PRODUCT / BUILD BASELINE
-      -> DOCUMENT AUTHORITY RECONCILIATION
-      -> GP001 MACHINE-READABLE CONTRACT
-      -> CONTROLLED EXTERNAL FIXTURE AUTHORITY
-      -> FIRST VERTICAL RUNTIME SLICE
-      -> ADVERSARIAL GP001 VALIDATION
-      -> REAL GP001 E2E
-      -> REPEATABILITY / REPLAY
-```
+- FC-01 run-id replay;
+- FC-02 cross-ledger/cross-runner replay;
+- FC-03 solution provenance;
+- FC-04 exact environment identity;
+- FC-05 zero-test regression;
+- FC-06 direct-human provider provenance;
+- FC-07 expiry crossing during precondition;
+- FC-08 provider-time expiry.
 
-Observed bounded result:
+The accepted revocation cutoff adds:
 
-```text
-exact input identity: MATCH
-controlled fixture authority: BOUND
-pre-change target test: FAIL
-post-change target test: PASS
-regression checks: PASS
-scope: ALLOWED
-protected material: UNCHANGED
-terminal status: ACTION_COMPLETED_REVIEW_REQUIRED
-human decision required: true
-replay contractual equivalence: EQUIVALENT
-replay ephemeral identity: DISTINCT
-```
+### FC-09 — PRE-CUTOFF ACCEPT EDIT
+Edited exact ACCEPT before final live verification blocks before `CONTRACT_ACCEPT`; no frozen contract.
 
-This establishes a repeatable bounded execution slice. It does not establish general product maturity.
+### FC-10 — PRE-CUTOFF ACCEPT DELETE
+Deleted exact ACCEPT before final live verification blocks before `CONTRACT_ACCEPT`; no frozen contract.
 
-## 5. Falsification history that now constrains implementation
+### FC-11 — PRE-CUTOFF REQUEST MUTATION
+A materially changed request invalidates the old decision/draft binding. The old decision cannot authorize the changed request.
 
-### F-1 — Caller-forged authority
+### FC-12 — FINAL VERIFY + FAILED GLOBAL CONSUMPTION
+A successful final live verification whose global `CONTRACT_ACCEPT` consumption fails creates no authority. Retry requires fresh provider verification; the failed snapshot is not dormant authority.
 
-Closed by removing caller-owned authority context from the public GP001 path.
+### FC-13 — POST-CUTOFF ACCEPT EDIT
+After successful `CONTRACT_ACCEPT` freeze, later ACCEPT edit does not retroactively revoke the frozen authority. Normal EFFECT controls still apply.
 
-### F-2 — Implementation-level policy bypass
+### FC-14 — POST-CUTOFF ACCEPT DELETE
+After successful freeze, later deletion of the original ACCEPT does not retroactively revoke the frozen authority.
 
-Closed by moving Controlled External Fixture authority into verified policy binding rather than runtime hard-code.
+### FC-15 — POST-CUTOFF REQUEST EDIT
+After successful freeze, later request edit does not change the frozen request snapshot or contract meaning.
 
-### F-3 — Post-validation authority drift
+### FC-16 — SNAPSHOT SUBSTITUTION
+Altered snapshot/hash/provider identity that does not match the consumed `CONTRACT_ACCEPT` receipt blocks.
 
-Closed by revalidating frozen contract-derived authority-critical state before consequential actions.
+### FC-17 — CONTRACT_ACCEPT REPLAY
+Same consumed `CONTRACT_ACCEPT` cannot produce another freeze via different `run_id`, fresh SQLite or another consumer where provider one-shot state is shared.
 
-Formation work must preserve the same discipline:
+## 4. Supported product scope
 
-> A generated interpretation or draft must not become authority merely because it exists in memory or was produced by an AI component.
+The human-selected endpoint remains:
 
-## 6. Current primary product gap
+- `P4 — REPEATABLE EXECUTOR 1.0`;
+- trusted intake: GitHub;
+- solution owner: External Intelligence without effect authority;
+- authorized pilot repositories: `JTJ07/scriptops` and `JTJ07/creative-os-project-reconstructor`;
+- external result endpoint: branch/commit/draft PR only;
+- merge/deploy/release/tag/new secrets/new credentials/new paid services: forbidden unless separately authorized.
 
-The largest gap is no longer the execution vertical slice.
+No scope or ownership expansion is introduced by the revocation-cutoff correction.
 
-It is the missing front door:
+## 5. Consequential workflow state
+
+The old six-run series for `eca7eeb...` ran successfully as a workflow and remains immutable historical raw evidence for that exact SHA. It is not current consequential proof after the later G-04 finding.
+
+The P4 real-pilot workflow is now **manual `workflow_dispatch` only** and requires six explicitly supplied fresh ACCEPT comment IDs. A PR-head `synchronize` event must not execute the consequential series and the workflow must not contain the historical ACCEPT 001–012 IDs.
+
+This corrective step stops before fresh human authority. No new six-run series is authorized or run here.
+
+## 6. Current critical path
 
 ```text
-USER REQUEST
-  -> INTERPRETATION
-  -> DRAFT TASK CONTRACT
-  -> CONTRACT CRITIQUE
-  -> HUMAN AUTHORIZATION
-  -> FROZEN TASK CONTRACT
-  -> EXISTING GP001 RUNTIME
+HUMAN-APPROVED REVOCATION CUTOFF
+  -> FINAL-LIVE SNAPSHOT + CONTRACT_ACCEPT BINDING
+  -> POST-CUTOFF FROZEN-AUTHORITY EXECUTION SOURCE
+  -> FC-09..FC-17
+  -> G-02 CURRENT-STATE RECONCILIATION
+  -> FULL NON-CONSEQUENTIAL FOUNDATION / DOCKER / GP001 PROOF
+  -> STOP BEFORE FRESH HUMAN AUTHORITY
+  -> SIX NEW DIRECT-HUMAN ACCEPT EVENTS (LATER, HUMAN)
+  -> MANUAL NEW EXACT-HEAD P4 SERIES (LATER)
+  -> FRESH INDEPENDENT PHASE C (LATER)
+  -> FINAL HUMAN ACCEPTANCE ONLY IF ALL GATES PASS
 ```
 
-This is the boundary between ordinary AI assistance and governed execution.
+## 7. Stop rule
 
-## 7. Immediate implementation targets
-
-### GAP-008 — Governed contract formation
-
-Implement formation states that cannot directly execute:
-
-```text
-REQUEST_RECEIVED
-INTERPRETATION_PROPOSED
-DRAFT_CONTRACT_CREATED
-DRAFT_CRITIQUED
-AWAITING_HUMAN_AUTHORIZATION
-```
-
-Only an explicit authorization transition may create `AUTHORIZED_AND_FROZEN`.
-
-### GAP-009 — User/AI provenance
-
-The draft must distinguish at least:
-
-- what the user actually supplied;
-- what the system inferred;
-- what remains unresolved;
-- what was discovered but remains out of scope.
-
-### GAP-010 — Contract critique
-
-Before authorization, detect/report:
-
-- silent scope expansion;
-- unsupported target/repository/commit inference;
-- weakened success criteria;
-- hidden out-of-scope work.
-
-Critique cannot authorize its own correction.
-
-### GAP-011 — Human contract decision surface
-
-Expose:
-
-```text
-ACCEPT
-MODIFY
-REJECT
-```
-
-and ensure a draft remains non-executable until `ACCEPT` or an equivalent superior-authority action.
-
-### GAP-012 — GP001 semantic compatibility
-
-The first authorized formation output must freeze into a task contract semantically compatible with the already accepted GP001 contract/runtime, without changing GP001's execution authority or success criteria.
-
-## 8. Stop rule
-
-Until `REQUEST_TO_CONTRACT_001` is proven end to end, do not implement:
-
-- generalized natural-language contract generation;
-- separate multi-agent services;
-- autonomous contract authorization;
-- long-term Executor-owned project memory;
-- GP002 merely to add breadth;
-- generalized research capability;
-- marketplace;
-- enterprise integrations;
-- autonomous deployment.
-
-The next product question is not whether Executor can do more.
-
-It is:
-
-> Can Executor translate one bounded human request into a truthful draft, keep interpretation separate from authority, obtain human authorization, and hand the frozen contract to the already proven execution kernel?
+Do not claim P4, merge PR #61, merge pilot PRs, release, deploy or tag while any selected G-01–G-18 gate remains unproven. Do not weaken the approved DONE definition to make a rejected/superseded candidate pass.

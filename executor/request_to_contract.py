@@ -204,6 +204,14 @@ class RequestToContract001:
 
         self._understood_objective = objective
         self._proposed_task = copy.deepcopy(proposed_task_contract)
+        self._provenance.append(
+            ProvenanceRecord(
+                path="$.understood_objective",
+                source="MODEL",
+                value=objective,
+                note="interpretation proposal; not authoritative user intent",
+            )
+        )
         for path, value, confidence in model_inferences:
             self._provenance.append(
                 ProvenanceRecord(
@@ -218,6 +226,29 @@ class RequestToContract001:
         ]
         self._open_questions = [item.strip() for item in open_questions if item.strip()]
         self.status = FormationStatus.INTERPRETATION_PROPOSED
+
+    def propose_canonical_gp001(
+        self,
+        *,
+        understood_objective: str,
+        out_of_scope_discoveries: Iterable[str] = (),
+        open_questions: Iterable[str] = (),
+    ) -> None:
+        repositories = self._canonical_task.get("repositories", {})
+        golden_path = self._canonical_task.get("golden_path", {})
+        target = repositories.get("target", {}) if isinstance(repositories, dict) else {}
+        problem = golden_path.get("problem", {}) if isinstance(golden_path, dict) else {}
+        self.propose_interpretation(
+            understood_objective=understood_objective,
+            proposed_task_contract=self._canonical_task,
+            model_inferences=(
+                ("$.target.repository", target.get("name"), None),
+                ("$.target.commit", target.get("commit"), None),
+                ("$.target.test", problem.get("target_test"), None),
+            ),
+            out_of_scope_discoveries=out_of_scope_discoveries,
+            open_questions=open_questions,
+        )
 
     def create_draft(self) -> dict[str, Any]:
         if self.status is not FormationStatus.INTERPRETATION_PROPOSED:

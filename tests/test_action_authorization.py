@@ -309,6 +309,39 @@ class ActionAuthorizationTest(unittest.TestCase):
         self.assertEqual(result.status, ValidationStatus.VALID)
         self.assertEqual(decision.issuer_role, "USER")
 
+    def test_bounded_external_repository_does_not_enable_generic_external_work(self):
+        packet = self.packet(
+            issuer_role="USER",
+            issuer_id="user-001",
+            evidence_ref="evidence:user-001",
+            action_kind="EXTERNAL_PROJECT_EXECUTION",
+            external_project=True,
+            paths=["phase6/scriptops-v2-hardening.py"],
+        )
+        packet["bindings"]["repository_commits"] = {"JTJ07/scriptops": COMMIT}
+        self.rehash(packet)
+        context = self.context(
+            repository_commits={"JTJ07/scriptops": COMMIT},
+            allowed_paths=("phase6/**",),
+            bounded_external_repositories=("JTJ07/scriptops",),
+        )
+        result, decision = self.validate(packet, context=context)
+        self.assertEqual(result.status, ValidationStatus.VALID)
+        self.assertIsNotNone(decision)
+
+        blocked_context = replace(
+            context,
+            bounded_external_repositories=(
+                "JTJ07/creative-os-project-reconstructor",
+            ),
+        )
+        self.assert_blocked(
+            packet,
+            "AUTHORIZATION_CAPABILITY_DENIED",
+            context=blocked_context,
+            rehash=False,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

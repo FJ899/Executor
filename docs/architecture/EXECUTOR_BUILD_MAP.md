@@ -4,7 +4,7 @@ version: "1.1"
 status: "USER ACCEPTED DIRECTION / ACTIVE BASELINE CANDIDATE"
 date: "2026-08-09"
 scope: "canonical architectural decomposition of Executor System"
-repository: "litrgratis-pixel/Executor"
+repository: "JTJ07/Executor"
 ---
 
 # Executor Build Map v1.1

@@ -1,21 +1,21 @@
 ---
 document: "Executor Project Completion Map"
-version: "1.0"
-status: "PHASE A CANDIDATE / HUMAN SEMANTIC APPROVAL REQUIRED"
-date: "2026-08-15"
+version: "1.1"
+status: "HUMAN SEMANTICALLY APPROVED / PHASE B ACTIVE"
+date: "2026-08-17"
 target_repository: "JTJ07/Executor"
 baseline_branch: "main"
-baseline_sha: "728d23e56ec9f76fb7a37673ceb20efccf91e03d"
+baseline_sha: "5e254811023553d1abe8bdbb3535b8150aaf19ad"
 protocol: "JTJ07/Saddle/evidence/PROJECT_COMPLETION_AUTONOMY_TEST_PROTOCOL_2026-08-15.md"
-phase: "A / COMPLETION MAP ONLY"
-implementation_changes: "NONE"
+phase: "B / IMPLEMENTATION AND EVIDENCE"
+implementation_changes: "AUTHORIZED ON A WORK BRANCH / REVIEW REQUIRED"
 ---
 
 # PROJECT COMPLETION MAP — Executor
 
 ## 0. Status and reading rules
 
-This document is the Phase-A completion map. It is a proposal for one human semantic review, not an implementation authorization, product acceptance, maturity claim, provider selection, merge decision, or release decision.
+This document is the human-approved completion map. `PHASE_B_AUTHORIZATION.md` freezes the selected semantic forks and activates work on a review branch. It is not product acceptance, a maturity claim, an implementation merge decision or a release decision. Historical Phase-A inventory/fork analysis is intentionally preserved below as provenance; later explicit Phase-B decisions and the 2026-08-17 G-04 clarification govern current semantics where older wording was unresolved.
 
 Semantic labels used below:
 
@@ -35,7 +35,7 @@ EXECUTION != PROOF
 AI RECOMMENDATION != HUMAN DECISION
 ```
 
-No `HUMAN_REQUIRED` option is selected by this map. `DONE` is deliberately conditional on the human choosing the completion endpoint and the semantic forks in section 7.
+The human selected HR-1 C, HR-2 A, HR-3 GitHub, HR-4 A and HR-5 C on 2026-08-16. The exact authority limits are recorded in `PHASE_B_AUTHORIZATION.md`. Final acceptance and release remain human-owned.
 
 ### 0.1 Adaptive completion control
 
@@ -143,7 +143,7 @@ Completing Executor does not mean turning this repository into:
 - a product that self-certifies correctness or acceptance;
 - a generalized IAM, agent marketplace, multi-agent platform or provider-routing framework.
 
-### 2.3 Unresolved completion-horizon ambiguity
+### 2.3 Completion-horizon decision history
 
 `FACT`: the repository defines three materially different possible end states:
 
@@ -151,7 +151,7 @@ Completing Executor does not mean turning this repository into:
 - `P3 — REAL VALUE MVP`, named by the authoritative ladder as the first true product MVP;
 - `P4 — REPEATABLE EXECUTOR 1.0`, the first explicit repeatable 1.0 level.
 
-`HYPOTHESIS`: “completion of the whole project” most naturally requires more than the current technical slice, but the repository does not contain a later human decision selecting one of these three as the terminal completion claim. This is `HR-1`, not an AI choice.
+`DECISION`: this Phase-A ambiguity is resolved. The human selected `HR-1 C — P4 REPEATABLE EXECUTOR 1.0` on 2026-08-16, as recorded in `PHASE_B_AUTHORIZATION.md`. The alternatives below remain historical decision context, not an open fork.
 
 ## 3. Current state
 
@@ -218,7 +218,7 @@ The whole project may be called complete only when all common conditions below a
 2. One canonical product/state document names the selected terminal level, supported task class, non-goals and exact evidence required for acceptance.
 3. A bounded user can enter through the selected real front door without hand-authoring internal task YAML, AAPs, hashes or runtime objects.
 4. Request-origin evidence and the exact `ACCEPT`/`MODIFY`/`REJECT` decision are externally verifiable under the selected trust profile and bound to the exact request, review material and draft.
-5. Only a valid, fresh, non-replayed `ACCEPT` can create the exact `AUTHORIZED_AND_FROZEN` contract; `MODIFY`, `REJECT`, expiry, revocation, mismatch and forged/model-generated decisions remain non-executable.
+5. Only an exact final-live-verified, fresh, non-replayed `ACCEPT` whose exact provider snapshot is successfully globally consumed as `CONTRACT_ACCEPT` can create `AUTHORIZED_AND_FROZEN`. Before that cutoff, edit/delete/mismatch/expiry/revocation blocks. Failed global consumption creates no authority and retry requires new final live verification. After successful `CONTRACT_ACCEPT`, later source-provider mutation does not retroactively revoke or alter the frozen contract.
 6. The solution proposal/plan is produced by the selected intelligence boundary without the user supplying the code fix and without giving the proposer effect authority.
 7. The consequential action is authorized against the exact current frozen contract, policy, input commit, path and before/after content; authorization is atomically consumed once and its terminal result is durably bound.
 8. Execution is isolated, bounded and fail-closed. The target failure is reproduced before mutation; target and required regressions pass after mutation; protected material and scope are verified.
@@ -232,7 +232,7 @@ The whole project may be called complete only when all common conditions below a
 
 ### 4.2 Completion endpoint alternatives (`HR-1`)
 
-No alternative below is selected in Phase A.
+These are the historical Phase-A alternatives. `HR-1 C — P4 Repeatable Executor 1.0` is selected for Phase B.
 
 #### A — Bounded Executor v1 functional slice
 
@@ -277,9 +277,9 @@ Consequence: best matches a repeatable “whole product 1.0” claim, but requir
 
 | ID | Material gap | Depends on | Decision owner | DONE WHEN |
 |---|---|---|---|---|
-| GAP-01 | Terminal completion level is not selected | none | `HUMAN_REQUIRED` (`HR-1`) | A, B or C is explicitly selected and its claim language is frozen |
-| GAP-02 | Trusted front-door placement is unresolved | GAP-01 | `HUMAN_REQUIRED` (`HR-2`) | A1, strengthened A2 or explicit scope reduction is selected |
-| GAP-03 | Concrete trust provider/profile and evidence semantics are absent | GAP-02 | `HUMAN_REQUIRED` (`HR-3`) | provider/domain, subject namespace, request-origin event, decision event, freshness, replay, revocation and failure policy are approved |
+| GAP-01 | `RESOLVED` — terminal completion level | none | `HUMAN` (`HR-1`) | `C — P4 Repeatable Executor 1.0` selected in `PHASE_B_AUTHORIZATION.md` |
+| GAP-02 | `RESOLVED` — trusted front-door placement | GAP-01 | `HUMAN` (`HR-2`) | `A — external governed request intake` selected |
+| GAP-03 | `RESOLVED FOR CURRENT PILOT` — trust provider/profile and authority semantics | GAP-02 | `HUMAN` (`HR-3`) | GitHub + `trust_profiles/github-p4-pilots.json` selected; revocation cutoff refined by the 2026-08-17 human decision |
 | GAP-04 | Canonical docs/state contradict merged implementation and current owner | GAP-01–03 for semantic wording | mixed: human approves semantics; implementation is `AI_DELEGABLE` | authoritative docs agree with exact `main`, current owner and selected DONE |
 | GAP-05 | Normal request surface is not on `main` | GAP-04 only for final wording | `AI_DELEGABLE` | bounded CLI/API passes happy and fail-closed paths; PR #59 is merged, revised or replaced on current base |
 | GAP-06 | Verified `ACCEPT/MODIFY/REJECT` consumption and freeze do not exist | GAP-02–03, GAP-05 | implementation `AI_DELEGABLE` within approved trust contract | exact fresh decision creates only the legal state; attacks fail closed |
@@ -299,7 +299,7 @@ Consequence: best matches a repeatable “whole product 1.0” claim, but requir
 The arrows below express hard prerequisites and currently known constraint relationships. They are not a fixed execution schedule. Subject to those prerequisites, each next action is selected by the adaptive completion-control rule in section 0.1.
 
 ```text
-CURRENT STATE: main@728d23e / P0 + bounded GP001 + formation phase 1
+HISTORICAL PHASE-A DEPENDENCY BASELINE: main@728d23e / P0 + bounded GP001 + formation phase 1
   |
   +--> HR-1 SELECT COMPLETION ENDPOINT (A / B / C)
   +--> HR-2 SELECT TRUSTED FRONT-DOOR PLACEMENT
@@ -376,7 +376,7 @@ The human must name the concrete provider/profile, not only the class, before im
 
 | Option | Meaning | Enables | Sacrifices / risk |
 |---|---|---|---|
-| A | external Intelligence/Saddle supplies a proposal through a frozen interface; Executor only governs effects | preserves Executor's accepted responsibility boundary and provider independence | requires a stable cross-system proposal/evidence contract and integration environment |
+| A | External Intelligence supplies a proposal through a frozen interface; Executor only governs effects; Saddle may validate intent conformity but does not select/author the solution path | preserves semantic ownership and provider independence | requires a stable cross-system proposal/evidence contract and integration environment |
 | B | an Executor-System cognitive adapter calls one selected model/provider | self-contained first product experience | adds provider credentials, spend, model-version policy and cognitive responsibility inside this product system |
 | C | deterministic pre-authored transformations only | no model cost or provider dependency | remains a controlled transformation demo; cannot prove “sensible fix without human supplying solution” for a real problem |
 
@@ -445,7 +445,7 @@ At the exact completion candidate SHA, every applicable gate must be recorded as
 | G-01 Goal/endpoint | recorded human approval of goal, DONE endpoint and HR choices |
 | G-02 Canonical truth | automated/manual document-state audit finds no material contradiction |
 | G-03 Request origin | forged, substituted, retroactive and wrong-subject origin evidence blocks |
-| G-04 Decision/freeze | only exact fresh ACCEPT freezes; MODIFY/REJECT/mismatch/replay/revocation attacks block |
+| G-04 Decision/freeze | only exact final-live-verified ACCEPT may create CONTRACT_ACCEPT; pre-cutoff edit/delete/mismatch/expiry/replay blocks; the exact snapshot becomes immutable authority only after successful global CONTRACT_ACCEPT consumption/result binding; failed consumption creates no freeze and retry re-verifies live state; post-cutoff source mutation does not retroactively revoke the frozen contract; snapshot substitution/replay remains fail-closed |
 | G-05 Solver separation | solution is not hand-authored by user and proposer has no effect authority |
 | G-06 Atomic authority | concurrent attempts produce exactly one consumption and one result binding; crash recovery is fail-closed |
 | G-07 Input identity | repository, commit, source tree, workflow and sandbox image match exact approved identities |
@@ -530,10 +530,34 @@ CONTINUATION: AUTHORIZED UNTIL ALL SELECTED DONE GATES PASS OR AN OBJECTIVE EXTE
 MERGE / RELEASE / DEPLOY AUTHORITY: [state explicitly]
 ```
 
-Until this gate is supplied, the correct project state is:
+This gate was subsequently supplied in `PHASE_B_AUTHORIZATION.md`. The current state is:
 
 ```text
-PHASE A MAP READY FOR HUMAN REVIEW
-PROJECT COMPLETION NOT AUTHORIZED
-PROJECT COMPLETION NOT CLAIMED
+PHASE B AUTHORIZED WITHIN RECORDED BOUNDARIES
+P4 NOT CLAIMED
+FINAL HUMAN ACCEPTANCE NOT RECORDED
 ```
+
+
+## 13. G-04 revocation-cutoff clarification — HUMAN DECISION (2026-08-17)
+
+This section records and governs the revocation meaning used by section 4.1(5) and gate G-04. The human explicitly accepted:
+
+```text
+AKCEPTUJĘ REVOCATION CUTOFF AT GLOBAL CONTRACT_ACCEPT CONSUMPTION
+AKCEPTUJĘ FINAL LIVE VERIFICATION AS REVOCATION CUTOFF BOUND INTO SUCCESSFUL GLOBAL CONTRACT_ACCEPT CONSUMPTION
+```
+
+Normative linearization:
+
+```text
+MUTABLE REQUEST / ACCEPT
+  -> FINAL LIVE PROVIDER VERIFICATION
+  -> EXACT IMMUTABLE SNAPSHOT S
+  -> GLOBAL CONTRACT_ACCEPT(SHA256(S))
+  -> if successful and durably bound: AUTHORIZED_AND_FROZEN(S)
+```
+
+Before final live verification, mutable-provider edit/deletion/mismatch/expiry is revocation and must block. If final verification produces `S` but global `CONTRACT_ACCEPT` fails, `S` is not authority and may not become authority later; retry requires a new final live provider verification. If exact `S` is successfully consumed and frozen, a provider mutation after the final verification does not retroactively revoke `S`, including mutation occurring after the verification read but before successful global consumption; the accepted cutoff is the final verification snapshot conditional on successful consumption. GitHub cross-resource atomicity is not claimed.
+
+After successful freeze, consequential EFFECT authorization remains a separate gate and must use the immutable frozen snapshot + successful `CONTRACT_ACCEPT` receipt together with all existing AAP, policy, provider-time, local-consumption, scope, isolation and result-binding controls. Mutable source GitHub state must not silently become a post-cutoff revocation mechanism.

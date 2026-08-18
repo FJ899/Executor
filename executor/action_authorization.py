@@ -17,6 +17,7 @@ from executor.repository_access import (
 
 
 _PACKET_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+_REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 _HEX_COMMIT = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 _SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
 _ACTION_KINDS = {
@@ -49,6 +50,7 @@ class AuthorizationContext:
     default_network: bool
     default_secrets: tuple[str, ...]
     verified_issuer_evidence: dict[str, tuple[str, str]]
+    bounded_external_repositories: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -348,6 +350,24 @@ def _validate_context(
                     "$.issuer",
                 )
             )
+    allowed_bounded = {item.lower() for item in context.bounded_external_repositories}
+    for repository in context.bounded_external_repositories:
+        if _REPOSITORY.fullmatch(repository) is None:
+            issues.append(
+                ValidationIssue(
+                    "INVALID_AUTHORIZATION_CONTEXT",
+                    "Bounded external repository must use owner/name form",
+                    "$.bounded_external_repositories",
+                )
+            )
+    if len(allowed_bounded) != len(context.bounded_external_repositories):
+        issues.append(
+            ValidationIssue(
+                "INVALID_AUTHORIZATION_CONTEXT",
+                "Bounded external repositories must be unique",
+                "$.bounded_external_repositories",
+            )
+        )
 
 
 def validate_action_authorization_packet(
@@ -716,7 +736,15 @@ def validate_action_authorization_packet(
                     "$.action.network",
                 )
             )
-        if external_project is True and not context.external_projects:
+        bounded_target = bool(context.repository_commits) and all(
+            name.lower() in {
+                item.lower() for item in context.bounded_external_repositories
+            }
+            for name in context.repository_commits
+        )
+        if external_project is True and not (
+            context.external_projects or bounded_target
+        ):
             issues.append(
                 ValidationIssue(
                     "AUTHORIZATION_CAPABILITY_DENIED",
