@@ -1,0 +1,10 @@
+ROLE: EXTERNAL_INTELLIGENCE
+MODEL: GPT-5.6 Sol
+EFFECT AUTHORITY: NONE
+
+Re-derive a bounded solution for the direct-human GitHub request JTJ07/Executor#63 from the exact target JTJ07/creative-os-project-reconstructor@defc7b029097284f94136fec54b75c313ac12f68, tree 5960d74773b19456863ac66084385b7619aa4285.
+
+Problem: Reject required-file symlinks that make the deterministic Project Reconstructor validator read outside the repository root.
+Allowed production path: scripts/verify_reconstructor.py.
+Preserve the frozen request evidence plan even if a later verifier may classify one regression command as insufficient; solution generation does not weaken or rewrite human authority.
+Produce the smallest deterministic correctness fix. Do not authorize or apply the change.

@@ -4,7 +4,7 @@ version: "1.0"
 status: "USER DIRECTION ACCEPTED / CANDIDATE BASELINE"
 date: "2026-08-09"
 scope: "governed translation from human request to authorized task contract"
-repository: "litrgratis-pixel/Executor"
+repository: "JTJ07/Executor"
 ---
 
 # Contract Formation Boundary v1

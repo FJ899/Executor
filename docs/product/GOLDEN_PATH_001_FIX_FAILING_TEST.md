@@ -4,7 +4,7 @@ version: "1.0"
 status: "ACCEPTED PRODUCT PATH / MACHINE CONTRACT IN PHASE C"
 date: "2026-08-09"
 scope: "first end-to-end Executor user scenario"
-repository: "litrgratis-pixel/Executor"
+repository: "JTJ07/Executor"
 ---
 
 # Golden Path 001 — Fix Failing Test

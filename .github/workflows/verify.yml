@@ -12,10 +12,16 @@ jobs:
   foundation-tests:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout exact candidate or push SHA
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+
+      - name: Verify exact checkout identity
+        run: |
+          expected="${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          test "$(git rev-parse HEAD)" = "$expected"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -24,6 +30,13 @@ jobs:
 
       - name: Compile package
         run: python -m compileall -q executor
+
+      - name: Build wheel and smoke installed CLI
+        run: |
+          python -m pip wheel . --no-deps --no-build-isolation --wheel-dir dist
+          python -m venv .venv-smoke
+          .venv-smoke/bin/python -m pip install --no-index dist/*.whl
+          .venv-smoke/bin/creative-os-executor --help
 
       - name: Run unit and state tests
         run: python -m unittest discover -s tests -v
@@ -56,7 +69,7 @@ jobs:
 
       - name: Read untrusted repository data through wrapper
         run: |
-          output=$(python -m executor.cli repository-read --project project_contracts/executor-self.yaml --policy EXECUTOR_POLICY.yaml --base-dir . --repository JTJ07/Executor --commit "$GITHUB_SHA" --root . --path tests/fixtures/untrusted_prompt.md)
+          output=$(python -m executor.cli repository-read --project project_contracts/executor-self.yaml --policy EXECUTOR_POLICY.yaml --base-dir . --repository JTJ07/Executor --commit "$(git rev-parse HEAD)" --root . --path tests/fixtures/untrusted_prompt.md)
           printf '%s' "$output" | grep '"trust": "untrusted_data"'
           printf '%s' "$output" | grep '"can_instruct_executor": false'
 
@@ -83,8 +96,15 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout
+      - name: Checkout exact candidate or push SHA
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify exact checkout identity
+        run: |
+          expected="${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          test "$(git rev-parse HEAD)" = "$expected"
 
       - name: Set up Python
         uses: actions/setup-python@v5

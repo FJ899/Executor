@@ -87,7 +87,7 @@ class DockerSandboxBackend:
 
     def authorize(self, context: SandboxExecutionContext) -> Path:
         policy = self._authoritative_policy()
-        if context.purpose not in {"EXECUTOR_FIXTURE", "PROJECT"}:
+        if context.purpose not in {"EXECUTOR_FIXTURE", "PROJECT", "BOUNDED_PILOT"}:
             raise SandboxExecutionError(
                 f"Unsupported sandbox execution purpose: {context.purpose}"
             )
@@ -98,18 +98,20 @@ class DockerSandboxBackend:
             raise SandboxExecutionError(
                 "EXECUTOR_FIXTURE is restricted to the Executor control repository"
             )
-        if not policy.external_projects and not (
+        is_control_fixture = (
             context.repository == self.control_repository
             and context.purpose == "EXECUTOR_FIXTURE"
-        ):
+        )
+        is_bounded_pilot = (
+            context.purpose == "BOUNDED_PILOT"
+            and policy.bounded_pilot_profile(repository=context.repository) is not None
+        )
+        if not policy.external_projects and not (is_control_fixture or is_bounded_pilot):
             raise SandboxExecutionError(
                 "External project execution is disabled by EXECUTOR_POLICY.yaml; "
                 "only Executor fixtures are allowed"
             )
-        if (
-            context.repository == self.control_repository
-            and context.purpose == "EXECUTOR_FIXTURE"
-        ):
+        if is_control_fixture:
             try:
                 context_root = Path(context.repository_root).resolve(strict=True)
                 policy_root = policy.repository_root.resolve(strict=True)

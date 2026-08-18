@@ -4,7 +4,7 @@ version: "1.1"
 status: "USER ACCEPTED / ACTIVE BASELINE"
 date: "2026-08-09"
 scope: "cross-cutting responsibility model for contract formation, proposal, challenge, synthesis, authorization, execution and proof"
-repository: "litrgratis-pixel/Executor"
+repository: "JTJ07/Executor"
 ---
 
 # Human-AI Deliberation Model v1.1

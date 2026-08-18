@@ -9,6 +9,18 @@
         "commit": "3934a94a5eebf750079200589d6dc40e024d44a0"
       }
     ],
+    "bounded_pilot_repositories": [
+      {
+        "repository": "JTJ07/scriptops",
+        "max_production_files": 3,
+        "draft_pr_only": true
+      },
+      {
+        "repository": "JTJ07/creative-os-project-reconstructor",
+        "max_production_files": 3,
+        "draft_pr_only": true
+      }
+    ],
     "auto_merge": false,
     "default_network": false,
     "default_secrets": []

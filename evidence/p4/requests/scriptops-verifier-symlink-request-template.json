@@ -1,0 +1,62 @@
+{
+  "schema_version": "executor-github-request/1.0",
+  "request_id": "p4-scriptops-verifier-symlink-boundary-001",
+  "target": {
+    "repository": "JTJ07/scriptops",
+    "commit": "daa6e5dc210e09171a530eeffe5601e0e74ae041",
+    "tree": "ba0b99bd99682dcc7a942537b502a7a72151fa09"
+  },
+  "task": {
+    "class": "BOUNDED_CORRECTNESS_OR_QUALITY_FIX",
+    "problem_statement": "Reject required-file symlinks in the deterministic ScriptOps repository verifier so required content cannot be read outside the repository root.",
+    "allowed_paths": [
+      "scripts/verify_repository.py"
+    ],
+    "protected_paths": [
+      "README.md",
+      "PROJECT_STATE.md",
+      "HANDOFF.md",
+      "DECISION_LOG.md",
+      "IDEA_ARCHIVE.md",
+      "sources/**",
+      "legacy/**",
+      "phase6/**",
+      "tests/**",
+      ".github/**",
+      "evidence/**"
+    ],
+    "precondition_argv": [
+      [
+        "python",
+        "-c",
+        "import importlib.util,tempfile,sys; from pathlib import Path; sys.path.insert(0,'scripts'); spec=importlib.util.spec_from_file_location('verify','scripts/verify_repository.py'); module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); directory=tempfile.TemporaryDirectory(); root=Path(directory.name)/'repository'; root.mkdir(); outside=Path(directory.name)/'outside.txt'; outside.write_text('outside'); (root/'README.md').symlink_to(outside); module.ROOT=root; blocked=False; exec(\"try:\\n module.read_text('README.md')\\nexcept SystemExit:\\n blocked=True\"); sys.exit(0 if blocked else 1)"
+      ]
+    ],
+    "postcondition_argv": [
+      [
+        "python",
+        "-c",
+        "import importlib.util,tempfile,sys; from pathlib import Path; sys.path.insert(0,'scripts'); spec=importlib.util.spec_from_file_location('verify','scripts/verify_repository.py'); module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); directory=tempfile.TemporaryDirectory(); root=Path(directory.name)/'repository'; root.mkdir(); outside=Path(directory.name)/'outside.txt'; outside.write_text('outside'); (root/'README.md').symlink_to(outside); module.ROOT=root; blocked=False; exec(\"try:\\n module.read_text('README.md')\\nexcept SystemExit:\\n blocked=True\"); sys.exit(0 if blocked else 1)"
+      ]
+    ],
+    "regression_argv": [
+      [
+        "python",
+        "scripts/verify_repository.py"
+      ],
+      [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-v"
+      ]
+    ],
+    "max_production_files": 1,
+    "max_patch_lines": 180
+  },
+  "expires_at": "2026-08-23T00:00:00Z",
+  "nonce": "p4-scriptops-verifier-request-001"
+}

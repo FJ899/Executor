@@ -1,0 +1,156 @@
+{
+  "schema_version": "executor-p4-pilot-candidate-evidence/1.6",
+  "status": "REVOCATION_CUTOFF_CORRECTIVE_CANDIDATE_FRESH_HUMAN_AUTHORITY_REQUIRED",
+  "updated_at": "2026-08-17",
+  "state_model": {
+    "rule": "Committed state defines the evidence contract; immutable GitHub runs/artifacts/receipts establish post-commit facts for the exact PR head; PR body may provide locators but cannot override committed policy.",
+    "transient_execution_status_committed_here": false,
+    "p4_claimed": false,
+    "final_human_acceptance_recorded": false
+  },
+  "historical_rejected_or_superseded_candidates": [
+    {
+      "executor_sha": "24107bc8a8186ed1928e098118982efb9d62ffaa",
+      "verdict": "FALSE-COMPLETION",
+      "cause": "effect authority replay/global uniqueness gap"
+    },
+    {
+      "executor_sha": "7f662cd487c14d62a4838be8c43cef1358869d50",
+      "verdict": "BLOCKED",
+      "cause": "G-02 canonical truth and G-14 exact-head CI binding"
+    },
+    {
+      "executor_sha": "fdf876e0e2af6d9e4ecea2301ecb686a471037bd",
+      "verdict": "FALSE-COMPLETION",
+      "cause": "G-04 direct-human origin did not fail closed against app-mediated GitHub events"
+    },
+    {
+      "executor_sha": "d11f3dd9d6c484a9c554cd562db46c30e0a333fe",
+      "verdict": "FALSE-COMPLETION",
+      "cause": "decision freshness TOCTOU: precondition-start time could be reused at later effect authorization after real expiry"
+    },
+    {
+      "executor_sha": "eca7eebbb4bead819cfd35ecd81b3200cc6e461a",
+      "verdict": "SUPERSEDED_BY_LATER_G04_FINDING",
+      "cause": "six-run raw evidence exists for this exact SHA, but Stage B re-read mutable GitHub request/comment state after freeze; accepted revocation-cutoff semantics were not yet implemented"
+    }
+  ],
+  "historical_rule": "Runs, artifacts, SQLite rows, provider receipts and human ACCEPT events consumed by rejected or superseded candidates remain historical provenance for their exact SHA only and cannot satisfy a later exact-candidate gate. VERDICT superseded does not erase evidence.",
+  "corrected_requests": [
+    {
+      "repository": "JTJ07/scriptops",
+      "executor_issue": 65,
+      "request_id": "p4-scriptops-numeric-candidate-002",
+      "request_body_sha256": "158ab5918c20802658b2c6649a63e6fb25511c0c0d745efcb170cf3577a022db",
+      "draft_sha256": "cfdcfa2ac6b2d6ac7e3da59b0d7aece0e54d43e99f3c8977e8cd422285b50cf6",
+      "base_commit": "daa6e5dc210e09171a530eeffe5601e0e74ae041",
+      "base_tree": "ba0b99bd99682dcc7a942537b502a7a72151fa09",
+      "target_pr": 8,
+      "target_head": "897de878703a029df814f2551b993c3818defa2a",
+      "solution_candidate": "evidence/p4/candidates/scriptops-solution-candidate.json",
+      "external_intelligence_provenance": "evidence/p4/intelligence/scriptops-provenance.json",
+      "external_intelligence_prompt": "evidence/p4/intelligence/scriptops-prompt.txt",
+      "required_executions_per_exact_candidate": 3,
+      "active_fresh_human_accept_comments": [],
+      "historical_consumed_human_accept_comments": [
+        5309032642,
+        5309033360,
+        5309034120,
+        5309233904,
+        5309234306,
+        5309234972,
+        5309431944,
+        5309432744,
+        5309433932,
+        5309764334,
+        5309764985,
+        5309765548
+      ]
+    },
+    {
+      "repository": "JTJ07/creative-os-project-reconstructor",
+      "executor_issue": 64,
+      "request_id": "p4-reconstructor-symlink-boundary-002",
+      "request_body_sha256": "e662f7c25fc699b252abcc6a25254b510bd9de94d703116f23631994de1bccbc",
+      "draft_sha256": "49f3ae5290220ed70db4d257f4abfec1ed67af67da9c9b9c4a1ff026a6a2863e",
+      "base_commit": "defc7b029097284f94136fec54b75c313ac12f68",
+      "base_tree": "5960d74773b19456863ac66084385b7619aa4285",
+      "target_pr": 4,
+      "target_head": "e59b9d6c1b496bcb6411e712e7c65cc891578ac3",
+      "solution_candidate": "evidence/p4/candidates/reconstructor-solution-candidate-corrected.json",
+      "external_intelligence_provenance": "evidence/p4/intelligence/reconstructor-provenance.json",
+      "external_intelligence_prompt": "evidence/p4/intelligence/reconstructor-prompt.txt",
+      "required_executions_per_exact_candidate": 3,
+      "active_fresh_human_accept_comments": [],
+      "historical_consumed_human_accept_comments": [
+        5309040666,
+        5309041408,
+        5309042154,
+        5309241731,
+        5309242858,
+        5309243169,
+        5309439844,
+        5309440490,
+        5309441091,
+        5309777153,
+        5309777822,
+        5309778702
+      ]
+    }
+  ],
+  "series_definition": {
+    "distinct_real_objectives": 2,
+    "authorized_repositories": 2,
+    "independent_executions_per_objective": 3,
+    "total_independently_authorized_executions": 6,
+    "third_objective_required": false,
+    "basis": "PROJECT_COMPLETION_MAP.md P4 requires multiple real runs across more than one repository or independent module set; docs/product/P4_REPEATABILITY_POLICY.md freezes this bounded two-objective, six-execution series."
+  },
+  "corrective_controls": [
+    "human-approved revocation cutoff: final live verification conditional on successful global CONTRACT_ACCEPT consumption",
+    "final request/ACCEPT provider evidence snapshotted and SHA-256 bound into CONTRACT_ACCEPT",
+    "failed CONTRACT_ACCEPT consumption creates no frozen authority and retry requires a new final live verification",
+    "post-cutoff source GitHub mutation does not retroactively revoke or alter AUTHORIZED_AND_FROZEN authority",
+    "run-pilot authority source is immutable frozen snapshot plus successful CONTRACT_ACCEPT receipt, not mutable issue/comment currentness",
+    "CONTRACT_ACCEPT and EFFECT authority are separate global one-shot consumptions",
+    "GitHub provider-backed global one-shot authority refs",
+    "stable effect identity independent of caller run_id and local ledger path",
+    "local SQLite retained as crash-safe evidence, not sole uniqueness boundary",
+    "exact PR-head checkout assertion in foundation CI",
+    "exact GitHub Actions workflow and resolved Docker image identity binding",
+    "post-request external-intelligence provenance with prompt hash and zero human solution edits",
+    "zero-test unittest discovery fails closed",
+    "provider-verifiable direct-human origin requires performed_via_github_app to be present and null",
+    "effect decision freshness is re-sampled after preconditions; provider_created_at must be strictly earlier than not_after"
+  ],
+  "consequential_workflow": {
+    "path": ".github/workflows/p4-real-pilots-one-shot.yml",
+    "trigger": "workflow_dispatch_only",
+    "historical_accept_ids_embedded": false,
+    "fresh_comment_inputs_required": 6,
+    "corrective_push_must_not_execute_series": true
+  },
+  "post_commit_evidence_requirements_before_fresh_authority": [
+    "Foundation CI must assert exact PR head SHA and pass full unit/compile/package/validator checks.",
+    "Docker sandbox security job must pass and prove cleanup.",
+    "GP001 replay must pass on the same exact PR head.",
+    "FC-09 through FC-17 and existing G-04/G-06/security regressions must pass.",
+    "Documentation must distinguish the historical eca7eeb series from current proof.",
+    "The consequential P4 workflow must not run from the corrective PR synchronization and must contain no ACCEPT 001-012 IDs."
+  ],
+  "future_consequential_evidence_requirements": [
+    "A completely fresh six-execution pilot series must later run on the same exact candidate head using six new direct-human ACCEPT events.",
+    "Artifacts must include exact CONTRACT_ACCEPT snapshots/receipt bindings separately from EFFECT authority evidence.",
+    "Provider decision/effect receipt refs must exist live and match FINAL bindings.",
+    "Every EFFECT reservation must expose provider_created_at strictly earlier than not_after.",
+    "Target PRs must remain OPEN, DRAFT, UNMERGED unless separately authorized otherwise."
+  ],
+  "completion_boundary": {
+    "p4": "NOT_CLAIMED",
+    "executor_1_0_human_acceptance": "NOT_RECORDED",
+    "merge_release_deploy_tag": "NOT_AUTHORIZED",
+    "phase_c": "REQUIRED_AFTER_NEW_CONSEQUENTIAL_EVIDENCE",
+    "g18": "NOT_AVAILABLE"
+  },
+  "current_rule": "Resolve the exact live PR #61 head/tree. The eca7eeb six-run evidence is historical only. Do not reuse ACCEPT 001-012. Stop after non-consequential corrective proof until the human supplies fresh authority for a completely new exact-head consequential series."
+}

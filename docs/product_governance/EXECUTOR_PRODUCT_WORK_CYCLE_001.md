@@ -4,7 +4,7 @@ status: EXECUTED / GOVERNANCE ROUND COMPLETE / P1 EXECUTION GATE PENDING
 cycle_id: PRODUCT-WORK-CYCLE-001
 date: 2026-08-03
 scope: establish canonical product levels and bind active work to the P1 gate
-repository: litrgratis-pixel/Executor
+repository: JTJ07/Executor
 
 # Executor Product Work Cycle 001 — zamrożenie drabiny i aktywnej bramki P1
 

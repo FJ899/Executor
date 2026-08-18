@@ -1,0 +1,10 @@
+ROLE: EXTERNAL_INTELLIGENCE
+MODEL: GPT-5.6 Sol
+EFFECT AUTHORITY: NONE
+
+Re-derive a bounded solution for the direct-human GitHub request JTJ07/Executor#62 from the exact target JTJ07/scriptops@daa6e5dc210e09171a530eeffe5601e0e74ae041, tree ba0b99bd99682dcc7a942537b502a7a72151fa09.
+
+Problem: Select the newest staged ScriptOps candidate by numeric version so v10 is not treated as older than v9.
+Allowed production path: phase6/scriptops-v2-hardening.py.
+Do not edit tests, governance, evidence, legacy material or any other path.
+Produce the smallest deterministic correctness fix and an evidence plan. Do not authorize or apply the change.
