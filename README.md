@@ -49,6 +49,19 @@ The accepted implementation contains the earlier foundations and the later bound
 
 Sandbox execution uses Docker without host fallback. The governed path preserves exact identity, policy, authority consumption, isolation, evidence and review-required terminal semantics. Generic arbitrary external-project execution and auto-merge remain outside the accepted bounded scope.
 
+### Historical P0 evidence binding — preserved provenance
+
+P0 was an earlier accepted product checkpoint. Its exact binding remains durable historical evidence and is intentionally preserved even though the current product state has advanced to Human-accepted P4:
+
+```text
+P0 ACHIEVED SHA: b092a85e82eb81ec6dc7db4a7064409c6c383359
+P0 EVIDENCE PR: #16
+P0 EVIDENCE RUN ID: 30755381646
+P0 HUMAN DECISION: ACCEPTED THROUGH MERGE OF PR #16
+```
+
+These fields are provenance for P0 only. They do not compete with, downgrade or replace the later P4 completion/acceptance chain.
+
 ## Start
 
 ```bash
