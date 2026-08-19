@@ -147,9 +147,14 @@ class GitHubGlobalAuthorityTests(unittest.TestCase):
             self.assertEqual(final["state"], "FINAL")
             self.assertTrue(final["terminal_success"])
             self.assertEqual(final["binding_scope"], "GLOBAL_AND_LOCAL_COMPOSITE")
-            self.assertEqual(final["global"]["state"], "GLOBAL_RESULT_BOUND")
-            self.assertFalse(final["global"]["terminal_success"])
-            self.assertTrue(final["global"]["requires_local_result_binding"])
+            self.assertEqual(final["global"]["state"], "FINAL")
+            self.assertEqual(final["global"]["provider_state"], "GLOBAL_RESULT_BOUND")
+            self.assertTrue(final["global"]["terminal_success"])
+            self.assertFalse(final["global"]["requires_local_result_binding"])
+            self.assertEqual(
+                final["global"]["binding_scope"],
+                "GLOBAL_COMPONENT_WITH_LOCAL_CONFIRMATION",
+            )
 
 
     def test_global_bound_local_failure_is_recovery_required_not_terminal_success(self):
@@ -190,6 +195,13 @@ class GitHubGlobalAuthorityTests(unittest.TestCase):
             self.assertEqual(recovered["state"], "FINAL")
             self.assertTrue(recovered["terminal_success"])
             self.assertEqual(recovered["binding_scope"], "GLOBAL_AND_LOCAL_COMPOSITE")
+            self.assertEqual(recovered["global"]["state"], "FINAL")
+            self.assertEqual(
+                recovered["global"]["provider_state"],
+                "GLOBAL_RESULT_BOUND",
+            )
+            self.assertTrue(recovered["global"]["terminal_success"])
+            self.assertFalse(recovered["global"]["requires_local_result_binding"])
             self.assertEqual(local.get(key).state, "FINAL")
             self.assertEqual(
                 recovered["result_sha256"],

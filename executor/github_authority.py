@@ -496,12 +496,20 @@ class GovernedAuthorityLedger:
                 "global/local result hashes disagree; recovery required",
                 global_binding=global_binding,
             )
+        composite_global = {
+            **global_binding,
+            "provider_state": global_binding.get("state"),
+            "state": "FINAL",
+            "binding_scope": "GLOBAL_COMPONENT_WITH_LOCAL_CONFIRMATION",
+            "terminal_success": True,
+            "requires_local_result_binding": False,
+        }
         return {
             **local_final.to_dict(),
             "state": "FINAL",
             "binding_scope": "GLOBAL_AND_LOCAL_COMPOSITE",
             "terminal_success": True,
-            "global": global_binding,
+            "global": composite_global,
         }
 
     def unresolved(self) -> tuple[AuthorityConsumption, ...]:
