@@ -6,18 +6,48 @@ Robocza nazwa systemu i pakietu Python: `creative-os-executor`. Nie oznacza ona 
 
 Executor jest runtime wykonawczym większego systemu Creative OS. Otrzymuje zatwierdzony kierunek i zamienia go w odwracalne, testowalne działanie. Nie zastępuje Ginsenga ani warstw deliberacyjnych. Executor nie jest właścicielem celu.
 
-Aktualny pierwszy produktowy pion to wykonanie dobrze określonego zadania technicznego w repozytorium i pokazanie zmiany wraz z weryfikacją. Zabezpieczenia, sandbox i dowód są fundamentami uczciwego wykonania, ale nie stanowią głównego celu produktu.
+## Current product state
 
-Zakres na kanonicznym `main` obejmuje:
+Executor 1.0 is no longer a Phase-B candidate. The selected P4 product claim was independently verified, explicitly accepted by the Human, then integrated to `main` through a separately verified and separately authorized integration path.
 
-- **M0 — Test Contract Validator**;
-- **M1 — Project Contract + Policy Engine**;
-- **M2A — State Machine + Checkpointy**;
-- **M2B — Izolowany Sandbox dla fixtures**.
+```text
+EXECUTOR 1.0 PRODUCT: HUMAN ACCEPTED
+SELECTED ENDPOINT: P4 REPEATABLE EXECUTOR 1.0
+PROJECT COMPLETION: PASS
+G-01–G-18: PASS
+IMPLEMENTATION INTEGRATION: COMPLETE
+FINAL HUMAN-ACCEPTED CANDIDATE: f60829f90ea2f69dc501582daf109b59676be07e
+FINAL HUMAN-ACCEPTED TREE: 1c4c141415505dd26e1fe307ca1aba987782cfba
+VERIFIED INTEGRATION MERGE: d3ebe93e9b9d6ec29ff859e931939c89b57ed468
+CURRENT MAIN AFTER POST-INTEGRATION CLOSURE: d115578cf05ed7edf55c50a2b5d29af16d13fb4d
+ACTIVE PRODUCT COMPLETION GATE: NONE
+```
 
-Sandbox używa backendu Docker bez fallbacku do wykonania na hoście. Profil wymusza read-only root/source, osobny tmpfs workspace, brak sieci i sekretów, niedostępny HOME, non-root, usunięte capabilities, limity zasobów/czasu oraz cleanup. Polityka, source, obraz i własność kontenera są wiązane z niezmiennymi identyfikatorami oraz weryfikowane fail-closed.
+The current post-integration `main` does not rewrite the historical accepted candidate identity. Detailed closure lineage lives in:
 
-Kandydat Phase B rozwija ten rdzeń bez włączania generycznego external execution. Polityka utrzymuje `external_projects: false` i dopuszcza wyłącznie dwa nazwane repozytoria pilotażowe oraz draft PR bez merge. Dopóki implementacyjny PR nie zostanie zaakceptowany i scalony, jest to praca review-branch, a nie kanon `main`.
+- `docs/governance/EXECUTOR_1_0_FINAL_COMPLETION_RECORD_2026-08-18.md`;
+- `evidence/phase-c/EXECUTOR_1_0_POST_INTEGRATION_CLOSURE_2026-08-18.md`.
+
+Still **not authorized** by product acceptance or integration:
+
+```text
+MERGE OF TARGET PILOT PRs
+RELEASE
+DEPLOYMENT
+TAG
+NEW SECRETS / CREDENTIALS
+PAID SERVICES
+BROADER EXTERNAL EFFECTS
+NEW PRODUCT-DEVELOPMENT PHASE
+```
+
+Any such future effect is a new phase and requires its own Human authority and appropriate evidence.
+
+## Implemented scope
+
+The accepted implementation contains the earlier foundations and the later bounded P4 path. Historical labels such as M0/M1/M2A/M2B remain useful architecture/provenance names; they are no longer a current completion queue.
+
+Sandbox execution uses Docker without host fallback. The governed path preserves exact identity, policy, authority consumption, isolation, evidence and review-required terminal semantics. Generic arbitrary external-project execution and auto-merge remain outside the accepted bounded scope.
 
 ## Start
 
@@ -33,31 +63,24 @@ Pliki `.yaml` używają składni JSON, poprawnego podzbioru YAML 1.2.
 
 ## Jak czytać repo — źródła prawdy
 
-`README.md` jest indeksem i skrótem statusu. Nie nadpisuje dedykowanych kontraktów.
+`README.md` jest indeksem i skrótem statusu. Nie nadpisuje dedykowanych kontraktów ani finalnych evidence records.
 
 - `docs/governance/DOCUMENT_AUTHORITY.md` — ownership źródeł prawdy i precedence;
+- `docs/governance/EXECUTOR_1_0_FINAL_COMPLETION_RECORD_2026-08-18.md` — finalny Human-accepted completion state i exact accepted identity;
+- `evidence/phase-c/EXECUTOR_1_0_POST_INTEGRATION_CLOSURE_2026-08-18.md` — verified integration i post-integration closure facts;
 - `CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md` — cel produktu i granice ekosystemu;
-- `PHASE_B_AUTHORIZATION.md` — human-selected DONE/trust/effect boundaries oraz jawne semantyczne decyzje człowieka;
-- `PROJECT_COMPLETION_MAP.md` — G-01–G-18 i definicja ukończenia;
-- `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md` — kanoniczne definicje poziomów maturity/proof, nie kolejka implementacyjna;
+- `PHASE_B_AUTHORIZATION.md` — historical Human-selected DONE/trust/effect semantics used to reach the accepted candidate;
+- `PROJECT_COMPLETION_MAP.md` — Human-approved G-01–G-18 completion contract and historical Phase-B execution map; current gate result is final PASS, not Phase-B ACTIVE;
+- `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md` — definicje poziomów maturity/proof, nie kolejka implementacyjna;
 - `docs/product/P4_REPEATABILITY_POLICY.md` — P4 retry/repeatability oraz rozdział CONTRACT_ACCEPT vs EFFECT;
-- `docs/architecture/IMPLEMENTATION_INVENTORY.md` — datowany obraz kandydata;
-- `docs/product/P4_GITHUB_PILOT_OPERATOR_GUIDE.md` — operator path;
-- `evidence/phase-c/PHASE_C_HANDOFF.md` — kontrakt niezależnej weryfikacji;
 - `ACTION_AUTHORIZATION_PACKET_v1.0.md` — terminalny kontrakt autoryzacji consequential action;
 - `EXECUTOR_POLICY.yaml` — deterministyczna polityka wykonania.
 
-Otwarty draft PR, branch-only dokument albo komentarz review nie zmienia kanonu `main` przed merge. Dla aktywnego kandydata dokładny PR head/tree określa implementację, a immutable exact-head runs/artifacts/provider receipts określają post-commit facts.
+Otwarty draft PR, branch-only dokument albo komentarz review nie zmienia kanonu `main` przed merge. Historical candidate and consumed authority evidence remain exact-SHA evidence only and must not be reused as new authority.
 
-## Human-approved revocation cutoff
+## Accepted authority model
 
-Phase B posiada jawną decyzję człowieka:
-
-```text
-AKCEPTUJĘ FINAL LIVE VERIFICATION AS REVOCATION CUTOFF BOUND INTO SUCCESSFUL GLOBAL CONTRACT_ACCEPT CONSUMPTION
-```
-
-Kandydat implementuje dwa różne etapy authority:
+The accepted P4 path preserves two different authority stages:
 
 ```text
 MUTABLE REQUEST / ACCEPT
@@ -74,79 +97,31 @@ AUTHORIZED_AND_FROZEN
   -> MUTATION / EVIDENCE / RESULT BINDING
 ```
 
-Przed cutoffem edit/delete/mismatch/expiry blokuje. Snapshot staje się authority wyłącznie po udanym globalnym `CONTRACT_ACCEPT`; failed consumption tworzy zero authority i retry musi wykonać nową live verification. Po udanym cutoffie późniejsza mutacja źródłowego GitHub Issue/Comment nie revokuje retroaktywnie zamrożonego kontraktu. `run-pilot` korzysta z immutable frozen snapshot + successful CONTRACT_ACCEPT receipt i nie przywraca mutable GitHub currentness jako drugiego modelu revocation.
+Before the accepted CONTRACT_ACCEPT cutoff, edit/delete/mismatch/expiry blocks. Successful freeze does not collapse CONTRACT_ACCEPT and EFFECT into one authority. A valid AAP means only `READY_FOR_ATOMIC_CONSUMPTION`; it is never proof that an effect happened.
 
-To nie osłabia effect-side controls. CONTRACT_ACCEPT i EFFECT są odrębnymi one-shot consumptions.
+## Historical candidate evidence
 
-## Action Authorization Packet
-
-Poprawny AAP oznacza wyłącznie:
-
-```text
-READY_FOR_ATOMIC_CONSUMPTION
-```
-
-Nie jest dowodem wykonania. Kandydat Phase B dodaje global one-shot authority, trwały lokalny ledger oraz dokładne związanie wyniku. Claim pozostaje kandydatem do czasu pełnego exact-head evidence, niezależnej Phase C i finalnej decyzji człowieka.
-
-## Build status versus maturity
-
-```text
-CURRENT HUMAN-SELECTED TARGET: P4 — REPEATABLE EXECUTOR 1.0
-TRUST DOMAIN: GITHUB / EXTERNAL GOVERNED INTAKE
-SOLUTION OWNER: EXTERNAL INTELLIGENCE
-PILOT CLASS: JTJ07/scriptops + JTJ07/creative-os-project-reconstructor / DRAFT PR ONLY
-
-CURRENT PROVEN PRODUCT LEVEL: P0 — FOUNDATION / ACHIEVED IN DECLARED SCOPE
-P0 ACHIEVED SHA: b092a85e82eb81ec6dc7db4a7064409c6c383359
-P0 EVIDENCE PR: #16
-P0 EVIDENCE RUN ID: 30755381646
-P0 HUMAN DECISION: ACCEPTED THROUGH MERGE OF PR #16
-ACTIVE MATURITY CLAIM: NONE
-P4 REQUIRES: ALL APPLICABLE GATES + FRESH CONSEQUENTIAL EVIDENCE + INDEPENDENT PHASE C + FINAL HUMAN ACCEPTANCE
-```
-
-Techniczny `PASS` nie oznacza automatycznie `PRODUCT ACCEPTED`, `HUMAN ACCEPTED`, `MERGED` ani maturity advancement.
-
-## Current candidate / historical P4 evidence
-
-The six-run P4 series at exact Executor head `eca7eebbb4bead819cfd35ecd81b3200cc6e461a` **did run** and its immutable raw evidence remains historical evidence for that exact SHA. A later G-04 finding superseded its prior completion verdict because the contract-freeze revocation cutoff was not yet represented correctly and Stage B re-read mutable provider state.
-
-Therefore:
+Earlier P4 evidence at `eca7eebbb4bead819cfd35ecd81b3200cc6e461a` remains historical-only because a later G-04 finding superseded its completion verdict. The corrective path produced fresh consequential evidence and the later exact Human-accepted candidate `f60829f...`.
 
 ```text
 OLD eca7eeb P4 EVIDENCE: HISTORICAL ONLY
-ACCEPT 001–012: HISTORICAL / CONSUMED / MUST NOT BE REUSED
-NEW EXACT CANDIDATE: REQUIRES FRESH CONSEQUENTIAL AUTHORITY LATER
-P4 REAL-PILOT WORKFLOW: MANUAL workflow_dispatch ONLY
-CORRECTIVE PUSH: MUST NOT RUN THE SIX-EXECUTION SERIES
-P4: NOT CLAIMED
-PHASE C: NOT YET RUN FOR THE NEW CANDIDATE
-FINAL HUMAN ACCEPTANCE: NOT AVAILABLE
+ACCEPT 001–012 FROM THAT SERIES: HISTORICAL / CONSUMED / MUST NOT BE REUSED
+FINAL ACCEPTED P4 CANDIDATE: f60829f90ea2f69dc501582daf109b59676be07e
+P4 REPEATABLE EXECUTOR 1.0: HUMAN ACCEPTED
+PROJECT COMPLETION: PASS
 ```
 
 `VERDICT superseded != EVIDENCE erased`.
 
-## Status implementacji
+## Truthful completion semantics
+
+A technical `PASS` never automatically means `HUMAN ACCEPTED`, `PRODUCT ACCEPTED`, `MERGED`, release or deployment. In this project the final product claim is valid because the independent evidence chain and explicit Human G-18 decision exist and are source-bound in the final completion record.
 
 ```text
-M0: IMPLEMENTED
-M1: IMPLEMENTED
-M2A: IMPLEMENTED
-M2B: IMPLEMENTED / FIXTURES VERIFIED
-M3+: NOT CLAIMED ON MAIN
-GP001 PRODUCT PATH: REAL FIXTURE E2E + REPLAY ACCEPTED IN DECLARED SCOPE
-REQUEST TO CONTRACT: PHASE 1 IMPLEMENTED / CLI SURFACE IN PHASE B CANDIDATE
-GITHUB REQUEST + DECISION TRUST: IMPLEMENTED CANDIDATE
-CONTRACT_ACCEPT REVOCATION CUTOFF: IMPLEMENTED CANDIDATE / FINAL-LIVE SNAPSHOT + GLOBAL ONE-SHOT BINDING
-POST-CUTOFF AUTHORITY SOURCE: FROZEN SNAPSHOT + SUCCESSFUL CONTRACT_ACCEPT RECEIPT
-ACTION AUTHORIZATION PACKET: VALIDATOR + ATOMIC LEDGER + RESULT BINDING IMPLEMENTED CANDIDATE
-EXTERNAL SOLUTION INTERFACE: IMPLEMENTED CANDIDATE / NO EFFECT AUTHORITY
-BOUNDED PILOT RUNTIME: IMPLEMENTED CANDIDATE / TWO HISTORICAL REVIEWED DRAFT-PR OUTPUTS EXIST
-GENERIC EXTERNAL PROJECT EXECUTION: FORBIDDEN
-BOUNDED PILOT REPOSITORIES: EXACTLY TWO / DRAFT PR ONLY
-AUTO MERGE: DISABLED
-
-P4: NOT CLAIMED
-INDEPENDENT PHASE C: REQUIRED AFTER FRESH NEW CONSEQUENTIAL EVIDENCE
-FINAL HUMAN ACCEPTANCE: OPEN / NOT AVAILABLE YET
+TECHNICAL / PHASE-C EVIDENCE: PASS
+PROJECT COMPLETION: PASS
+EXECUTOR 1.0: ACCEPT
+P4 REPEATABLE EXECUTOR 1.0: HUMAN ACCEPTED
+IMPLEMENTATION INTEGRATION: COMPLETE
+FALSE SUCCESS PATHS FOUND IN FINAL ADVERSARIAL EVIDENCE CHAIN: 0
 ```
