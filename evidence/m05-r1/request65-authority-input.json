@@ -1,0 +1,7 @@
+{
+  "schema_version": "m05-r1-authority-input/1.0",
+  "chain_id": "M05-R1-SCRIPTOPS-ISSUE-65",
+  "issue_number": 65,
+  "status": "PENDING_DIRECT_HUMAN_AUTHORITY",
+  "comment_id": null
+}
