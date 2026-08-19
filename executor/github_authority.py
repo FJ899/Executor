@@ -11,7 +11,11 @@ from datetime import datetime, timezone
 from typing import Any, Protocol
 from urllib.parse import quote
 
-from executor.authority_ledger import AtomicAuthorityLedger, AuthorityConsumption
+from executor.authority_ledger import (
+    AtomicAuthorityLedger,
+    AuthorityConsumption,
+    AuthorityLedgerError,
+)
 from executor.github_trust import canonical_json
 
 
@@ -21,6 +25,14 @@ class GlobalAuthorityError(RuntimeError):
 
 class GlobalAuthorityReplayError(GlobalAuthorityError):
     pass
+
+
+class ResultBindingRecoveryRequired(GlobalAuthorityError):
+    """Global result component is bound but the local result binding is incomplete."""
+
+    def __init__(self, message: str, *, global_binding: dict[str, Any]):
+        super().__init__(message)
+        self.global_binding = global_binding
 
 
 class GlobalAuthorityExpiredError(GlobalAuthorityError):
@@ -332,13 +344,17 @@ class GitHubGlobalAuthority:
         for key, value in expected.items():
             if current_receipt.get(key) != value:
                 raise GlobalAuthorityError(f"global authority receipt {key} mismatch")
-        if current_receipt.get("state") == "FINAL":
+        if current_receipt.get("state") in {"FINAL", "GLOBAL_RESULT_BOUND"}:
             if current_receipt.get("result_sha256") == result_sha:
                 return {
                     **reservation.to_dict(),
-                    "state": "FINAL",
+                    "state": "GLOBAL_RESULT_BOUND",
                     "final_sha": current_sha,
                     "result_sha256": result_sha,
+                    "binding_scope": "GLOBAL_COMPONENT_ONLY",
+                    "terminal_success": False,
+                    "requires_local_result_binding": True,
+                    "receipt_schema_version": current_receipt.get("schema_version"),
                 }
             raise GlobalAuthorityError("global authority result is already bound differently")
         if current_receipt.get("state") != "RESERVED":
@@ -348,8 +364,12 @@ class GitHubGlobalAuthority:
             raise GlobalAuthorityError("global reservation commit has no tree")
         final_receipt = {
             **current_receipt,
-            "state": "FINAL",
+            "schema_version": "executor-global-authority-receipt/1.1",
+            "state": "GLOBAL_RESULT_BOUND",
             "result_sha256": result_sha,
+            "binding_scope": "GLOBAL_COMPONENT_ONLY",
+            "terminal_success": False,
+            "requires_local_result_binding": True,
         }
         final_commit = self.transport.request_json(
             "POST",
@@ -382,14 +402,19 @@ class GitHubGlobalAuthority:
             if not isinstance(latest_sha, str):
                 raise
             latest_receipt = self._parse_receipt(self._get_commit(latest_sha))
-            if latest_receipt.get("state") != "FINAL" or latest_receipt.get("result_sha256") != result_sha:
+            if latest_receipt.get("state") not in {"FINAL", "GLOBAL_RESULT_BOUND"} or latest_receipt.get("result_sha256") != result_sha:
                 raise GlobalAuthorityError("concurrent global result binding differs") from exc
             final_sha = latest_sha
+            final_receipt = latest_receipt
         return {
             **reservation.to_dict(),
-            "state": "FINAL",
+            "state": "GLOBAL_RESULT_BOUND",
             "final_sha": final_sha,
             "result_sha256": result_sha,
+            "binding_scope": "GLOBAL_COMPONENT_ONLY",
+            "terminal_success": False,
+            "requires_local_result_binding": True,
+            "receipt_schema_version": final_receipt.get("schema_version"),
         }
 
 
@@ -452,17 +477,31 @@ class GovernedAuthorityLedger:
         consumption: GovernedAuthorityConsumption,
         result: dict[str, Any],
     ) -> dict[str, Any]:
-        global_final = self.global_authority.finalize(
+        global_binding = self.global_authority.finalize(
             consumption.global_reservation,
             result=result,
         )
-        local_final = self.local.bind_result(
-            execution_token=consumption.execution_token,
-            result=result,
-        )
+        try:
+            local_final = self.local.bind_result(
+                execution_token=consumption.execution_token,
+                result=result,
+            )
+        except AuthorityLedgerError as exc:
+            raise ResultBindingRecoveryRequired(
+                "global result component is bound but local result binding is incomplete; recovery required",
+                global_binding=global_binding,
+            ) from exc
+        if local_final.result_sha256 != global_binding.get("result_sha256"):
+            raise ResultBindingRecoveryRequired(
+                "global/local result hashes disagree; recovery required",
+                global_binding=global_binding,
+            )
         return {
             **local_final.to_dict(),
-            "global": global_final,
+            "state": "FINAL",
+            "binding_scope": "GLOBAL_AND_LOCAL_COMPOSITE",
+            "terminal_success": True,
+            "global": global_binding,
         }
 
     def unresolved(self) -> tuple[AuthorityConsumption, ...]:

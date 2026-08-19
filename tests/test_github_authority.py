@@ -6,13 +6,14 @@ import unittest
 from pathlib import Path
 from urllib.parse import unquote
 
-from executor.authority_ledger import AtomicAuthorityLedger
+from executor.authority_ledger import AtomicAuthorityLedger, AuthorityLedgerError
 from executor.github_authority import (
     GlobalAuthorityExpiredError,
     GlobalAuthorityHttpError,
     GlobalAuthorityReplayError,
     GitHubGlobalAuthority,
     GovernedAuthorityLedger,
+    ResultBindingRecoveryRequired,
 )
 
 
@@ -92,6 +93,20 @@ class LoseCreateRefRaceTransport(FakeGitHubTransport):
         return super().request_json(method, url, payload)
 
 
+class FailOnceBindLedger(AtomicAuthorityLedger):
+    """Inject one local result-binding failure after the global component is bound."""
+
+    def __init__(self, path):
+        super().__init__(path)
+        self.fail_next_bind = True
+
+    def bind_result(self, *, execution_token, result):
+        if self.fail_next_bind:
+            self.fail_next_bind = False
+            raise AuthorityLedgerError("injected local result-binding failure")
+        return super().bind_result(execution_token=execution_token, result=result)
+
+
 class GitHubGlobalAuthorityTests(unittest.TestCase):
     def test_same_key_is_global_across_instances_and_local_database_files(self):
         transport = FakeGitHubTransport()
@@ -130,7 +145,56 @@ class GitHubGlobalAuthorityTests(unittest.TestCase):
                 result={"status": "ACTION_COMPLETED_REVIEW_REQUIRED"},
             )
             self.assertEqual(final["state"], "FINAL")
-            self.assertEqual(final["global"]["state"], "FINAL")
+            self.assertTrue(final["terminal_success"])
+            self.assertEqual(final["binding_scope"], "GLOBAL_AND_LOCAL_COMPOSITE")
+            self.assertEqual(final["global"]["state"], "GLOBAL_RESULT_BOUND")
+            self.assertFalse(final["global"]["terminal_success"])
+            self.assertTrue(final["global"]["requires_local_result_binding"])
+
+
+    def test_global_bound_local_failure_is_recovery_required_not_terminal_success(self):
+        transport = FakeGitHubTransport()
+        authority = GitHubGlobalAuthority(
+            repository="JTJ07/Executor",
+            transport=transport,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            local = FailOnceBindLedger(Path(directory) / "authority.sqlite3")
+            ledger = GovernedAuthorityLedger(local, authority)
+            key = "aap:partial-result-binding"
+            result = {"status": "ACTION_COMPLETED_REVIEW_REQUIRED"}
+            consumption = ledger.consume(
+                authority_key=key,
+                payload_sha256="f" * 64,
+                action_kind="EXTERNAL_PROJECT_EXECUTION",
+                run_id="partial-run",
+            )
+
+            with self.assertRaises(ResultBindingRecoveryRequired) as raised:
+                ledger.bind_result(consumption=consumption, result=result)
+
+            global_binding = raised.exception.global_binding
+            self.assertEqual(global_binding["state"], "GLOBAL_RESULT_BOUND")
+            self.assertFalse(global_binding["terminal_success"])
+            self.assertTrue(global_binding["requires_local_result_binding"])
+            self.assertEqual(local.get(key).state, "CONSUMED")
+
+            ref_sha = transport.refs[global_binding["ref"]]
+            receipt = authority._parse_receipt(transport.commits[ref_sha])
+            self.assertEqual(receipt["state"], "GLOBAL_RESULT_BOUND")
+            self.assertFalse(receipt["terminal_success"])
+            self.assertTrue(receipt["requires_local_result_binding"])
+            self.assertEqual(receipt["binding_scope"], "GLOBAL_COMPONENT_ONLY")
+
+            recovered = ledger.bind_result(consumption=consumption, result=result)
+            self.assertEqual(recovered["state"], "FINAL")
+            self.assertTrue(recovered["terminal_success"])
+            self.assertEqual(recovered["binding_scope"], "GLOBAL_AND_LOCAL_COMPOSITE")
+            self.assertEqual(local.get(key).state, "FINAL")
+            self.assertEqual(
+                recovered["result_sha256"],
+                recovered["global"]["result_sha256"],
+            )
 
     def test_atomic_provider_ref_creation_loses_race_fail_closed(self):
         authority = GitHubGlobalAuthority(
