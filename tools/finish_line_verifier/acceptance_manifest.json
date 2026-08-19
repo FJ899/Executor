@@ -1,0 +1,91 @@
+{
+  "candidate_declared_verdict_authority": "IGNORED_FOR_AUTHORITY",
+  "document": "Finish-line trusted verifier acceptance manifest",
+  "m05": {
+    "artifact_sha256": "ad2f02a734338e80a78dd650392ce0bf60aeaf64321cfb9d7f9e2a0f99ed80c6",
+    "chain_id": "M05-R1-SCRIPTOPS-ISSUE-65",
+    "contract_authority_final_sha": "ca501604f9ab7fafb6b2f498fe24b055c154c015",
+    "contract_sha256": "bf7035c7163232d6c934fd7ab0920a38eb5e876b664a83fad32a7ea273bdc903",
+    "decision_comment_id": 5345450496,
+    "effect_authority_final_sha": "e4522d7838d9627275bbc485b2e4195349912656",
+    "executor_head": "d9facb2e7a3493ff9856ef2616f1c16ec4be2b0a",
+    "executor_tree": "d682b2da6f4540dbd50c25a4f8c8933f1f70af83",
+    "expected_changed_paths": [
+      "phase6/scriptops-v2-hardening.py"
+    ],
+    "expected_members": [
+      ".executor/m05-r1-authority.sqlite3",
+      "m05-r1-changed-paths.txt",
+      "m05-r1-draft.json",
+      "m05-r1-executor-head.txt",
+      "m05-r1-executor-tree.txt",
+      "m05-r1-frozen.json",
+      "m05-r1-identity-preflight.json",
+      "m05-r1-image-id.txt",
+      "m05-r1-proposal.json",
+      "m05-r1-provider-gate.json",
+      "m05-r1-result.json",
+      "m05-r1-runs/m05-r1-request65-32280682838-1/change.patch",
+      "m05-r1-runs/m05-r1-request65-32280682838-1/report.json",
+      "m05-r1-state-delta-candidate.json",
+      "m05-r1-target-status.txt",
+      "m05-r1-target.patch",
+      "m05-r1-verifier.json",
+      "m05-r1-workflow-sha256.txt"
+    ],
+    "patch_sha256": "c9c355db350382ab98b3edaf4d0794c50905816b45ec077f8fdc675b0b856007",
+    "request_body_sha256": "158ab5918c20802658b2c6649a63e6fb25511c0c0d745efcb170cf3577a022db",
+    "request_issue": 65,
+    "request_node_id": "I_kwDOTpqUf88AAAABM-aINQ",
+    "result_sha256": "233161b1cdeecc965e3c35a6403658b1249fbcff1f0facf07fe65ce1f7730c17",
+    "run_id": "32280682838",
+    "sandbox_image_id": "sha256:96c53a0c3bba0492535fcdf754a58ea9e62cb964e99f7b28e8d9aeaaa35a09a8",
+    "target_commit": "daa6e5dc210e09171a530eeffe5601e0e74ae041",
+    "target_repository": "JTJ07/scriptops",
+    "target_tree": "ba0b99bd99682dcc7a942537b502a7a72151fa09",
+    "workflow_sha256": "0cc14b53c42576ff202d6ad3674293b4da71b614606a04e7095a01f91e1e2262"
+  },
+  "p4": {
+    "executor_head": "f60829f90ea2f69dc501582daf109b59676be07e",
+    "executor_tree": "1c4c141415505dd26e1fe307ca1aba987782cfba",
+    "run_id": "32072660218",
+    "workflow_sha256": "047977aa24f05ec45803f4017cc618a4665b052644e74f43def709e109f9807c",
+    "artifacts": {
+      "reconstructor": {
+        "artifact_sha256": "558fde51f264b725ad51086ca52d7ff68b2b9110fb11e4101cef357bb438a91c",
+        "changed_path": "scripts/verify_reconstructor.py",
+        "image_id": "sha256:b5876a05e527471a4b0ebd1e7bbf643a34059add2c21e7997a70ae143adc0e33",
+        "proposal_id": "external-reconstructor-symlink-boundary-002",
+        "repository": "JTJ07/creative-os-project-reconstructor",
+        "run_ids": [
+          "p4-reconstructor-corrected-001",
+          "p4-reconstructor-corrected-002",
+          "p4-reconstructor-corrected-003"
+        ],
+        "source_commit": "defc7b029097284f94136fec54b75c313ac12f68",
+        "source_tree": "5960d74773b19456863ac66084385b7619aa4285"
+      },
+      "scriptops": {
+        "artifact_sha256": "040d47c0b8230ca339242e4404460dd9fdfd3bac2d396c3337b12cc65e242a78",
+        "changed_path": "phase6/scriptops-v2-hardening.py",
+        "image_id": "sha256:64b16275b427cc370fb9a6066ef3921fbedd9523b5779574a492f68f9d2d760e",
+        "proposal_id": "external-scriptops-numeric-version-001",
+        "repository": "JTJ07/scriptops",
+        "run_ids": [
+          "p4-scriptops-corrected-001",
+          "p4-scriptops-corrected-002",
+          "p4-scriptops-corrected-003"
+        ],
+        "source_commit": "daa6e5dc210e09171a530eeffe5601e0e74ae041",
+        "source_tree": "ba0b99bd99682dcc7a942537b502a7a72151fa09"
+      }
+    }
+  },
+  "schema_version": "executor-finish-line-verifier-manifest/1.0",
+  "trust_boundary": {
+    "artifact_generated_pass_markers": "UNTRUSTED_OBSERVATIONS",
+    "candidate_code_imports": "FORBIDDEN",
+    "authoritative_use_requires": "VERIFIER CODE + MANIFEST EXECUTED FROM A SEPARATELY ACCEPTED TRUST ROOT",
+    "verifier_runtime": "PYTHON_STDLIB_ONLY"
+  }
+}
