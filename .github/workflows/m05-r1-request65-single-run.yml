@@ -1,0 +1,13 @@
+name: M05 R1 noncanonical-path marker
+
+on:
+  workflow_dispatch:
+
+# EVALUATION BRANCH ONLY. The executable M05 harness lives temporarily at the
+# canonical P4 workflow path because accepted Executor runtime binds to that path.
+jobs:
+  inert:
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "inert evaluation marker"
