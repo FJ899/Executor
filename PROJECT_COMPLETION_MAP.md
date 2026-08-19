@@ -1,27 +1,56 @@
 ---
 document: "Executor Project Completion Map"
-version: "1.1"
-status: "HUMAN SEMANTICALLY APPROVED / PHASE B ACTIVE"
-date: "2026-08-17"
+version: "1.2"
+status: "FINAL HUMAN ACCEPTED / PROJECT COMPLETION PASS / INTEGRATED ON MAIN"
+date: "2026-08-19"
 target_repository: "JTJ07/Executor"
 baseline_branch: "main"
 baseline_sha: "5e254811023553d1abe8bdbb3535b8150aaf19ad"
 protocol: "JTJ07/Saddle/evidence/PROJECT_COMPLETION_AUTONOMY_TEST_PROTOCOL_2026-08-15.md"
-phase: "B / IMPLEMENTATION AND EVIDENCE"
-implementation_changes: "AUTHORIZED ON A WORK BRANCH / REVIEW REQUIRED"
+phase: "COMPLETE / HUMAN ACCEPTED / INTEGRATED"
+implementation_changes: "CURRENT PRODUCT PHASE CLOSED / FUTURE EFFECTS REQUIRE SEPARATE HUMAN AUTHORITY"
 ---
 
 # PROJECT COMPLETION MAP — Executor
 
+## CURRENT TERMINAL STATUS
+
+This map remains the Human-approved DONE/gate contract and preserves the Phase-A/Phase-B execution history. It is **not** a current task queue after final completion.
+
+Current terminal facts are source-bound in `docs/governance/EXECUTOR_1_0_FINAL_COMPLETION_RECORD_2026-08-18.md` and `evidence/phase-c/EXECUTOR_1_0_POST_INTEGRATION_CLOSURE_2026-08-18.md`:
+
+```text
+SELECTED ENDPOINT: P4 REPEATABLE EXECUTOR 1.0
+G-01–G-18: PASS
+PROJECT COMPLETION: PASS
+EXECUTOR 1.0: HUMAN ACCEPTED
+EXACT HUMAN-ACCEPTED CANDIDATE: f60829f90ea2f69dc501582daf109b59676be07e
+IMPLEMENTATION INTEGRATION: COMPLETE
+CURRENT MAIN AFTER POST-INTEGRATION CLOSURE: d115578cf05ed7edf55c50a2b5d29af16d13fb4d
+ACTIVE COMPLETION GATE: NONE
+```
+
+Any Phase-A/Phase-B text below that says `current`, `gap`, `blocker`, `P4 NOT CLAIMED`, `Phase B active`, or `final acceptance not recorded` is retained as **historical checkpoint provenance** unless a later subsection explicitly says otherwise. It must not override the terminal facts above.
+
+Still not authorized by completion/acceptance:
+
+```text
+RELEASE / DEPLOYMENT / TAG
+TARGET PILOT PR MERGES
+NEW SECRETS / CREDENTIALS / PAID SERVICES
+BROADER EXTERNAL EFFECTS
+NEW PRODUCT-DEVELOPMENT PHASE
+```
+
 ## 0. Status and reading rules
 
-This document is the human-approved completion map. `PHASE_B_AUTHORIZATION.md` freezes the selected semantic forks and activates work on a review branch. It is not product acceptance, a maturity claim, an implementation merge decision or a release decision. Historical Phase-A inventory/fork analysis is intentionally preserved below as provenance; later explicit Phase-B decisions and the 2026-08-17 G-04 clarification govern current semantics where older wording was unresolved.
+This document is the human-approved completion map. `PHASE_B_AUTHORIZATION.md` froze the selected semantic forks and activated the historical Phase-B work that later produced the accepted product candidate. Historical Phase-A/Phase-B inventory, gaps and path analysis are intentionally preserved below as provenance. They no longer describe the current completion state.
 
 Semantic labels used below:
 
-- `FACT` — supported by current repository state or recorded GitHub evidence;
+- `FACT` — supported by repository state or recorded GitHub evidence at the checkpoint being described;
 - `DECISION` — already selected by the human in an authoritative source;
-- `HYPOTHESIS` — plausible interpretation requiring confirmation;
+- `HYPOTHESIS` — plausible interpretation requiring confirmation at that checkpoint;
 - `RECOMMENDATION` — proposed route, not authority.
 
 Hard boundaries:
@@ -35,7 +64,7 @@ EXECUTION != PROOF
 AI RECOMMENDATION != HUMAN DECISION
 ```
 
-The human selected HR-1 C, HR-2 A, HR-3 GitHub, HR-4 A and HR-5 C on 2026-08-16. The exact authority limits are recorded in `PHASE_B_AUTHORIZATION.md`. Final acceptance and release remain human-owned.
+The human selected HR-1 C, HR-2 A, HR-3 GitHub, HR-4 A and HR-5 C on 2026-08-16. The exact authority limits are recorded in `PHASE_B_AUTHORIZATION.md`. Final product acceptance was later separately supplied by the Human and is recorded in the final completion record. Release remains separately Human-owned and is not authorized.
 
 ### 0.1 Adaptive completion control
 
@@ -79,9 +108,11 @@ No specialized project, component, framework, agent or tool receives priority me
 | Current package version | `0.2.0` |
 | Releases / tags | none observed |
 
+This baseline is the historical Phase-A reconstruction baseline, not the current post-completion `main` identity.
+
 ### 1.2 Sources read
 
-The analysis covered:
+The Phase-A analysis covered:
 
 - product purpose and responsibility boundaries: `CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md`, `EXECUTOR_CHARTER.md`;
 - product and architecture: `docs/product/EXECUTOR_V1_PRODUCT_SPEC.md`, `docs/architecture/EXECUTOR_BUILD_MAP.md`;
@@ -91,13 +122,13 @@ The analysis covered:
 - GP001: `docs/product/GOLDEN_PATH_001_FIX_FAILING_TEST.md`, task/test contracts, `executor/gp001_contract.py`, `executor/gp001_runtime.py`, `tools/run_gp001_real_e2e.py`;
 - authority and policy: `ACTION_AUTHORIZATION_PACKET_v1.0.md`, `EXECUTOR_POLICY.yaml`, `executor/action_authorization.py`, `executor/sandbox/policy_snapshot.py`;
 - state, repository and sandbox paths: `executor/state_machine.py`, `executor/repository_access.py`, `executor/sandbox/docker.py` and their tests;
-- all 62 current branch refs, all 18 open PRs, the single open issue, the recent merged history and current workflows;
+- then-current branch refs, PRs/issues and workflows;
 - PR #59 and its full patch; draft stacks #17–#22, #29, #34, #36, #38 and #51–#57;
-- current GitHub Actions evidence for PR #58 and PR #59.
+- then-current GitHub Actions evidence for PR #58 and PR #59.
 
 ### 1.3 Source authority caveat
 
-`docs/governance/DOCUMENT_AUTHORITY.md` correctly says that merged code and tests are required to support implementation claims and that open PRs are not canon. Several document headers and status sections are stale despite later merges. This map therefore separates:
+`docs/governance/DOCUMENT_AUTHORITY.md` defines subject-specific precedence. Several document headers/status sections were stale during Phase A and later advanced again during Phase B. This map therefore separates:
 
 ```text
 PRODUCT PURPOSE
@@ -105,6 +136,8 @@ IMPLEMENTATION ON MAIN
 OPEN CANDIDATE WORK
 MATURITY / PROOF
 ```
+
+After final completion, the current product-completion result is governed by the final completion and post-integration closure records, while the map below remains the DONE contract and historical execution provenance.
 
 ## 2. Recovered project goal
 
@@ -151,68 +184,67 @@ Completing Executor does not mean turning this repository into:
 - `P3 — REAL VALUE MVP`, named by the authoritative ladder as the first true product MVP;
 - `P4 — REPEATABLE EXECUTOR 1.0`, the first explicit repeatable 1.0 level.
 
-`DECISION`: this Phase-A ambiguity is resolved. The human selected `HR-1 C — P4 REPEATABLE EXECUTOR 1.0` on 2026-08-16, as recorded in `PHASE_B_AUTHORIZATION.md`. The alternatives below remain historical decision context, not an open fork.
+`DECISION`: this Phase-A ambiguity was resolved. The human selected `HR-1 C — P4 REPEATABLE EXECUTOR 1.0` on 2026-08-16, as recorded in `PHASE_B_AUTHORIZATION.md`. P4 was later independently verified and Human-accepted. The alternatives below remain historical decision context, not an open fork.
 
-## 3. Current state
+## 3. Historical Phase-B state snapshot
 
-### 3.1 Complete and supported by evidence
+The following subsections preserve the state that existed when Phase B was being planned/executed. They are not current completion status.
+
+### 3.1 Complete and supported by evidence at that checkpoint
 
 `FACT`:
 
-- M0 contract validation, M1 governance/policy, M2A state/checkpoint integrity and M2B Docker isolation exist on `main` with positive and negative tests.
-- P0 is the only canonically claimed achieved product level.
-- GP001 has a machine-readable exact task/test contract for one controlled external fixture.
-- GP001 runtime checks exact repository/commit identity, reproduces the failing test, permits one exact file mutation, runs target and regression commands in Docker, verifies scope/protected material, emits a patch/report and ends at `ACTION_COMPLETED_REVIEW_REQUIRED`.
+- M0 contract validation, M1 governance/policy, M2A state/checkpoint integrity and M2B Docker isolation existed on `main` with positive and negative tests.
+- P0 was then the only canonically claimed achieved product level.
+- GP001 had a machine-readable exact task/test contract for one controlled external fixture.
+- GP001 runtime checked exact repository/commit identity, reproduced the failing test, permitted one exact file mutation, ran target and regression commands in Docker, verified scope/protected material, emitted a patch/report and ended at `ACTION_COMPLETED_REVIEW_REQUIRED`.
 - GP001 real E2E and two-run replay were accepted through PRs #47 and #48 in the declared controlled-fixture scope.
 - PR #58 reconciled the current Executor self identity to `JTJ07/Executor`; its `Verify Executor foundations` run `31539013966` and `GP001 replay repeatability` run `31539014065` succeeded.
-- REQUEST_TO_CONTRACT_001 phase 1 was merged by PR #50. It preserves the verbatim request as the sole direct `USER` provenance, labels structured interpretation as `MODEL`, creates and critiques an exact canonical GP001 draft, exports a hash-bound non-executable authorization request, and fails closed at `AWAITING_VERIFIED_HUMAN_AUTHORIZATION`.
-- Generic external-project execution and auto-merge remain disabled; default worker network and secrets remain empty.
+- REQUEST_TO_CONTRACT_001 phase 1 was merged by PR #50. It preserved the verbatim request as the sole direct `USER` provenance, labeled structured interpretation as `MODEL`, created and critiqued an exact canonical GP001 draft, exported a hash-bound non-executable authorization request, and failed closed at `AWAITING_VERIFIED_HUMAN_AUTHORIZATION`.
+- Generic external-project execution and auto-merge remained disabled; default worker network and secrets remained empty.
 
-### 3.2 Implemented but not equivalent to the final product path
-
-`FACT`:
-
-- The `main` CLI does not expose REQUEST_TO_CONTRACT_001. The class is reachable only through Python code/tests. PR #59 is one commit ahead of `main` and adds the bounded `form-gp001-request` CLI plus status documentation.
-- PR #59 passed `Verify Executor foundations` (`31908746286`): 252 tests ran, 10 Docker opt-in tests were skipped in that job, all non-skipped tests passed, compile and validators passed. Its Docker security job ran 10 tests successfully. `GP001 replay repeatability` (`31908746347`) also passed.
-- The real GP001 E2E is not a solver proof. `tools/run_gp001_real_e2e.py` contains the complete `OLD_BLOCK -> NEW_BLOCK` repair and passes an already prepared `AuthorizedFileMutation` to the runtime.
-- `GP001Runtime.execute()` accepts a prepared exact mutation; it does not obtain a solution from a worker or planning component.
-- Current request formation deliberately cannot consume `ACCEPT`, `MODIFY` or `REJECT`, cannot create `AUTHORIZED_AND_FROZEN`, and cannot hand a frozen contract to GP001.
-- The AAP validator exists, but the authoritative AAP contract says real execution additionally requires atomic consumption and result binding. Current GP001 reports `authorization_consumption: RUN_LOCAL_REPLAY_GUARD_ONLY` and uses an in-memory packet-ID set. Persistent atomic consumption and action-result binding are not on `main`.
-- Current GP001 produces a patch/report in a controlled workspace. It does not create a result commit or draft PR for a real user repository.
-
-### 3.3 Incomplete, obsolete or contradictory state
+### 3.2 Implemented but not equivalent to the final product path at that checkpoint
 
 `FACT`:
 
-- No request-origin / human-identity trust provider is selected.
-- No canonical verifier exists for externally rooted request-origin plus exact decision-event evidence, including freshness, replay and revocation semantics.
-- Open draft PRs #51–#57 contain a large technology-agnostic trust analysis, but are explicitly unmerged, select no provider and select neither A1 nor strengthened A2.
-- The current authoritative ladder still says the immediate target is old P1/PR #29, while later accepted build-order work moved to GP001 and REQUEST_TO_CONTRACT_001.
-- `README.md`, build order, inventory, product spec, product-purpose status and several document headers contain stale claims such as old owner `litrgratis-pixel/Executor`, GP001 “not yet E2E”, or request formation “missing” despite PRs #47–#50.
-- PR #59 corrects a useful subset of these contradictions but is still non-canonical and does not reconcile every authoritative document.
-- The repository has 62 branches and 18 open PRs: one current non-draft PR (#59) and 17 drafts. Several draft descriptions explicitly say “never merge”; other stacks are 17 to 107 commits behind current `main` or based on other obsolete branches.
-- The single open issue, #35, is explicitly a temporary PR #32 transport envelope that says it should be closed after payload recovery.
-- There are 25 workflow files. Many are historical runner/controller diagnostics rather than current product gates.
-- A push on the PR #59 branch produced an expected-but-noisy failure in `Trusted controller allocation test` run `31908727637`: the workflow compared current head `8254985...` with hard-coded historical workflow SHA `010dec8...`. The two current required PR workflows passed.
-- `main` is reported as unprotected by the branch API. There are no tags or releases.
+- The then-current `main` CLI did not expose REQUEST_TO_CONTRACT_001. PR #59 was one commit ahead and added the bounded `form-gp001-request` CLI plus status documentation.
+- PR #59 passed `Verify Executor foundations` (`31908746286`) and `GP001 replay repeatability` (`31908746347`).
+- The historical real GP001 E2E was not yet a solver proof; `tools/run_gp001_real_e2e.py` contained the repair and passed an already prepared `AuthorizedFileMutation` to the runtime.
+- `GP001Runtime.execute()` accepted a prepared exact mutation; it did not itself obtain a solution from a worker or planning component.
+- Request formation at that checkpoint deliberately could not consume `ACCEPT`, `MODIFY` or `REJECT`, could not create `AUTHORIZED_AND_FROZEN`, and could not hand a frozen contract to GP001.
+- The AAP validator existed, while persistent atomic consumption and action-result binding were not yet on that historical `main`.
+- GP001 produced a patch/report in a controlled workspace and did not yet create a result commit or draft PR for a real user repository.
 
-### 3.4 Non-canonical branch families
+### 3.3 Incomplete, obsolete or contradictory state at that checkpoint
 
-| Family | State relative to current `main` | Completion relevance |
+`FACT`:
+
+- No request-origin / human-identity trust provider had yet been selected.
+- No canonical verifier yet existed for externally rooted request-origin plus exact decision-event evidence.
+- Open draft PRs #51–#57 contained trust analysis but were unmerged.
+- The then-authoritative ladder/build-order/status surfaces contained stale claims.
+- The repository had many branches/drafts and historical workflow diagnostics.
+- `main` was reported as unprotected; no tags or releases were observed.
+
+These items are preserved as Phase-B provenance. They do not reopen final completion. The production request-origin/Human-identity provider may still remain intentionally unselected for future broader production scope, but it is not a blocker to the already accepted bounded P4 claim.
+
+### 3.4 Non-canonical branch families at that checkpoint
+
+| Family | Historical Phase-B meaning | Completion relevance at that checkpoint |
 |---|---|---|
-| PR #59 / `codex/finish-request-formation` | 1 ahead, 0 behind | current bounded CLI/docs candidate; AI may integrate, revise or replace after map approval |
-| PRs #51–#57 | stacked trust-design drafts; root is 17 commits behind and diverged | evidence for `HR-2`/`HR-3`, never automatic canon |
-| PRs #17–#21 | old M3 design/implementation stack; root is 107 commits behind and diverged | salvage requirements/tests only if demanded by the selected completion path |
-| PR #29 and PR #22 | old P1 pilot candidate/remediation; 107 commits behind and diverged | do not merge wholesale; compare useful acquisition/evidence mechanisms with current GP001 |
-| PR #34 | old product-contract draft; 106 commits behind | may contain accepted semantic history, but conflicts must be reconciled rather than merged blindly |
-| PRs #36/#38 and issue #35 | temporary evidence transport/generator work | close after preserving any still-required provenance |
-| merged-feature branches | historical heads already represented in `main` history | delete or retain per branch-retention policy; they are not active roadmap work |
+| PR #59 / `codex/finish-request-formation` | then-current bounded CLI/docs candidate | candidate work, not canon |
+| PRs #51–#57 | stacked trust-design drafts | evidence for decisions, never automatic canon |
+| PRs #17–#21 | old M3 design/implementation stack | salvage requirements/tests only if demanded |
+| PR #29 and PR #22 | old P1 pilot candidate/remediation | do not merge wholesale |
+| PR #34 | old product-contract draft | historical semantic material only |
+| PRs #36/#38 and issue #35 | temporary evidence transport/generator work | temporary provenance |
+| merged-feature branches | historical heads represented in main history | not active roadmap work |
 
 ## 4. Precise definition of DONE
 
 ### 4.1 Common DONE invariant
 
-The whole project may be called complete only when all common conditions below are true at one exact canonical SHA:
+The whole project may be called complete only when all common conditions below are true at one exact candidate identity/evidence chain and the accepted implementation is safely integrated as separately authorized:
 
 1. The human has accepted the recovered goal, selected `HR-1`, and resolved all active `HUMAN_REQUIRED` forks.
 2. One canonical product/state document names the selected terminal level, supported task class, non-goals and exact evidence required for acceptance.
@@ -224,15 +256,15 @@ The whole project may be called complete only when all common conditions below a
 8. Execution is isolated, bounded and fail-closed. The target failure is reproduced before mutation; target and required regressions pass after mutation; protected material and scope are verified.
 9. The result is a reviewable patch or draft PR as required by the selected endpoint, with no auto-merge, and a concise truthful report ending only in `ACTION_COMPLETED_REVIEW_REQUIRED`, `BLOCKED` or `FAILED`.
 10. Evidence is bound to the exact code/input/environment and can be replayed or independently checked without the executor process's memory or self-report.
-11. Documentation, implementation inventory, commands, support limits and maturity claims match actual `main`; no known contradictory success claim remains.
+11. Documentation, implementation inventory, commands, support limits and maturity claims match actual accepted/current state; no known contradictory success claim remains.
 12. All required tests, adversarial gates, package/CLI smoke checks and relevant CI pass at the exact candidate SHA; non-gating diagnostic workflows are removed, disabled or explicitly separated from release status.
-13. No active critical-path branch, PR, temporary issue or undocumented blocker remains. Historical evidence is preserved without presenting abandoned drafts as active work.
+13. No active critical-path branch, PR, temporary issue or undocumented blocker remains for the selected completion claim. Historical evidence is preserved without presenting abandoned drafts as active work.
 14. The branch-specific endpoint gates in section 4.2 pass.
-15. A fresh independent Phase-C verifier returns `PROJECT COMPLETION: PASS` and the human makes the final acceptance decision required by the selected endpoint.
+15. A fresh independent Phase-C verifier establishes the required technical fact and the human makes the final acceptance decision required by the selected endpoint.
 
 ### 4.2 Completion endpoint alternatives (`HR-1`)
 
-These are the historical Phase-A alternatives. `HR-1 C — P4 Repeatable Executor 1.0` is selected for Phase B.
+These are the historical Phase-A alternatives. `HR-1 C — P4 Repeatable Executor 1.0` was selected and later accepted.
 
 #### A — Bounded Executor v1 functional slice
 
@@ -269,34 +301,38 @@ Additional DONE conditions are every P3 gate plus every P4 gate:
 - known failure taxonomy and honest bounded retry;
 - stable operator workflow and version/model regression policy;
 - documented limits and comparison with manual execution;
-- explicit human `EXECUTOR 1.0: ACCEPT` decision and a release/tag if separately authorized.
+- explicit human `EXECUTOR 1.0: ACCEPT` decision and a release/tag only if separately authorized.
 
-Consequence: best matches a repeatable “whole product 1.0” claim, but requires materially more external pilots, time, cost and human review than A or B.
+Consequence: this was the selected completion claim. The product claim is now Human-accepted; release/tag remain separately unauthorized.
 
-## 5. Complete gap map
+## 5. Historical Phase-B gap map
 
-| ID | Material gap | Depends on | Decision owner | DONE WHEN |
+This table records the gaps used to drive Phase B. It is not a current blocker list after final G-01–G-18 PASS.
+
+| ID | Material gap at Phase-B checkpoint | Depends on | Decision owner | Historical DONE WHEN |
 |---|---|---|---|---|
-| GAP-01 | `RESOLVED` — terminal completion level | none | `HUMAN` (`HR-1`) | `C — P4 Repeatable Executor 1.0` selected in `PHASE_B_AUTHORIZATION.md` |
-| GAP-02 | `RESOLVED` — trusted front-door placement | GAP-01 | `HUMAN` (`HR-2`) | `A — external governed request intake` selected |
-| GAP-03 | `RESOLVED FOR CURRENT PILOT` — trust provider/profile and authority semantics | GAP-02 | `HUMAN` (`HR-3`) | GitHub + `trust_profiles/github-p4-pilots.json` selected; revocation cutoff refined by the 2026-08-17 human decision |
-| GAP-04 | Canonical docs/state contradict merged implementation and current owner | GAP-01–03 for semantic wording | mixed: human approves semantics; implementation is `AI_DELEGABLE` | authoritative docs agree with exact `main`, current owner and selected DONE |
-| GAP-05 | Normal request surface is not on `main` | GAP-04 only for final wording | `AI_DELEGABLE` | bounded CLI/API passes happy and fail-closed paths; PR #59 is merged, revised or replaced on current base |
-| GAP-06 | Verified `ACCEPT/MODIFY/REJECT` consumption and freeze do not exist | GAP-02–03, GAP-05 | implementation `AI_DELEGABLE` within approved trust contract | exact fresh decision creates only the legal state; attacks fail closed |
-| GAP-07 | AAP atomic consumption/result binding is absent; GP001 uses a run-local set | GAP-06 before real consequential execution | `AI_DELEGABLE` unless changing AAP semantics | concurrent/replayed/crashed execution yields exactly one durable consumption and one bound terminal result |
-| GAP-08 | No selected source of a non-human-written solution proposal is connected | GAP-01; semantic ownership in `HR-4` | `HUMAN_REQUIRED` for ownership/provider authority, then `AI_DELEGABLE` | an approved proposal boundary supplies a bounded candidate without effect authority and without hard-coded solution evidence |
-| GAP-09 | Request formation, freeze, solver proposal, authority and GP001 are not orchestrated end to end | GAP-05–08 | `AI_DELEGABLE` | one operator path reaches review-required or honest blocked/failed from a normal request |
-| GAP-10 | Current runtime only supports one exact controlled fixture and creates no user draft PR | GAP-01, GAP-09, `HR-5` | human grants external authority; implementation `AI_DELEGABLE` | endpoint-specific source acquisition, output commit/patch/draft PR and policy binding pass |
-| GAP-11 | Independent evidence/replay does not cover the full request-to-result chain | GAP-06–10 | `AI_DELEGABLE` | fresh verifier can validate origin, decision, freeze, proposal, effect, result and report from durable artifacts |
-| GAP-12 | Product-value/repeatability evidence is absent | GAP-09–11 | external inputs/human review required; run execution `AI_DELEGABLE` | A, B or C endpoint metrics and acceptance gates pass |
-| GAP-13 | CI contains historical diagnostic workflows and a known noisy failure | may start after map approval | `AI_DELEGABLE` for repo cleanup; workflow-policy changes follow project approval rules | required checks are explicit and green; obsolete diagnostics no longer signal project failure |
-| GAP-14 | 62 branches, 17 draft PRs and temporary issue #35 obscure active state | GAP-01–03 before closing semantic drafts | `AI_DELEGABLE` after preserving decisions/evidence | one active completion path remains; obsolete/temp items are closed with provenance pointers; retention policy is documented |
-| GAP-15 | Release/operator documentation and packaging evidence are incomplete | GAP-09–12 | `AI_DELEGABLE`; public release is human-authorized | setup/use/error/report docs match reality; wheel/CLI smoke passes; support/version policy matches endpoint |
-| GAP-16 | Final independent completion fact and human acceptance do not exist | GAP-01–15 | independent verifier + `HUMAN_REQUIRED` acceptance | Phase C returns PASS and final human decision is recorded |
+| GAP-01 | `RESOLVED` — terminal completion level | none | `HUMAN` (`HR-1`) | `C — P4 Repeatable Executor 1.0` selected |
+| GAP-02 | `RESOLVED` — trusted front-door placement | GAP-01 | `HUMAN` (`HR-2`) | external governed request intake selected |
+| GAP-03 | `RESOLVED FOR ACCEPTED PILOT` — trust provider/profile and authority semantics | GAP-02 | `HUMAN` (`HR-3`) | GitHub + accepted trust profile / revocation semantics |
+| GAP-04 | canonical docs/state contradiction | GAP-01–03 | mixed | authoritative docs agree with exact accepted/current state |
+| GAP-05 | normal request surface not yet on historical main | GAP-04 | `AI_DELEGABLE` | bounded front door implemented and verified |
+| GAP-06 | verified decision consumption/freeze missing | GAP-02–03, GAP-05 | `AI_DELEGABLE` | exact legal transition implemented; attacks fail closed |
+| GAP-07 | atomic AAP consumption/result binding absent | GAP-06 | `AI_DELEGABLE` | durable one-shot consumption/result binding |
+| GAP-08 | selected solution proposal source missing | semantic ownership | Human boundary + AI implementation | bounded proposal without effect authority |
+| GAP-09 | end-to-end orchestration missing | GAP-05–08 | `AI_DELEGABLE` | operator path reaches truthful terminal state |
+| GAP-10 | no real bounded external draft-PR path | GAP-09 | Human effect authority + AI implementation | authorized bounded draft PR evidence |
+| GAP-11 | independent evidence/replay incomplete | GAP-06–10 | `AI_DELEGABLE` | full durable origin-to-result verification |
+| GAP-12 | product-value/repeatability evidence absent | GAP-09–11 | external inputs/human review | selected endpoint metrics/evidence pass |
+| GAP-13 | CI historical diagnostics/noise | repo cleanup | `AI_DELEGABLE` | release status separated from diagnostics |
+| GAP-14 | branch/PR/temp-state hygiene | after evidence preservation | `AI_DELEGABLE` | active path unambiguous |
+| GAP-15 | release/operator docs/packaging incomplete | GAP-09–12 | AI; public release Human | docs/package evidence match claim |
+| GAP-16 | independent completion fact and Human acceptance absent | GAP-01–15 | verifier + Human | final independent evidence + Human acceptance |
 
-## 6. Dependency constraints and provisional completion path
+Final completion evidence later closed the applicable selected-DONE gates. This historical table must not be used to reopen them without new evidence that invalidates the accepted chain.
 
-The arrows below express hard prerequisites and currently known constraint relationships. They are not a fixed execution schedule. Subject to those prerequisites, each next action is selected by the adaptive completion-control rule in section 0.1.
+## 6. Historical dependency constraints and Phase-B completion path
+
+The arrows below expressed hard prerequisites and then-known constraint relationships. They were not a fixed schedule and are no longer a current work queue.
 
 ```text
 HISTORICAL PHASE-A DEPENDENCY BASELINE: main@728d23e / P0 + bounded GP001 + formation phase 1
@@ -308,7 +344,7 @@ HISTORICAL PHASE-A DEPENDENCY BASELINE: main@728d23e / P0 + bounded GP001 + form
   +--> HR-5 AUTHORIZE ENDPOINT-SPECIFIC EXTERNAL EFFECTS / PILOTS
           |
           v
-  CANONICALIZE STATE + INTEGRATE/REPLACE PR #59
+  CANONICALIZE STATE + INTEGRATE/REPLACE REQUEST SURFACE
           |
           v
   VERIFIED ORIGIN + DECISION VERIFIER
@@ -338,9 +374,9 @@ HISTORICAL PHASE-A DEPENDENCY BASELINE: main@728d23e / P0 + bounded GP001 + form
                 FINAL HUMAN ACCEPTANCE
 ```
 
-Parallel work is permitted only where the arrows allow it. In particular, solver-interface work and the atomic ledger may proceed in parallel after their semantic contracts are fixed; no real effect may run before verified freeze and atomic effect authority exist. After either path changes project state materially, the whole project is reassessed before more work is selected.
+The adaptive completion-control decision in section 0.1 remains valid as a decision principle, but the Phase-B route shown here has completed for the selected P4 claim.
 
-## 7. Decision forks
+## 7. Decision forks — historical selected context
 
 ### 7.1 `HUMAN_REQUIRED`
 
@@ -352,43 +388,39 @@ Parallel work is permitted only where the arrows allow it. In particular, solver
 | B | P3 Real Value MVP | proves one real problem is worth delegating | no repeatability; needs real repo, review and measured human-time reduction |
 | C | P4 Repeatable Executor 1.0 | supports a whole-product 1.0 claim | largest evidence burden, multiple pilots, stable operations and model/version policy |
 
+Historical result: `C` selected and later Human-accepted.
+
 #### HR-2 — Where does trusted request origin begin?
 
 | Option | Meaning | Enables | Sacrifices / risk |
 |---|---|---|---|
 | A | A1: externalized governed request intake | simpler trust topology; origin and decision share one external transaction domain | changes the governed product front door from direct Executor intake to an external authority domain |
 | B | strengthened A2: Executor front door plus direct external origin attestation before formation | preserves direct `USER -> EXECUTOR` experience | requires a new pre-formation verified request envelope/boundary; later authentication alone is insufficient |
-| C | retain unverified request intake and stop at non-executable phase 1 | preserves current low-risk demonstrator | cannot satisfy the accepted executable v1 promise, P3 or P4; requires explicit scope reduction |
-
-Naive A2 (“accept local request now, authenticate later”) is already rejected by the draft adversarial analysis because `USER provenance != VERIFIED REQUEST-ORIGIN EVIDENCE`.
+| C | retain unverified request intake and stop at non-executable phase 1 | preserves current low-risk demonstrator | cannot satisfy accepted executable claim without scope reduction |
 
 #### HR-3 — Which external trust/evidence domain is canonical?
 
 | Option | Meaning | Enables | Sacrifices / risk |
 |---|---|---|---|
-| A | external transaction/approval platform owns request plus decision events | strong event IDs, actor provenance and approval lifecycle in one domain | vendor/workflow coupling; must prove direct-principal action and immutable event revision |
-| B | external identity root plus human signing/approval ceremony over exact request/draft hashes | provider-independent artifact verification and direct exact-content binding | key/device lifecycle, revocation and user ceremony complexity |
-| C | enterprise IdP/workflow authority service | organizational governance and delegated operational fit | changes target operating context, adds IAM/legal/admin dependencies and may not fit an individual-user product |
-
-The human must name the concrete provider/profile, not only the class, before implementation can claim real authority.
+| A | external transaction/approval platform owns request plus decision events | strong event IDs, actor provenance and approval lifecycle in one domain | vendor/workflow coupling |
+| B | external identity root plus human signing/approval ceremony | provider-independent artifact verification | key/device lifecycle complexity |
+| C | enterprise IdP/workflow authority service | organizational governance | added IAM/legal/admin dependencies |
 
 #### HR-4 — Who owns solution generation?
 
 | Option | Meaning | Enables | Sacrifices / risk |
 |---|---|---|---|
-| A | External Intelligence supplies a proposal through a frozen interface; Executor only governs effects; Saddle may validate intent conformity but does not select/author the solution path | preserves semantic ownership and provider independence | requires a stable cross-system proposal/evidence contract and integration environment |
-| B | an Executor-System cognitive adapter calls one selected model/provider | self-contained first product experience | adds provider credentials, spend, model-version policy and cognitive responsibility inside this product system |
-| C | deterministic pre-authored transformations only | no model cost or provider dependency | remains a controlled transformation demo; cannot prove “sensible fix without human supplying solution” for a real problem |
+| A | External Intelligence supplies a proposal through a frozen interface; Executor only governs effects; Saddle may validate intent conformity but does not select/author the solution path | preserves semantic ownership and provider independence | requires a stable cross-system proposal/evidence contract |
+| B | an Executor-System cognitive adapter calls one selected model/provider | self-contained experience | adds provider credentials/spend/model policy |
+| C | deterministic pre-authored transformations only | no model dependency | cannot prove sensible external solution generation |
 
 #### HR-5 — What real-world effect authority is granted?
 
 | Option | Meaning | Enables | Sacrifices / risk |
 |---|---|---|---|
 | A | controlled fixture only, no GitHub write | endpoint A | cannot pass P3/P4 |
-| B | one named real pilot repository/task, exact commit, draft PR only | endpoint B and the first P3 proof | needs repository authorization, GitHub write capability and human review; still no merge |
-| C | frozen supported task/repository class with bounded draft-PR authority | endpoint C and P4 series | broader policy, operations and failure surface; requires evidence before generalization |
-
-Exact repository, task, budget, credentials, retention and legal/commercial constraints are part of this human decision.
+| B | one named real pilot repository/task, exact commit, draft PR only | endpoint B / P3 | bounded GitHub write and review needed |
+| C | frozen supported task/repository class with bounded draft-PR authority | endpoint C / P4 | broader policy/evidence surface |
 
 #### HR-6 — Final acceptance and release
 
@@ -399,107 +431,71 @@ Only the human may:
 - authorize a public release/tag;
 - authorize deployment, paid spend, new secrets or broader repository effects.
 
+Final product acceptance was supplied for the selected P4 claim. Release/deploy/tag and broader effects remain separately unauthorized.
+
 ### 7.2 `AI_DELEGABLE`
 
-After HR-1–HR-5 are fixed and full Phase-B delegation is explicit, the agent may decide and record rationale for:
+During Phase B, after HR-1–HR-5 were fixed, the agent could decide implementation details within the approved map. That historical delegation did not create perpetual authority for a new product phase or future external effects.
 
-- whether to merge, revise, cherry-pick or replace PR #59's implementation;
-- module boundaries, APIs, schemas and internal data structures that preserve the approved contracts;
-- implementation sequencing within section 6;
-- deterministic validation and error-handling design;
-- local persistence technology for atomic consumption/result binding when it creates no new external commitment;
-- test fixtures, adversarial cases and CI job structure;
-- minimal dependency choices justified by a measured need;
-- refactoring required to remove duplication or connect the accepted path;
-- exact retry limits within the approved budget and semantics;
-- documentation reconciliation and release-note wording that does not change the claim;
-- closure/deletion of obsolete branches, PRs, issue #35 and diagnostic workflows after preserving necessary evidence;
-- abandoning a failed implementation branch and choosing another reversible approach;
-- stopping unnecessary work once every selected DONE gate is objectively satisfied.
+## 8. Historical possible external blockers
 
-The agent must escalate only a newly discovered fork that changes product meaning, external authority, legal/commercial commitment, accepted risk or the DONE definition.
+These were possible Phase-B blockers, not current blockers to the already accepted P4 product claim:
 
-## 8. Possible external blockers
+1. unresolved Human selections;
+2. unavailable trust provider/evidence domain;
+3. missing provider configuration/secrets after selection;
+4. no authorized real pilot repository/problem;
+5. no GitHub write permission for the selected bounded draft-PR effect;
+6. no approved model/provider credential or budget where needed;
+7. Docker/hosted-runner outage or unavailable immutable inputs;
+8. external provider/API changes;
+9. no independent fresh verifier;
+10. no Human reviewer for final acceptance.
 
-These are possible Phase-B blockers, not current blockers to completing Phase A:
-
-1. No human selection of HR-1–HR-5.
-2. No accessible trust provider capable of proving request origin and exact direct-principal decisions with required freshness/revocation semantics.
-3. Missing provider configuration, signing keys, webhooks or secrets after the provider is selected.
-4. No authorized real pilot repository/problem for endpoint B or C.
-5. No GitHub write permission to create a draft PR in the selected pilot repository.
-6. No approved model/provider credential or budget if HR-4 option B is selected.
-7. Docker/hosted-runner outage or inability to obtain immutable sandbox images and exact external source commits.
-8. External provider/API changes that invalidate the approved trust or worker profile.
-9. No independent fresh-session/model verifier for Phase C.
-10. No human reviewer to judge real patch usefulness, time reduction and final product acceptance.
-
-A normal engineering difficulty, failed first approach, stale branch, test failure or documentation contradiction is not an external blocker.
+A future broader production/release phase may have new blockers, but they must not be back-projected into the closed Executor 1.0 completion claim.
 
 ## 9. Final PASS gates
 
-At the exact completion candidate SHA, every applicable gate must be recorded as `PASS` with locators:
+At the accepted completion candidate/evidence chain, every applicable gate is recorded as `PASS` in the final completion record:
 
 | Gate | Required evidence |
 |---|---|
 | G-01 Goal/endpoint | recorded human approval of goal, DONE endpoint and HR choices |
-| G-02 Canonical truth | automated/manual document-state audit finds no material contradiction |
-| G-03 Request origin | forged, substituted, retroactive and wrong-subject origin evidence blocks |
-| G-04 Decision/freeze | only exact final-live-verified ACCEPT may create CONTRACT_ACCEPT; pre-cutoff edit/delete/mismatch/expiry/replay blocks; the exact snapshot becomes immutable authority only after successful global CONTRACT_ACCEPT consumption/result binding; failed consumption creates no freeze and retry re-verifies live state; post-cutoff source mutation does not retroactively revoke the frozen contract; snapshot substitution/replay remains fail-closed |
-| G-05 Solver separation | solution is not hand-authored by user and proposer has no effect authority |
-| G-06 Atomic authority | concurrent attempts produce exactly one consumption and one result binding; crash recovery is fail-closed |
-| G-07 Input identity | repository, commit, source tree, workflow and sandbox image match exact approved identities |
-| G-08 Precondition | target failure or other real acceptance counterexample is reproduced before change |
+| G-02 Canonical truth | document-state audit finds no material contradiction in accepted claim |
+| G-03 Request origin | forged/substituted/wrong-subject evidence blocks |
+| G-04 Decision/freeze | exact accepted revocation-cutoff semantics and fail-closed consumption |
+| G-05 Solver separation | solution not hand-authored by user; proposer no effect authority |
+| G-06 Atomic authority | exactly one consumption and one result binding; crash recovery fail-closed |
+| G-07 Input identity | exact approved repository/commit/source/workflow/sandbox identities |
+| G-08 Precondition | target failure/counterexample reproduced before change |
 | G-09 Postcondition | target and required regressions pass after change |
-| G-10 Scope | allowed paths only; protected tests/material unchanged unless explicitly authorized |
-| G-11 Isolation | no host fallback, worker network/secrets only as approved, resource limits and cleanup pass |
-| G-12 Report | result is truthful, concise and limited to review-required/blocked/failed |
-| G-13 Replay | independent replay/check validates complete origin-to-result evidence without process memory |
-| G-14 CI/package | unit, integration/Docker, compile, validators, wheel install/CLI smoke and required workflows pass |
-| G-15 Endpoint value | all branch-specific A, B or C gates in section 4.2 pass |
-| G-16 Repository closure | no unfinished critical-path PR/branch/temp issue; obsolete evidence work is clearly archived/closed |
-| G-17 Independent verdict | fresh Phase-C verifier returns `PROJECT COMPLETION: PASS` |
-| G-18 Human acceptance | explicit final acceptance for the selected claim; release only if separately authorized |
+| G-10 Scope | allowed paths only; protected material preserved |
+| G-11 Isolation | no host fallback; approved network/secrets/limits/cleanup |
+| G-12 Report | truthful review-required/blocked/failed terminal semantics |
+| G-13 Replay | independent complete origin-to-result evidence verification |
+| G-14 CI/package | unit/integration/compile/validators/package/CLI checks pass |
+| G-15 Endpoint value | selected P4 value/repeatability gates pass |
+| G-16 Repository closure | no unfinished critical-path work for accepted claim |
+| G-17 Independent verdict | fresh independent Phase-C fact established |
+| G-18 Human acceptance | explicit final Human `EXECUTOR 1.0: ACCEPT` |
 
-Any unmet applicable gate yields `BLOCKED` or `FALSE-COMPLETION`, never a weaker interpretation of DONE.
-
-## 10. Independent completion verification plan
-
-A fresh session/model that did not execute Phase B receives only:
-
-- canonical target repository state at the candidate SHA;
-- this map as approved by the human;
-- the recorded HR decisions and completion authorization;
-- durable evidence generated during Phase B.
-
-It performs the following independently:
-
-1. Pin repository, branch, commit, tree, open PR/issue inventory and workflow definitions.
-2. Verify that the accepted goal/DONE and all HR decisions are present and unchanged.
-3. Reconstruct the real entrypoints/call graph for request, origin verification, formation, freeze, solution proposal, action authority, runtime, evidence and reporting.
-4. Run full unit discovery, compile, project/task/test validators, package build/install and CLI smoke in a fresh environment.
-5. Run Docker/security/integration tests with immutable image identity and verify cleanup.
-6. Execute a fresh happy-path case permitted by the selected endpoint without reusing Phase-B process memory.
-7. Execute the negative matrix: forged origin, wrong actor, mutable/rebound event, model-generated ACCEPT, draft mismatch, MODIFY/REJECT, expired/revoked/replayed decision, proposal scope drift, stale source, wrong commit, protected-path edit, packet race/replay, crash between consumption and result, tampered evidence and false-success report.
-8. Recompute hashes and replay/verify durable evidence from raw artifacts rather than trusting the executing agent's summary.
-9. For endpoint B/C, inspect the real patch/draft PR and human review/time/cost measurements; for C, recompute the series metrics and failure taxonomy.
-10. Check documentation and all open branches/PRs/issues for goal drift or unfinished critical-path work.
-11. Check that no Saddle repository content was modified by Executor completion work.
-12. Return exactly one verdict:
+Current result:
 
 ```text
+G-01–G-18: PASS
 PROJECT COMPLETION: PASS
-PROJECT COMPLETION: BLOCKED
-PROJECT COMPLETION: FALSE-COMPLETION
+P4 REPEATABLE EXECUTOR 1.0: HUMAN ACCEPTED
 ```
 
-The executing agent's own DONE statement is observational evidence only and cannot satisfy G-17.
+## 10. Independent completion verification plan — historical verification contract
 
-## 11. Phase-B execution package after human approval
+A fresh verifier receives canonical target state, this Human-approved map, recorded decisions and durable evidence. It independently checks exact identity, request/decision/freeze/proposal/effect/result boundaries, tests, negative matrix, replay, documentation and false-success paths before establishing the technical completion fact.
 
-The approved Phase-B agent should begin from fresh `main`, not by merging a historical stack. It may mine old drafts for requirements and tests, but every adopted change must be reconciled with the current code and selected HR decisions.
+The executing agent's own DONE statement is observational evidence only and cannot satisfy G-17. The accepted project used an independent Phase-C chain and then a separate direct Human G-18 acceptance.
 
-Coverage obligations, not a fixed workflow:
+## 11. Historical Phase-B execution package
+
+The historical Phase-B coverage obligations were:
 
 1. canonical state/docs and CI hygiene;
 2. current request surface;
@@ -512,11 +508,11 @@ Coverage obligations, not a fixed workflow:
 9. full evidence/replay, metrics and documentation;
 10. independent Phase-C handoff.
 
-The agent may reorder, combine, replace or eliminate workstreams when evidence shows that another available capability reaches the unchanged DONE more directly. After every material state change it must rerun the whole-project constraint assessment from section 0.1. Phase B ends only at G-01–G-18 PASS or an objective external blocker.
+These obligations drove the accepted product path; they are not a current implementation queue after completion.
 
-## 12. Human semantic approval template
+## 12. Human semantic approval history and current result
 
-The protocol's one semantic gate can be recorded using this complete shape:
+The historical semantic approval gate used this shape:
 
 ```text
 RECOVERED EXECUTOR GOAL: ACCEPT / CORRECT AS FOLLOWS: ...
@@ -530,14 +526,17 @@ CONTINUATION: AUTHORIZED UNTIL ALL SELECTED DONE GATES PASS OR AN OBJECTIVE EXTE
 MERGE / RELEASE / DEPLOY AUTHORITY: [state explicitly]
 ```
 
-This gate was subsequently supplied in `PHASE_B_AUTHORIZATION.md`. The current state is:
+That Phase-B authority was subsequently exercised and closed. The current state is:
 
 ```text
-PHASE B AUTHORIZED WITHIN RECORDED BOUNDARIES
-P4 NOT CLAIMED
-FINAL HUMAN ACCEPTANCE NOT RECORDED
+PHASE B: HISTORICAL / COMPLETED
+P4 REPEATABLE EXECUTOR 1.0: HUMAN ACCEPTED
+PROJECT COMPLETION: PASS
+FINAL HUMAN ACCEPTANCE: RECORDED / G-18 PASS
+IMPLEMENTATION INTEGRATION: COMPLETE
+ACTIVE COMPLETION GATE: NONE
+RELEASE / DEPLOY / TAG: NOT AUTHORIZED
 ```
-
 
 ## 13. G-04 revocation-cutoff clarification — HUMAN DECISION (2026-08-17)
 
