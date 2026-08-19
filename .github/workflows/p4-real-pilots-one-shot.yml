@@ -1,0 +1,413 @@
+name: M05 R1 request65 canonical-path evaluation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/p4-real-pilots-one-shot.yml
+      - .github/workflows/m05-r1-request65-single-run.yml
+      - evidence/m05-r1/request65-authority-input.json
+
+# EVALUATION ONLY / MUST NOT MERGE.
+# This branch-local workflow temporarily occupies the canonical P4 workflow path
+# because the accepted Executor runtime binds execution-environment identity to it.
+# Runtime, trust, authority and pilot implementation files remain byte-identical
+# to accepted main. The only provider adapter here is authenticated use of the
+# already-existing GitHubRestClient(token=...) capability.
+permissions:
+  contents: write
+  issues: read
+
+concurrency:
+  group: m05-r1-request65-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  CHAIN_ID: M05-R1-SCRIPTOPS-ISSUE-65
+  EXPECTED_BASE: 846239e3105886cdec912a2cee35e127378fcc2e
+  ISSUE_NUMBER: "65"
+  REQUEST_BODY_SHA256: 158ab5918c20802658b2c6649a63e6fb25511c0c0d745efcb170cf3577a022db
+  REQUEST_NODE_ID: I_kwDOTpqUf88AAAABM-aINQ
+  TARGET_COMMIT: daa6e5dc210e09171a530eeffe5601e0e74ae041
+  TARGET_TREE: ba0b99bd99682dcc7a942537b502a7a72151fa09
+  EXECUTOR_WORKFLOW_PATH: .github/workflows/p4-real-pilots-one-shot.yml
+  EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: JTJ07/Executor
+  EXECUTOR_GLOBAL_AUTHORITY_TOKEN: ${{ github.token }}
+  GITHUB_EVIDENCE_TOKEN: ${{ github.token }}
+
+jobs:
+  one-shot-evaluation:
+    if: github.head_ref == 'evaluation/m05-r1-single-run-request65'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact evaluation head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Bind evaluation scope and inherited runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          git merge-base --is-ancestor "$EXPECTED_BASE" HEAD
+          git diff --name-only "$EXPECTED_BASE" HEAD | LC_ALL=C sort > m05-r1-changed-paths.txt
+          cat > m05-r1-allowed-paths.txt <<'EOF'
+          .github/workflows/m05-r1-request65-single-run.yml
+          .github/workflows/p4-real-pilots-one-shot.yml
+          evidence/m05-r1/request65-authority-input.json
+          EOF
+          LC_ALL=C sort -o m05-r1-allowed-paths.txt m05-r1-allowed-paths.txt
+          diff -u m05-r1-allowed-paths.txt m05-r1-changed-paths.txt
+          for path in \
+            executor/cli.py \
+            executor/github_trust.py \
+            executor/github_authority.py \
+            executor/pilot_contract.py \
+            executor/pilot_runtime.py \
+            executor/execution_environment.py \
+            executor/solution_proposal.py \
+            trust_profiles/github-p4-pilots.json; do
+            test "$(git rev-parse "$EXPECTED_BASE:$path")" = "$(git rev-parse "HEAD:$path")"
+          done
+          git rev-parse HEAD > m05-r1-executor-head.txt
+          git rev-parse 'HEAD^{tree}' > m05-r1-executor-tree.txt
+          sha256sum "$EXECUTOR_WORKFLOW_PATH" > m05-r1-workflow-sha256.txt
+
+      - name: Re-resolve direct-Human request with existing authenticated trust client
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from executor.github_trust import GitHubRestClient, GitHubTrustProfile, verify_github_request
+          from executor.pilot_contract import build_pilot_draft, pilot_draft_sha256
+
+          profile = GitHubTrustProfile.from_dict(json.loads(Path("trust_profiles/github-p4-pilots.json").read_text()))
+          source = GitHubRestClient(token=os.environ["GITHUB_EVIDENCE_TOKEN"])
+          request = verify_github_request(source, profile=profile, issue_number=65)
+          draft = build_pilot_draft(request)
+          draft_sha = pilot_draft_sha256(draft)
+
+          assert request.issue_node_id == "I_kwDOTpqUf88AAAABM-aINQ"
+          assert request.body_sha256 == "158ab5918c20802658b2c6649a63e6fb25511c0c0d745efcb170cf3577a022db"
+          assert request.payload["target"]["commit"] == "daa6e5dc210e09171a530eeffe5601e0e74ae041"
+          assert request.payload["target"]["tree"] == "ba0b99bd99682dcc7a942537b502a7a72151fa09"
+          assert draft_sha == "cfdcfa2ac6b2d6ac7e3da59b0d7aece0e54d43e99f3c8977e8cd422285b50cf6"
+
+          Path("m05-r1-draft.json").write_text(json.dumps({
+              "schema_version": "executor-pilot-draft-result/1.0",
+              "status": "AWAITING_VERIFIED_GITHUB_DECISION",
+              "draft": draft,
+              "draft_sha256": draft_sha,
+              "executable": False,
+          }, indent=2, sort_keys=True) + "\n")
+          PY
+
+      - name: Verify same-identity request and External Intelligence proposal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          request = json.loads(Path("evidence/p4/requests/scriptops-request.json").read_text())
+          provenance = json.loads(Path("evidence/p4/intelligence/scriptops-provenance.json").read_text())
+          candidate = json.loads(Path("evidence/p4/candidates/scriptops-solution-candidate.json").read_text())
+          draft_result = json.loads(Path("m05-r1-draft.json").read_text())
+
+          assert request["request_id"] == "p4-scriptops-numeric-candidate-002"
+          assert request["target"]["commit"] == "daa6e5dc210e09171a530eeffe5601e0e74ae041"
+          assert request["target"]["tree"] == "ba0b99bd99682dcc7a942537b502a7a72151fa09"
+          assert provenance["producer_role"] == "EXTERNAL_INTELLIGENCE"
+          assert provenance["effect_capability"] == "NONE"
+          assert provenance["request"]["issue_number"] == 65
+          assert provenance["request"]["issue_node_id"] == "I_kwDOTpqUf88AAAABM-aINQ"
+          assert provenance["request"]["body_sha256"] == "158ab5918c20802658b2c6649a63e6fb25511c0c0d745efcb170cf3577a022db"
+          assert provenance["source"]["commit"] == "daa6e5dc210e09171a530eeffe5601e0e74ae041"
+          assert provenance["source"]["tree"] == "ba0b99bd99682dcc7a942537b502a7a72151fa09"
+          assert candidate["repository"] == "JTJ07/scriptops"
+          assert candidate["source_commit"] == "daa6e5dc210e09171a530eeffe5601e0e74ae041"
+          assert candidate["source_tree"] == "ba0b99bd99682dcc7a942537b502a7a72151fa09"
+
+          Path("m05-r1-identity-preflight.json").write_text(json.dumps({
+              "schema_version": "m05-r1-identity-preflight/1.0",
+              "chain_id": "M05-R1-SCRIPTOPS-ISSUE-65",
+              "request_issue": 65,
+              "request_node_id": "I_kwDOTpqUf88AAAABM-aINQ",
+              "request_body_sha256": "158ab5918c20802658b2c6649a63e6fb25511c0c0d745efcb170cf3577a022db",
+              "draft_sha256": draft_result["draft_sha256"],
+              "target_commit": "daa6e5dc210e09171a530eeffe5601e0e74ae041",
+              "target_tree": "ba0b99bd99682dcc7a942537b502a7a72151fa09",
+              "intelligence_producer_role": provenance["producer_role"],
+              "intelligence_effect_capability": provenance["effect_capability"],
+              "status": "PASS_WAITING_FOR_AUTHORITY_CHECK",
+          }, indent=2, sort_keys=True) + "\n")
+          PY
+
+      - name: Resolve bound Human authority locator
+        id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+          data = json.loads(Path("evidence/m05-r1/request65-authority-input.json").read_text())
+          if data.get("chain_id") != "M05-R1-SCRIPTOPS-ISSUE-65" or data.get("issue_number") != 65:
+              raise SystemExit("authority input identity mismatch")
+          if data.get("status") != "DIRECT_HUMAN_AUTHORITY_BOUND":
+              raise SystemExit("direct Human authority is not bound")
+          comment_id = data.get("comment_id")
+          if not isinstance(comment_id, int) or comment_id <= 0:
+              raise SystemExit("comment_id must be a positive integer")
+          print(f"comment_id={comment_id}")
+          PY
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path("evidence/m05-r1/request65-authority-input.json").read_text())
+          Path("m05-r1-provider-gate.json").write_text(json.dumps({
+              "schema_version": "m05-r1-provider-gate/1.0",
+              "chain_id": data["chain_id"],
+              "issue_number": data["issue_number"],
+              "authority_input_status": data["status"],
+              "comment_id": data["comment_id"],
+              "provider_verified": False,
+              "contract_authority_consumed": False,
+              "effect_executed": False,
+              "status": "DIRECT_HUMAN_AUTHORITY_INPUT_PRESENT_NOT_YET_VERIFIED",
+          }, indent=2, sort_keys=True) + "\n")
+          PY
+
+      - name: Build isolated ScriptOps pilot image
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/m05-r1-scriptops.Dockerfile" <<'EOF'
+          FROM python:3.11-slim-bookworm
+          RUN apt-get update \
+              && apt-get install -y --no-install-recommends git \
+              && rm -rf /var/lib/apt/lists/* \
+              && python -m pip install --no-cache-dir PyYAML==6.0.2
+          EOF
+          docker build --pull -f "$RUNNER_TEMP/m05-r1-scriptops.Dockerfile" -t m05-r1-scriptops:pyyaml-git .
+          docker image inspect --format='{{.Id}}' m05-r1-scriptops:pyyaml-git > m05-r1-image-id.txt
+          echo "EXECUTOR_SANDBOX_IMAGE=$(cat m05-r1-image-id.txt)" >> "$GITHUB_ENV"
+
+      - name: Acquire exact historical ScriptOps target
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone https://github.com/JTJ07/scriptops.git target
+          git -C target checkout "$TARGET_COMMIT"
+          test "$(git -C target rev-parse HEAD)" = "$TARGET_COMMIT"
+          test "$(git -C target rev-parse 'HEAD^{tree}')" = "$TARGET_TREE"
+          test -z "$(git -C target status --porcelain=v1 --untracked-files=all)"
+
+      - name: Verify and consume fresh Human contract authority
+        shell: bash
+        env:
+          COMMENT_ID: ${{ steps.gate.outputs.comment_id }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from executor.authority_ledger import AtomicAuthorityLedger
+          from executor.github_authority import GitHubGlobalAuthority, GovernedAuthorityLedger
+          from executor.github_trust import GitHubRestClient, GitHubTrustProfile, verify_github_decision, verify_github_request
+          from executor.pilot_contract import apply_github_decision, build_pilot_draft, pilot_draft_sha256
+
+          profile = GitHubTrustProfile.from_dict(json.loads(Path("trust_profiles/github-p4-pilots.json").read_text()))
+          source = GitHubRestClient(token=os.environ["GITHUB_EVIDENCE_TOKEN"])
+          request = verify_github_request(source, profile=profile, issue_number=65)
+          draft = build_pilot_draft(request)
+          draft_sha = pilot_draft_sha256(draft)
+          assert draft_sha == "cfdcfa2ac6b2d6ac7e3da59b0d7aece0e54d43e99f3c8977e8cd422285b50cf6"
+          comment_id = int(os.environ["COMMENT_ID"])
+          decision = verify_github_decision(
+              source,
+              profile=profile,
+              request=request,
+              comment_id=comment_id,
+              draft_sha256=draft_sha,
+          )
+          assert decision.decision == "ACCEPT"
+          ledger = GovernedAuthorityLedger(
+              AtomicAuthorityLedger(".executor/m05-r1-authority.sqlite3"),
+              GitHubGlobalAuthority.from_environment(expected_repository=profile.intake_repository),
+          )
+          frozen = apply_github_decision(
+              draft=draft,
+              decision=decision,
+              source=source,
+              profile=profile,
+              ledger=ledger,
+          )
+          assert frozen["status"] == "AUTHORIZED_AND_FROZEN"
+          Path("m05-r1-frozen.json").write_text(json.dumps(frozen, indent=2, sort_keys=True) + "\n")
+          Path("m05-r1-provider-gate.json").write_text(json.dumps({
+              "schema_version": "m05-r1-provider-gate/1.0",
+              "chain_id": "M05-R1-SCRIPTOPS-ISSUE-65",
+              "issue_number": 65,
+              "comment_id": comment_id,
+              "comment_node_id": decision.comment_node_id,
+              "actor_login": decision.actor_login,
+              "actor_id": decision.actor_id,
+              "decision": decision.decision,
+              "draft_sha256": decision.draft_sha256,
+              "created_at": decision.created_at,
+              "expires_at": decision.expires_at,
+              "provider_verified": True,
+              "contract_authority_consumed": True,
+              "effect_executed": False,
+              "status": "DIRECT_HUMAN_AUTHORITY_VERIFIED_AND_FROZEN",
+          }, indent=2, sort_keys=True) + "\n")
+          PY
+
+      - name: Materialize exact existing Intelligence proposal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m executor.cli materialize-pilot-proposal \
+            --candidate evidence/p4/candidates/scriptops-solution-candidate.json \
+            --provenance evidence/p4/intelligence/scriptops-provenance.json \
+            --frozen m05-r1-frozen.json \
+            > m05-r1-proposal.json
+
+      - name: Execute exactly one bounded governed pilot
+        shell: bash
+        env:
+          COMMENT_ID: ${{ steps.gate.outputs.comment_id }}
+        run: |
+          set -euo pipefail
+          python -m executor.cli run-pilot \
+            --profile trust_profiles/github-p4-pilots.json \
+            --issue "$ISSUE_NUMBER" \
+            --comment "$COMMENT_ID" \
+            --frozen m05-r1-frozen.json \
+            --proposal m05-r1-proposal.json \
+            --ledger .executor/m05-r1-authority.sqlite3 \
+            --workspace target \
+            --runs-root m05-r1-runs \
+            --run-id "m05-r1-request65-${{ github.run_id }}-${{ github.run_attempt }}" \
+            --image "$EXECUTOR_SANDBOX_IMAGE" \
+            --executor-root . \
+            --executor-commit "${{ github.event.pull_request.head.sha }}" \
+            > m05-r1-result.json
+          git -C target diff --no-ext-diff --no-textconv --binary "$TARGET_COMMIT" > m05-r1-target.patch
+          git -C target status --porcelain=v1 --untracked-files=all > m05-r1-target-status.txt
+
+      - name: Independent deterministic verifier
+        shell: bash
+        env:
+          COMMENT_ID: ${{ steps.gate.outputs.comment_id }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import subprocess
+          from pathlib import Path
+
+          result = json.loads(Path("m05-r1-result.json").read_text())
+          frozen = json.loads(Path("m05-r1-frozen.json").read_text())
+          proposal = json.loads(Path("m05-r1-proposal.json").read_text())
+          gate = json.loads(Path("m05-r1-provider-gate.json").read_text())
+          workflow_sha = hashlib.sha256(Path(".github/workflows/p4-real-pilots-one-shot.yml").read_bytes()).hexdigest()
+
+          assert result["status"] == "ACTION_COMPLETED_REVIEW_REQUIRED"
+          assert gate["provider_verified"] is True
+          assert gate["contract_authority_consumed"] is True
+          assert frozen["status"] == "AUTHORIZED_AND_FROZEN"
+          assert frozen["contract"]["request_evidence"]["issue_number"] == 65
+          assert frozen["contract"]["decision_evidence"]["comment_id"] == gate["comment_id"]
+          assert proposal["repository"] == "JTJ07/scriptops"
+          assert proposal["source_commit"] == "daa6e5dc210e09171a530eeffe5601e0e74ae041"
+          assert proposal["source_tree"] == "ba0b99bd99682dcc7a942537b502a7a72151fa09"
+          environment = result["execution_environment"]
+          assert environment["workflow_path"] == ".github/workflows/p4-real-pilots-one-shot.yml"
+          assert environment["workflow_sha256"] == workflow_sha
+          assert environment["executor_commit"] == Path("m05-r1-executor-head.txt").read_text().strip()
+
+          changed = subprocess.check_output(
+              ["git", "-C", "target", "diff", "--name-only", "daa6e5dc210e09171a530eeffe5601e0e74ae041"],
+              text=True,
+          ).splitlines()
+          assert changed == ["phase6/scriptops-v2-hardening.py"], changed
+
+          patch = Path("m05-r1-target.patch").read_bytes()
+          verifier = {
+              "schema_version": "m05-r1-independent-verifier/1.0",
+              "chain_id": "M05-R1-SCRIPTOPS-ISSUE-65",
+              "status": "PASS",
+              "executor_result_status": result["status"],
+              "request_issue": 65,
+              "human_comment_id": gate["comment_id"],
+              "target_commit": "daa6e5dc210e09171a530eeffe5601e0e74ae041",
+              "changed_paths": changed,
+              "patch_sha256": hashlib.sha256(patch).hexdigest(),
+              "execution_environment_workflow_sha256": workflow_sha,
+              "canonical_external_repository_effect": "NONE",
+              "review_required": True,
+          }
+          Path("m05-r1-verifier.json").write_text(json.dumps(verifier, indent=2, sort_keys=True) + "\n")
+          Path("m05-r1-state-delta-candidate.json").write_text(json.dumps({
+              "schema_version": "m05-r1-state-delta-candidate/1.0",
+              "chain_id": verifier["chain_id"],
+              "source": "WORKFLOW_ARTIFACT_CANDIDATE_NOT_YET_DURABLE_COS_STATE",
+              "h5_executor_effect": result["status"],
+              "h6_verifier": verifier["status"],
+              "external_target_canon_changed": False,
+              "h7_durable_state": "PENDING_COS_EVIDENCE_INTEGRATION",
+              "h8_reassessment": "PENDING_M05_RECHECK",
+              "whole_h1_h8_pass": False,
+          }, indent=2, sort_keys=True) + "\n")
+          PY
+
+      - name: Verify no leaked pilot containers
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(docker ps -aq --filter label=creative-os-executor-pilot=p4-bounded-real-pilot)"
+
+      - name: Upload replay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m05-r1-request65-canonical-path-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          include-hidden-files: true
+          path: |
+            m05-r1-executor-head.txt
+            m05-r1-executor-tree.txt
+            m05-r1-changed-paths.txt
+            m05-r1-workflow-sha256.txt
+            m05-r1-draft.json
+            m05-r1-identity-preflight.json
+            m05-r1-provider-gate.json
+            m05-r1-image-id.txt
+            m05-r1-frozen.json
+            m05-r1-proposal.json
+            m05-r1-result.json
+            m05-r1-target.patch
+            m05-r1-target-status.txt
+            m05-r1-verifier.json
+            m05-r1-state-delta-candidate.json
+            .executor/m05-r1-authority.sqlite3*
+            m05-r1-runs/**
