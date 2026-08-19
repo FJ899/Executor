@@ -1,23 +1,45 @@
 ---
 document: "Contract Formation Boundary"
-version: "1.0"
-status: "USER DIRECTION ACCEPTED / CANDIDATE BASELINE"
-date: "2026-08-09"
-scope: "governed translation from human request to authorized task contract"
+version: "1.1"
+status: "OWNERSHIP RECONCILIATION CANDIDATE / DIRECTION AUTHORIZED"
+date: "2026-08-19"
+scope: "governed materialization and binding of proposed meaning into an authorized task contract"
 repository: "JTJ07/Executor"
 ---
 
-# Contract Formation Boundary v1
+# Contract Formation Boundary v1.1
 
 ## 1. Purpose
 
-This document defines the boundary between a human request and an executable task contract.
+This document defines the boundary between a Human request, Intelligence-produced interpretation/HOW proposals, and an executable task contract.
 
 The core rule is:
 
-> **CONTRACT FORMATION IS A GOVERNED ACTION.**
+> **CONTRACT FORMATION IS A GOVERNED MATERIALIZATION AND BINDING ACTION, NOT THE OWNER OF OPERATIONAL HOW.**
 
-Turning natural language into executable authority is not a formatting step. It is the point where interpretation can begin to affect the real action space of the system.
+Turning proposed meaning into executable authority is not a formatting step. It is the point where a proposal can begin to constrain the real action space of the system. Contract Formation must therefore preserve provenance, expose unresolved meaning, reject scope drift and require Human/superior authority before any draft becomes executable.
+
+Semantic ownership remains separate:
+
+```text
+HUMAN
+  owns intent / goal / DONE / normative decisions
+
+EXTERNAL / BASE INTELLIGENCE
+  interprets the problem space and proposes/selects operational HOW
+
+CONTRACT FORMATION
+  materializes and binds supplied/accepted meaning and scope
+  into a reviewable bounded contract representation
+
+EXECUTOR
+  executes only an already authorized/frozen consequential contract
+
+VERIFIER
+  independently establishes facts
+```
+
+Capability to interpret text inside one process does not transfer semantic ownership of HOW into Contract Formation.
 
 ## 2. Distinct objects
 
@@ -26,7 +48,7 @@ The following are not interchangeable:
 ```text
 USER REQUEST
     !=
-AI INTERPRETATION
+INTELLIGENCE INTERPRETATION / HOW PROPOSAL
     !=
 DRAFT TASK CONTRACT
     !=
@@ -43,15 +65,15 @@ Fix the failing test about batch atomicity.
 
 It is evidence of user intent, but it is not itself a complete executable contract.
 
-### AI Interpretation
+### Intelligence Interpretation / HOW Proposal
 
-A structured hypothesis about what the request means.
+A structured proposal about what the request means and how the bounded problem could be solved.
 
-Interpretation may infer candidate targets, scope, success conditions and unresolved questions, but inference is not user intent and does not create authority.
+Intelligence may infer candidate targets, scope, success conditions and unresolved questions. Those inferences are proposals, not authoritative user intent, Human decisions or effect authority.
 
 ### Draft Task Contract
 
-A proposed executable boundary containing explicit fields such as:
+A reviewable materialization of proposed/accepted meaning containing explicit fields such as:
 
 - objective;
 - repository and pinned input identity;
@@ -63,44 +85,48 @@ A proposed executable boundary containing explicit fields such as:
 - discoveries outside scope;
 - unresolved assumptions.
 
-A draft is review material. It is not executable authority.
+A draft is review material. It is not executable authority and its existence does not prove that its semantics were Human-authorized.
 
 ### Authorized / Frozen Task Contract
 
-A draft that has passed the required human or superior-authority decision gate and has been frozen for execution.
+A draft that has passed the required Human or superior-authority decision gate and has been frozen for execution.
 
 Only this state may enter the Executor execution kernel.
 
 ## 3. Contract formation pipeline
 
+The semantic pipeline is:
+
 ```text
-USER REQUEST
+USER REQUEST / ACCEPTED MEANING
       |
       v
-INTERPRET
+EXTERNAL / BASE INTELLIGENCE
+ interpret problem / propose HOW and candidate contract meaning
       |
       v
-PROPOSE DRAFT CONTRACT
+CONTRACT FORMATION
+ materialize / bind / provenance-check / critique for drift
       |
       v
-CRITIQUE
+DRAFT TASK CONTRACT
       |
       v
 PRESENT DECISION SURFACE
       |
       v
-HUMAN AUTHORIZATION
+HUMAN / SUPERIOR AUTHORIZATION
    /          |          \
 ACCEPT      MODIFY      REJECT
    |
    v
 FROZEN TASK CONTRACT
-   |
-   v
+      |
+      v
 EXECUTION KERNEL
 ```
 
-The first implementation may use one model/process for `INTERPRET -> PROPOSE -> CRITIQUE`. Architectural roles do not require separate agents.
+The same model or process may technically perform more than one step. That implementation convenience does not merge semantic ownership. In particular, a Contract Formation API may accept fields named `understood_objective` or `proposed_task_contract`, but the proposal remains Intelligence provenance and Contract Formation does not gain ownership of selecting HOW by storing, checking or critiquing it.
 
 ## 4. Formation invariants
 
@@ -108,21 +134,23 @@ The first implementation may use one model/process for `INTERPRET -> PROPOSE -> 
 
 A natural-language request must not be treated as a complete executable contract merely because a model can infer missing details.
 
-### CFI-002 — AI INTERPRETATION != USER INTENT
+### CFI-002 — INTELLIGENCE INTERPRETATION != USER INTENT
 
-Model interpretation is a proposal about meaning, not authoritative evidence that the user intended every inferred detail.
+Model/Intelligence interpretation is a proposal about meaning, not authoritative evidence that the user intended every inferred detail.
 
 ### CFI-003 — DRAFT CONTRACT != AUTHORIZED CONTRACT
 
-A generated contract remains non-executable until the required authorization gate has accepted it.
+A generated/materialized contract remains non-executable until the required authorization gate has accepted it.
 
-### CFI-004 — CONTRACT FORMATION IS A GOVERNED ACTION
+### CFI-004 — CONTRACT FORMATION IS A GOVERNED BINDING ACTION
 
-Any transition that changes a request into executable authority must be observable, reviewable and constrained by a defined authorization boundary.
+Any transition that materializes proposed meaning into a candidate executable boundary must be observable, reviewable, provenance-bound and constrained by a defined authorization boundary.
+
+This governance responsibility does not grant Contract Formation semantic ownership of the proposal it materializes.
 
 ### CFI-005 — DISCOVERY MAY NOT SILENTLY EXPAND THE CONTRACT
 
-If interpretation or critique discovers an additional problem, opportunity or broader architectural concern, it must remain outside the current contract unless separately authorized.
+If Intelligence, formation-time critique or validation discovers an additional problem, opportunity or broader architectural concern, it must remain outside the current contract unless separately authorized.
 
 Correct behavior:
 
@@ -137,7 +165,7 @@ ACTION ON Y:
 NONE
 
 RECOMMENDATION:
-Create or authorize a separate contract.
+Return Y to Intelligence/Human decision space or create a separately authorized contract.
 ```
 
 Incorrect behavior:
@@ -149,18 +177,26 @@ X + Y
 
 without an explicit authority transition.
 
+### CFI-006 — CONTRACT FORMATION MUST NOT SELECT HOW
+
+Contract Formation may validate structure, provenance, scope compatibility, unresolved assumptions and divergence from an accepted profile. It must not originate, rank, select, route or optimize the operational solution merely because it is capable of generating text.
+
+If a different HOW is needed, that question returns to Intelligence and, where normative meaning changes, to the Human.
+
 ## 5. Formation state model
 
-Minimum states:
+Minimum materialization states:
 
 ```text
-REQUEST_RECEIVED
-      -> INTERPRETATION_PROPOSED
+REQUEST / PROPOSAL RECEIVED
+      -> PROPOSAL BOUND
       -> DRAFT_CONTRACT_CREATED
       -> DRAFT_CRITIQUED
       -> AWAITING_HUMAN_AUTHORIZATION
       -> AUTHORIZED_AND_FROZEN
 ```
+
+An implementation may preserve historical names such as `REQUEST_RECEIVED` or `INTERPRETATION_PROPOSED`. Those names describe local processing state; they do not assign semantic ownership of interpretation/HOW to Contract Formation.
 
 Alternative terminal/non-executable states:
 
@@ -170,15 +206,7 @@ REJECTED
 CANCELLED
 ```
 
-No execution transition is legal from:
-
-```text
-REQUEST_RECEIVED
-INTERPRETATION_PROPOSED
-DRAFT_CONTRACT_CREATED
-DRAFT_CRITIQUED
-AWAITING_HUMAN_AUTHORIZATION
-```
+No execution transition is legal from any non-authorized formation state.
 
 ## 6. Human decision surface
 
@@ -188,52 +216,56 @@ Minimum decision surface:
 
 ```text
 REQUEST
-UNDERSTOOD OBJECTIVE
+PROPOSED / UNDERSTOOD OBJECTIVE
 TARGET / INPUT IDENTITY
 PROPOSED WRITE SCOPE
 PROTECTED MATERIAL
 SUCCESS CONDITIONS
 DISCOVERED BUT OUT OF SCOPE
 UNRESOLVED ASSUMPTIONS
+PROVENANCE OF PROPOSED MEANING
 STATUS: DRAFT — USER AUTHORIZATION REQUIRED
 ```
 
-The user must be able to accept, modify or reject the draft.
+The user must be able to accept, modify or reject the draft. Human authorization accepts the bounded semantics presented; it does not retroactively convert every prior AI inference into Human-authored meaning.
 
 ## 7. REQUEST_TO_CONTRACT_001 scope
 
-The first formation slice is intentionally narrow.
+The first formation slice remains intentionally narrow.
 
-It will reuse GP001 rather than introduce a new technical problem.
+It reuses GP001 rather than introducing a new technical problem.
 
 Target request class:
 
 > A user asks to fix the known GP001 failing test without manually authoring `task.yaml`.
 
-The slice must prove only that the system can:
+The implemented slice proves only that the system can:
 
 1. receive a bounded natural-language request;
-2. form a truthful GP001 draft contract;
-3. expose assumptions and out-of-scope discoveries;
-4. critique the draft for scope expansion or unsupported inference;
-5. require human authorization;
-6. freeze an authorized contract that is semantically compatible with the existing GP001 execution contract.
+2. accept an Intelligence/model proposal for the GP001 interpretation and task contract;
+3. materialize that proposal with truthful provenance;
+4. expose assumptions and out-of-scope discoveries;
+5. critique the draft for scope expansion, unsupported inference or divergence from the accepted GP001 profile;
+6. require verified Human authorization before executable authority can exist.
 
-It does not need to prove general natural-language understanding, arbitrary project contract generation, multiple autonomous agents, long-term memory, or automatic authorization.
+The current `RequestToContract001` implementation deliberately records structured extraction/proposed objective as `MODEL` provenance and blocks contract divergence from the accepted GP001 profile. It does not prove general natural-language understanding, arbitrary project contract generation, autonomous HOW ownership, multiple autonomous agents, long-term memory or automatic authorization.
 
-## 8. Relationship to execution
+## 8. Relationship to Intelligence and execution
 
-Contract formation owns the transition from request to proposed authority.
-
-The execution kernel owns only execution of an already authorized contract.
+The boundary is:
 
 ```text
-FORMATION LAYER
-What exactly is being proposed for authorization?
+INTELLIGENCE
+What HOW / bounded meaning is being proposed, and why?
+        |
+        v
+CONTRACT FORMATION
+Can that supplied proposal be truthfully materialized and bound
+without adding meaning, scope or authority?
         |
         v
 HUMAN / SUPERIOR AUTHORITY
-Is this the action I authorize?
+Is this the bounded action I authorize?
         |
         v
 EXECUTION KERNEL
@@ -244,4 +276,12 @@ VERIFICATION
 What actually happened?
 ```
 
-No layer may silently absorb the authority of its neighbor.
+Contract Formation owns the integrity of materialization/binding and the non-executable draft-to-authorized boundary. It does **not** own the Human goal, normative meaning, operational HOW or effect authority.
+
+No layer may silently absorb the semantic ownership or authority of its neighbor.
+
+## 9. Reconciliation note
+
+This v1.1 wording reconciles the earlier local phrase `Contract formation owns the transition from request to proposed authority` with the later accepted ecosystem ownership model.
+
+It does not change Executor runtime behavior, the accepted Executor 1.0 product state, the GP001 implementation, Human authority requirements, release/deploy state or any capability. It removes only the architectural ambiguity that could otherwise allow Contract Formation to be misread as the owner of Intelligence's HOW-selection function.
