@@ -1,0 +1,180 @@
+{
+  "candidate_declared_verdict_authority": "IGNORED_FOR_AUTHORITY",
+  "extends_accepted_trust_root": {
+    "accepted_base": "03ec27d3015b5c086a5dc6db7dc558208fe2a478",
+    "manifest_git_blob": "33b901dd1aa44c3f94548a745aeeb877473f836d",
+    "manifest_path": "tools/finish_line_verifier/acceptance_manifest.json",
+    "repository": "JTJ07/Executor",
+    "verify_git_blob": "cee2a7e67466088588c24a0ca4b6e9879def676a",
+    "verify_path": "tools/finish_line_verifier/verify.py"
+  },
+  "p4_run94": {
+    "artifacts": {
+      "reconstructor": {
+        "artifact_id": 9419647722,
+        "artifact_name": "p4-reconstructor-corrected-series-evidence",
+        "artifact_sha256": "b76d52f569531e537cacc950a30e0ffd9206f09f24dda9926ce20e83aa358f7d",
+        "authority_snapshot_sha256s": [
+          "4a12c71a9ea90cc242269252d0b5cb27ce83ae79051247c4e0eb0c0684da597c",
+          "945ef8940b8558057b81400108fdcd616c41fcc3b9d235657c9cf449524ad611",
+          "0b557acdec715ff69bf447acea295b6fc30747011732f76faceb66d4d807d3f4"
+        ],
+        "changed_path": "scripts/verify_reconstructor.py",
+        "contract_final_shas": [
+          "d5873b6f131cf2287bbdb9d501159d341d1924ab",
+          "c91d5669857bf94bbe7690e3e7be9294c4365452",
+          "8072d5664f6179d00f2c9b2ac9d4dcdefca02ee1"
+        ],
+        "decisions": [
+          {
+            "body_sha256": "6c48a11b02a1c11a9e6122c69538d7641a6055c9c65ff8daa12c0d59b07ac759",
+            "comment_id": 5359915019,
+            "comment_node_id": "IC_kwDOTpqUf88AAAABP3nQCw"
+          },
+          {
+            "body_sha256": "2f4518b29147d8eb72184e5f4971084d2089542b35977c78eae1e8b8a4571961",
+            "comment_id": 5359917712,
+            "comment_node_id": "IC_kwDOTpqUf88AAAABP3nakA"
+          },
+          {
+            "body_sha256": "2407e38fec8402dc6420524b6b083fa41ddeb5e9be88b894a6c25404b26f4475",
+            "comment_id": 5359920154,
+            "comment_node_id": "IC_kwDOTpqUf88AAAABP3nkGg"
+          }
+        ],
+        "effect_final_shas": [
+          "8b29b5ffeb682ecf86cd1cbf787588c75edc15a7",
+          "e3c91200f50c7ba445de49da38c0c12375647aab",
+          "aaab83d25843f6571efeda9bf7b49da4779fef39"
+        ],
+        "human_actor_id": 219382941,
+        "human_actor_login": "JTJ07",
+        "image_id": "sha256:b5876a05e527471a4b0ebd1e7bbf643a34059add2c21e7997a70ae143adc0e33",
+        "model": "GPT-5.6 Sol",
+        "model_provider": "OpenAI",
+        "patch_sha256": "56081b656827ad7247b1a95647fff8f9a2b3476ccd719308bd9e39a650299d2c",
+        "prompt_sha256": "30d60d4ae5e353b66156b5e32717ab6c146cbdb4ff547618299b7d088a5c6182",
+        "proposal_id": "external-reconstructor-symlink-boundary-002",
+        "repository": "JTJ07/creative-os-project-reconstructor",
+        "request_body_sha256": "e662f7c25fc699b252abcc6a25254b510bd9de94d703116f23631994de1bccbc",
+        "request_issue": 64,
+        "request_node_id": "I_kwDOTpqUf88AAAABM-Zuww",
+        "review": {
+          "pr_number": 4,
+          "repository": "JTJ07/creative-os-project-reconstructor",
+          "review_id": 4946583370,
+          "reviewed_file_sha256": "3c91b20c70f9a3d696a3fffb0508418f6fb40b49c7a1a9ca146dd6397913753a",
+          "reviewed_head": "e59b9d6c1b496bcb6411e712e7c65cc891578ac3",
+          "reviewer_login": "JTJ07"
+        },
+        "reviewed_file_sha256": "3c91b20c70f9a3d696a3fffb0508418f6fb40b49c7a1a9ca146dd6397913753a",
+        "run_ids": [
+          "p4-reconstructor-corrected-001",
+          "p4-reconstructor-corrected-002",
+          "p4-reconstructor-corrected-003"
+        ],
+        "source_commit": "defc7b029097284f94136fec54b75c313ac12f68",
+        "source_tree": "5960d74773b19456863ac66084385b7619aa4285",
+        "task_class": "BOUNDED_CORRECTNESS_OR_QUALITY_FIX"
+      },
+      "scriptops": {
+        "artifact_id": 9419652927,
+        "artifact_name": "p4-scriptops-corrected-series-evidence",
+        "artifact_sha256": "b26cae6737cdd01d1d63fdaa0addba493d77f6a385ce225f8f4a26c87fc89b87",
+        "authority_snapshot_sha256s": [
+          "c7b14b8af4f0477b2f7899ed7de5719e3833943007ab4c400d9f09b4f919fb09",
+          "88715282979d7e2b356148b7ac3458d878b0d7ac2c1c6db8a678c6456e5f14cb",
+          "da163fc52e3f53477d89a432f9f702981de7aee01a12efdb710cf6e578013914"
+        ],
+        "changed_path": "phase6/scriptops-v2-hardening.py",
+        "contract_final_shas": [
+          "a3432d2103a338ed3dd2265cb8f9855c99b51828",
+          "4c9947813d226f48b613749dc744e0a6b9c126f0",
+          "748a78156c9484f204356ec05ac199aceca06d64"
+        ],
+        "decisions": [
+          {
+            "body_sha256": "f0343108d1aa037ae9cecfb515ded8c0130e0b89bff90a823b2b555417d4310b",
+            "comment_id": 5359901270,
+            "comment_node_id": "IC_kwDOTpqUf88AAAABP3maVg"
+          },
+          {
+            "body_sha256": "ebf7f3e42b61a2078d9607cc2ca075cd0113227a6669e0ba92aaa976d634bc95",
+            "comment_id": 5359903127,
+            "comment_node_id": "IC_kwDOTpqUf88AAAABP3mhlw"
+          },
+          {
+            "body_sha256": "2405b6a98634b08fa919a5e824e1823ff4ce1949fe934c5a48c3c35c312adba3",
+            "comment_id": 5359906374,
+            "comment_node_id": "IC_kwDOTpqUf88AAAABP3muRg"
+          }
+        ],
+        "effect_final_shas": [
+          "3ae21fdb926ddee6ec01386b5b14c100dc09269d",
+          "442691677c55d600a6a2283d538ca74fe6c24784",
+          "9bac29db7f2e957d2c14751b9ea6ffdc0f69ffc5"
+        ],
+        "human_actor_id": 219382941,
+        "human_actor_login": "JTJ07",
+        "image_id": "sha256:59c3d89cdc3dfa777bb9f65725d857a4c5b85e316b0220647b996ec48daf1b63",
+        "model": "GPT-5.6 Sol",
+        "model_provider": "OpenAI",
+        "patch_sha256": "c9c355db350382ab98b3edaf4d0794c50905816b45ec077f8fdc675b0b856007",
+        "prompt_sha256": "33e875991fe51752121eec45439911284d8723e6cf5638f7c99652cac91dce1c",
+        "proposal_id": "external-scriptops-numeric-version-001",
+        "repository": "JTJ07/scriptops",
+        "request_body_sha256": "158ab5918c20802658b2c6649a63e6fb25511c0c0d745efcb170cf3577a022db",
+        "request_issue": 65,
+        "request_node_id": "I_kwDOTpqUf88AAAABM-aINQ",
+        "review": {
+          "pr_number": 8,
+          "repository": "JTJ07/scriptops",
+          "review_id": 4946578707,
+          "reviewed_file_sha256": "8f3a183604f2d9dadc2f6f179152fa7983783300673b6d2392735bb537a88e88",
+          "reviewed_head": "897de878703a029df814f2551b993c3818defa2a",
+          "reviewer_login": "JTJ07"
+        },
+        "reviewed_file_sha256": "8f3a183604f2d9dadc2f6f179152fa7983783300673b6d2392735bb537a88e88",
+        "run_ids": [
+          "p4-scriptops-corrected-001",
+          "p4-scriptops-corrected-002",
+          "p4-scriptops-corrected-003"
+        ],
+        "source_commit": "daa6e5dc210e09171a530eeffe5601e0e74ae041",
+        "source_tree": "ba0b99bd99682dcc7a942537b502a7a72151fa09",
+        "task_class": "BOUNDED_CORRECTNESS_OR_QUALITY_FIX"
+      }
+    },
+    "change_stability": {
+      "baseline_executor_head": "f60829f90ea2f69dc501582daf109b59676be07e",
+      "baseline_workflow_sha256": "047977aa24f05ec45803f4017cc618a4665b052644e74f43def709e109f9807c",
+      "current_workflow_sha256": "43f6a175cb0ac35e13b3bf65a514eb65c4a59d3e8cdbbfd44cc495bdfa1d9be3",
+      "dedicated_ref": "refs/heads/preflight/p4-pyyaml-6.0.3-ref-binding",
+      "historical_reconstructor_patch_sha256": "56081b656827ad7247b1a95647fff8f9a2b3476ccd719308bd9e39a650299d2c",
+      "historical_ref": "refs/heads/phase-b/p4-repeatable-executor-1.0",
+      "historical_scriptops_patch_sha256": "c9c355db350382ab98b3edaf4d0794c50905816b45ec077f8fdc675b0b856007",
+      "new_dependency": "PyYAML==6.0.3",
+      "new_image_id": "sha256:59c3d89cdc3dfa777bb9f65725d857a4c5b85e316b0220647b996ec48daf1b63",
+      "old_dependency": "PyYAML==6.0.2",
+      "old_image_id": "sha256:64b16275b427cc370fb9a6066ef3921fbedd9523b5779574a492f68f9d2d760e"
+    },
+    "executor_head": "3cd0c8d747fef06f82c01cdab8449c7c8a100038",
+    "executor_tree": "c739aaa989a15eaed65996d7a0b5242a0ec26d7e",
+    "expected_execution_count": 6,
+    "expected_objective_count": 2,
+    "head_branch": "preflight/p4-pyyaml-6.0.3-ref-binding",
+    "model": "GPT-5.6 Sol",
+    "model_provider": "OpenAI",
+    "run_attempt": 1,
+    "run_id": "32404181188",
+    "workflow_path": ".github/workflows/p4-real-pilots-one-shot.yml",
+    "workflow_sha256": "43f6a175cb0ac35e13b3bf65a514eb65c4a59d3e8cdbbfd44cc495bdfa1d9be3"
+  },
+  "schema_version": "executor-finish-line-verifier-run94-manifest/1.0-candidate",
+  "trust_boundary": {
+    "artifact_generated_pass_markers": "UNTRUSTED_OBSERVATIONS",
+    "authoritative_use_requires": "VERIFIER CODE + MANIFEST EXECUTED FROM A SEPARATELY ACCEPTED TRUST ROOT",
+    "candidate_code_imports": "FORBIDDEN",
+    "verifier_runtime": "PYTHON_STDLIB_ONLY"
+  }
+}
