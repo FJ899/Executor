@@ -1,0 +1,167 @@
+name: P4 run94 trusted-verifier rebind preflight
+
+on:
+  push:
+    branches:
+      - proof-design/p4-run94-trusted-verifier-rebind
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+jobs:
+  run94-trusted-verifier-rebind:
+    if: ${{ github.ref == 'refs/heads/proof-design/p4-run94-trusted-verifier-rebind' }}
+    runs-on: ubuntu-24.04
+    env:
+      TARGET_HEAD: 3cd0c8d747fef06f82c01cdab8449c7c8a100038
+      BASELINE_HEAD: f60829f90ea2f69dc501582daf109b59676be07e
+      RUN_ID: "32404181188"
+      SCRIPTOPS_ARTIFACT_ID: "9419652927"
+      RECONSTRUCTOR_ARTIFACT_ID: "9419647722"
+      SCRIPTOPS_REVIEWED_HEAD: 897de878703a029df814f2551b993c3818defa2a
+      RECONSTRUCTOR_REVIEWED_HEAD: e59b9d6c1b496bcb6411e712e7c65cc891578ac3
+
+    steps:
+      - name: Checkout verifier candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: verifier
+
+      - name: Checkout exact run94 Executor candidate read-only
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ env.TARGET_HEAD }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: current
+
+      - name: Checkout accepted run91 baseline read-only
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ env.BASELINE_HEAD }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: baseline
+
+      - name: Prove controller is non-consequential
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C verifier rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C current rev-parse HEAD)" = "$TARGET_HEAD"
+          test "$(git -C baseline rev-parse HEAD)" = "$BASELINE_HEAD"
+          test -z "$(git -C verifier status --porcelain --untracked-files=all)"
+          test "$(git -C verifier hash-object tools/finish_line_verifier/verify.py)" = "cee2a7e67466088588c24a0ca4b6e9879def676a"
+          test "$(git -C verifier hash-object tools/finish_line_verifier/acceptance_manifest.json)" = "33b901dd1aa44c3f94548a745aeeb877473f836d"
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('verifier/.github/workflows/p4-run94-trusted-verifier-rebind.yml').read_text(encoding='utf-8')
+          assert 'permissions:\n  contents: read\n  actions: read\n  pull-requests: read' in text
+          for token in ('github' + '-pilot-decide', 'materialize' + '-pilot-proposal', 'run' + '-pilot'):
+              assert token not in text, token
+          PY
+
+      - name: Run verifier unit and repository tests
+        shell: bash
+        working-directory: verifier
+        run: |
+          set -euo pipefail
+          python -m compileall -q tools/finish_line_verifier/verify.py tools/finish_line_verifier/verify_run94.py executor
+          python -m unittest tests.test_finish_line_verifier tests.test_finish_line_verifier_run94 -v
+          python -m unittest discover -s tests -v
+
+      - name: Fetch immutable run94 provider metadata and artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-run94-rebind"
+          mkdir -p "$out"
+          auth="Authorization: Bearer $GH_TOKEN"
+          accept="Accept: application/vnd.github+json"
+          api="https://api.github.com/repos/JTJ07/Executor"
+          curl --fail --silent --show-error --location -H "$auth" -H "$accept" \
+            "$api/actions/runs/$RUN_ID" > "$out/run.json"
+          curl --fail --silent --show-error --location -H "$auth" -H "$accept" \
+            "$api/actions/runs/$RUN_ID/artifacts?per_page=100" > "$out/artifacts.json"
+          curl --fail --silent --show-error --location -H "$auth" -H "$accept" \
+            "$api/actions/artifacts/$SCRIPTOPS_ARTIFACT_ID/zip" > "$out/scriptops.zip"
+          curl --fail --silent --show-error --location -H "$auth" -H "$accept" \
+            "$api/actions/artifacts/$RECONSTRUCTOR_ARTIFACT_ID/zip" > "$out/reconstructor.zip"
+
+      - name: Fetch source-bound Human review inputs read-only
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-run94-rebind"
+          auth="Authorization: Bearer $GH_TOKEN"
+          accept="Accept: application/vnd.github+json"
+          raw="Accept: application/vnd.github.raw+json"
+          curl --fail --silent --show-error --location -H "$auth" -H "$accept" \
+            "https://api.github.com/repos/JTJ07/scriptops/pulls/8/reviews?per_page=100" \
+            > "$out/scriptops-reviews.json"
+          curl --fail --silent --show-error --location -H "$auth" -H "$raw" \
+            "https://api.github.com/repos/JTJ07/scriptops/contents/phase6/scriptops-v2-hardening.py?ref=$SCRIPTOPS_REVIEWED_HEAD" \
+            > "$out/scriptops-reviewed.py"
+          curl --fail --silent --show-error --location -H "$auth" -H "$accept" \
+            "https://api.github.com/repos/JTJ07/creative-os-project-reconstructor/pulls/4/reviews?per_page=100" \
+            > "$out/reconstructor-reviews.json"
+          curl --fail --silent --show-error --location -H "$auth" -H "$raw" \
+            "https://api.github.com/repos/JTJ07/creative-os-project-reconstructor/contents/scripts/verify_reconstructor.py?ref=$RECONSTRUCTOR_REVIEWED_HEAD" \
+            > "$out/reconstructor-reviewed.py"
+
+      - name: Independently re-derive run94 G-13 and G-15 inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-run94-rebind"
+          python verifier/tools/finish_line_verifier/verify_run94.py \
+            --manifest verifier/tools/finish_line_verifier/run94_manifest.json \
+            --scriptops "$out/scriptops.zip" \
+            --reconstructor "$out/reconstructor.zip" \
+            --run-metadata "$out/run.json" \
+            --artifacts-metadata "$out/artifacts.json" \
+            --scriptops-reviews "$out/scriptops-reviews.json" \
+            --scriptops-reviewed-file "$out/scriptops-reviewed.py" \
+            --reconstructor-reviews "$out/reconstructor-reviews.json" \
+            --reconstructor-reviewed-file "$out/reconstructor-reviewed.py" \
+            --baseline-workflow baseline/.github/workflows/p4-real-pilots-one-shot.yml \
+            --current-workflow current/.github/workflows/p4-real-pilots-one-shot.yml \
+            --output "$out/result.json"
+          python - "$out/result.json" <<'PY'
+          import json, sys
+          from pathlib import Path
+          result = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+          assert result['raw_evidence_status'] == 'PASS'
+          assert result['g13_replay_input_status'] == 'PASS'
+          assert result['g15_inputs_status'] == 'PASS'
+          assert result['objectives'] == 2
+          assert result['executions'] == 6
+          assert result['reviewed_output_coverage'] == '6/6'
+          assert result['change_stability']['status'] == 'PASS'
+          assert result['change_stability']['task_semantics_change'] is False
+          assert result['change_stability']['capability_change'] is False
+          assert result['p4_completion_status'] == 'NOT_DECIDED_BY_THIS_VERIFIER'
+          assert 'G17_TRUST_ROOT_ACCEPTANCE_AND_INDEPENDENT_COMPLETION_VERDICT' in result['not_established_by_this_verifier']
+          assert 'G18_FINAL_HUMAN_EXECUTOR_1_0_ACCEPTANCE' in result['not_established_by_this_verifier']
+          print('RUN94_TRUSTED_VERIFIER_REBIND_PREFLIGHT=PASS')
+          print('CONSEQUENTIAL_EXECUTIONS=0')
+          print('EFFECT_CONSUMPTIONS=0')
+          print('HUMAN_ACCEPT_CONSUMPTIONS=0')
+          print('CLAIM_RECONCILIATION=0')
+          PY
+
+      - name: Upload non-consequential reproof evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: p4-run94-trusted-verifier-rebind-evidence
+          path: ${{ runner.temp }}/p4-run94-rebind/**
+          if-no-files-found: error

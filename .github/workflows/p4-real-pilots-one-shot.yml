@@ -40,7 +40,7 @@ concurrency:
 
 jobs:
   scriptops-pilot-series:
-    if: ${{ github.ref == 'refs/heads/phase-b/p4-repeatable-executor-1.0' }}
+    if: ${{ github.ref == 'refs/heads/preflight/p4-pyyaml-6.0.3-ref-binding' }}
     runs-on: ubuntu-latest
     env:
       EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: JTJ07/Executor
@@ -89,7 +89,7 @@ jobs:
           RUN apt-get update \
               && apt-get install -y --no-install-recommends git \
               && rm -rf /var/lib/apt/lists/* \
-              && python -m pip install --no-cache-dir PyYAML==6.0.2
+              && python -m pip install --no-cache-dir PyYAML==6.0.3
           DOCKERFILE
           docker build --pull -f "$RUNNER_TEMP/p4-scriptops.Dockerfile" -t executor-scriptops-pilot:pyyaml-git .
 
@@ -205,7 +205,7 @@ jobs:
             pilot-evidence/scriptops/runs/**
 
   reconstructor-pilot-series:
-    if: ${{ github.ref == 'refs/heads/phase-b/p4-repeatable-executor-1.0' }}
+    if: ${{ github.ref == 'refs/heads/preflight/p4-pyyaml-6.0.3-ref-binding' }}
     runs-on: ubuntu-latest
     env:
       EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: JTJ07/Executor

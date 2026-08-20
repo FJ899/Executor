@@ -1,0 +1,103 @@
+name: P4 run94 final closure reconciliation candidate
+
+on:
+  push:
+    branches:
+      - reconcile/p4-run94-final-closure-candidate
+
+permissions:
+  contents: read
+
+env:
+  IMPLEMENTATION_HEAD: 3cd0c8d747fef06f82c01cdab8449c7c8a100038
+  TRUSTED_VERIFIER_HEAD: e73f1d410e663c85f7552ac92a492ef45d6a2901
+  TRUSTED_VERIFIER_RUN: "32407901358"
+  CONSEQUENTIAL_RUN: "32404181188"
+
+jobs:
+  reconcile-final-closure:
+    if: ${{ github.ref == 'refs/heads/reconcile/p4-run94-final-closure-candidate' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact reconciliation candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prove ancestry and non-consequential scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor "$IMPLEMENTATION_HEAD" "$GITHUB_SHA"
+          git merge-base --is-ancestor "$TRUSTED_VERIFIER_HEAD" "$GITHUB_SHA"
+          test -z "$(git status --porcelain --untracked-files=all)"
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('.github/workflows/p4-run94-final-closure-reconciliation.yml').read_text(encoding='utf-8')
+          assert 'permissions:\n  contents: read' in text
+          for token in ('github' + '-pilot-decide', 'materialize' + '-pilot-proposal', 'run' + '-pilot'):
+              assert token not in text, token
+          PY
+
+      - name: Prove reconciliation record remains fail-closed on Human gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('evidence/phase-c/P4_RUN94_FINAL_CLOSURE_RECONCILIATION_2026-08-20.md')
+          text = p.read_text(encoding='utf-8')
+          required = [
+              'G-13: PASS',
+              'G-15: PASS',
+              'G-16: PASS',
+              'G-17: PASS',
+              'G-02: CANDIDATE_READY_NOT_CANONICAL',
+              'G-18: OPEN_HUMAN_ONLY',
+              'PROJECT COMPLETION: BLOCKED ONLY ON G-18',
+              'g18_authority: "NONE"',
+              'merge_authority: "NONE"',
+              'release_authority: "NONE"',
+              'deploy_authority: "NONE"',
+              'tag_authority: "NONE"',
+          ]
+          for token in required:
+              assert token in text, token
+          assert '3cd0c8d747fef06f82c01cdab8449c7c8a100038' in text
+          assert '32404181188' in text
+          assert '32407901358' in text
+          assert 'e73f1d410e663c85f7552ac92a492ef45d6a2901' in text
+          PY
+
+      - name: Run focused and repository tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q executor tools tests
+          python -m unittest tests.test_p4_run94_final_closure_reconciliation -v
+          python -m unittest discover -s tests -v
+
+      - name: Final non-consequential summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "P4_RUN94_FINAL_CLOSURE_RECONCILIATION_CANDIDATE=PASS"
+          echo "IMPLEMENTATION_HEAD=$IMPLEMENTATION_HEAD"
+          echo "TRUSTED_VERIFIER_RUN=$TRUSTED_VERIFIER_RUN"
+          echo "CONSEQUENTIAL_RUN=$CONSEQUENTIAL_RUN"
+          echo "G13=PASS"
+          echo "G15=PASS"
+          echo "G16=PASS"
+          echo "G17=PASS"
+          echo "G02=CANDIDATE_READY_NOT_CANONICAL"
+          echo "G18=OPEN_HUMAN_ONLY"
+          echo "CONSEQUENTIAL_EXECUTIONS=0"
+          echo "EFFECT_CONSUMPTIONS=0"
+          echo "HUMAN_ACCEPT_CONSUMPTIONS=0"
+          echo "MERGE=0"
+          echo "RELEASE=0"
+          echo "DEPLOY=0"
+          echo "TAG=0"
