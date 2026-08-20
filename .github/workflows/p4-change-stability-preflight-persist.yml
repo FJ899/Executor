@@ -63,9 +63,11 @@ jobs:
           }
 
           printf '%s\n' "${{ github.sha }}" > "$out/preflight-controller-head.txt"
-          if grep -E 'github-pilot-decide|materialize-pilot-proposal|run-pilot' controller/.github/workflows/p4-change-stability-preflight-persist.yml; then
-            fail 'PREFLIGHT_CONTROLLER_CONTAINS_CONSEQUENTIAL_PILOT_CALL'
-          fi
+          for token in "github-pilot-"decide "materialize-pilot-"proposal "run-"pilot; do
+            if grep -F "$token" controller/.github/workflows/p4-change-stability-preflight-persist.yml; then
+              fail 'PREFLIGHT_CONTROLLER_CONTAINS_CONSEQUENTIAL_PILOT_CALL'
+            fi
+          done
 
           actual_head="$(git -C candidate rev-parse HEAD 2>/dev/null)"
           actual_tree="$(git -C candidate rev-parse 'HEAD^{tree}' 2>/dev/null)"
@@ -117,6 +119,7 @@ jobs:
             fi
           fi
 
+          rm -rf "$RUNNER_TEMP/pyyaml-wheel"
           mkdir -p "$RUNNER_TEMP/pyyaml-wheel"
           python -m pip download --only-binary=:all: --no-deps --dest "$RUNNER_TEMP/pyyaml-wheel" 'PyYAML==6.0.3' > "$out/pyyaml-download.txt" 2>&1
           if test $? -ne 0; then
@@ -181,7 +184,7 @@ jobs:
             PKGS
             sed -i 's/^            //' "$out/expected-apt-runtime-packages.txt"
             LC_ALL=C sort "$out/expected-apt-runtime-packages.txt" -o "$out/expected-apt-runtime-packages.txt"
-            docker run --rm executor-scriptops-preflight:pyyaml-6.0.3 sh -c 'dpkg-query -W -f="${Package}=${Version}\n" git git-man libbrotli1 libcurl3-gnutls liberror-perl libexpat1 libgdbm-compat4 libldap-2.5-0 libnghttp2-14 libperl5.36 libpsl5 librtmp1 libsasl2-2 libsasl2-modules-db libssh2-1 perl perl-modules-5.36 | LC_ALL=C sort' > "$out/actual-apt-runtime-packages.txt" 2>&1
+            docker run --rm executor-scriptops-preflight:pyyaml-6.0.3 sh -c "dpkg-query -W -f='\${Package}=\${Version}\\n' git git-man libbrotli1 libcurl3-gnutls liberror-perl libexpat1 libgdbm-compat4 libldap-2.5-0 libnghttp2-14 libperl5.36 libpsl5 librtmp1 libsasl2-2 libsasl2-modules-db libssh2-1 perl perl-modules-5.36 | LC_ALL=C sort" > "$out/actual-apt-runtime-packages.txt" 2>&1
             if test $? -ne 0; then
               fail 'NEW_IMAGE_APT_PACKAGE_MANIFEST_FAILED'
             else
@@ -267,7 +270,7 @@ jobs:
           git -C controller config user.name 'github-actions[bot]'
           git -C controller config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git -C controller add -- "$RESULT_PATH"
-          git -C controller commit -m 'Record non-consequential P4 change-stability preflight evidence'
+          git -C controller commit -m 'Record clean non-consequential P4 change-stability preflight evidence'
           git -C controller push origin HEAD:preflight-run/p4-pyyaml-6.0.3
 
       - name: Enforce preflight verdict
