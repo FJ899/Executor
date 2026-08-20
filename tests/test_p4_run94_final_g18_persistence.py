@@ -70,7 +70,7 @@ class FinalG18PersistenceTests(unittest.TestCase):
         self.assertIn("G-18: OPEN_HUMAN_ONLY", text)
         self.assertIn("PROJECT COMPLETION: BLOCKED ONLY ON G-18", text)
         current = read(NEW_RECORD)
-        self.assertIn("pre-G-18", current)
+        self.assertIn("Pre-G-18", current)
         self.assertIn("G-18: PASS", current)
 
 
