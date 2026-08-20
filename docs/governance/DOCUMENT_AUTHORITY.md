@@ -1,48 +1,59 @@
 ---
 document: "Executor Document Authority"
-version: "1.2"
-status: "ACTIVE / FINAL COMPLETION RECONCILED"
-date: "2026-08-19"
+version: "1.3-candidate"
+status: "CURRENT-STATE PRECEDENCE RECONCILIATION CANDIDATE"
+date: "2026-08-20"
 scope: "source-of-truth ownership, precedence and status semantics"
 repository: "JTJ07/Executor"
+merge_authority: "NONE"
 ---
 
-# Executor Document Authority v1.2
+# Executor Document Authority v1.3 — candidate
 
 ## 1. Purpose
 
 This document answers one question:
 
-> When two repository documents appear to disagree, which document is authoritative for which kind of claim?
+> When two Executor records appear to disagree, which source owns which claim?
 
-No single document owns every dimension of Executor. Authority is assigned by subject so architecture, implementation status, Human authorization semantics and maturity do not silently overwrite one another.
+No single document owns every dimension of Executor. Authority remains subject-specific. This candidate does not change the P4 gate contract or semantic ownership; it only reconciles current-state precedence after the 2026-08-19 finish-line recheck and the fresh run94 reproof.
 
-The repository has reached a later state than the Phase-B snapshot preserved in several historical planning documents. Current completion facts must therefore be read from the final completion/integration records before interpreting older Phase-B status text.
+This file is non-canonical until separately authorized and merged.
 
-## 2. Authority by subject
+## 2. Current technical reproof and historical Human acceptance are different facts
 
-### Current product completion and Human acceptance
+The latest reviewable current-state reconciliation candidate is:
 
-Authoritative current records:
+- `evidence/phase-c/P4_RUN94_FINAL_CLAIM_RECONCILIATION_2026-08-20.md`.
 
-- `docs/governance/EXECUTOR_1_0_FINAL_COMPLETION_RECORD_2026-08-18.md`;
-- `evidence/phase-c/EXECUTOR_1_0_POST_INTEGRATION_CLOSURE_2026-08-18.md`.
-
-They own the final exact accepted candidate, G-01–G-18 result, Human G-18 acceptance, verified integration lineage and current closure meaning.
-
-Current terminal facts:
+It owns the current **technical reproof status** for exact candidate:
 
 ```text
-SELECTED ENDPOINT: P4 REPEATABLE EXECUTOR 1.0
-PRODUCT / COMPLETION: HUMAN ACCEPTED
-PROJECT COMPLETION: PASS
-G-01–G-18: PASS
-IMPLEMENTATION INTEGRATION: COMPLETE
-EXACT HUMAN-ACCEPTED CANDIDATE: f60829f90ea2f69dc501582daf109b59676be07e
-CURRENT MAIN AFTER POST-INTEGRATION CLOSURE: d115578cf05ed7edf55c50a2b5d29af16d13fb4d
+HEAD: 3cd0c8d747fef06f82c01cdab8449c7c8a100038
+TREE: c739aaa989a15eaed65996d7a0b5242a0ec26d7e
+RUN94: 32404181188
+TRUSTED READ-ONLY VERIFIER RUN: 32407901358
+G-13: PASS
+G-15: PASS
+G-17: PASS
+G-18 FOR 3cd0c8d...: NOT SUPPLIED
 ```
 
-The accepted candidate identity and later current-main identity are intentionally different facts. The later integration/closure SHA does not rewrite which exact candidate the Human accepted.
+The following remain authoritative **historical exact-identity facts**:
+
+- `docs/governance/EXECUTOR_1_0_FINAL_COMPLETION_RECORD_2026-08-18.md` — final Human acceptance and integration lineage for the earlier exact candidate `f60829f90ea2f69dc501582daf109b59676be07e`;
+- `evidence/phase-c/EXECUTOR_1_0_POST_INTEGRATION_CLOSURE_2026-08-18.md` — post-integration facts for that historical accepted chain;
+- `evidence/phase-c/P4_FINISH_LINE_GATE_RECHECK_2026-08-19.md` — dated snapshot that later identified missing finish-line proof and intentionally deferred claim reconciliation.
+
+The 2026-08-18 G-18 decision is preserved; it is not revoked. It is also not inherited by a later exact candidate without a new explicit final Human decision.
+
+```text
+HISTORICAL G-18 FACT PRESERVED
+!=
+G-18 FOR 3cd0c8d... ESTABLISHED
+```
+
+## 3. Authority by subject
 
 ### Product purpose and ecosystem responsibility
 
@@ -50,7 +61,7 @@ Authoritative source:
 
 - `CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md`.
 
-Owns why Executor exists, its ecosystem responsibility and the boundary that Executor does not own user goals or strategic decisions. It does not override later current completion facts.
+Owns why Executor exists and its ecosystem responsibility. Executor does not own user goals or strategic direction.
 
 ### Human Phase-B authority semantics
 
@@ -58,7 +69,7 @@ Authoritative historical semantic source:
 
 - `PHASE_B_AUTHORIZATION.md`.
 
-Owns the Human-selected DONE/trust/solution/effect boundaries and the revocation-cutoff semantics used to construct and verify the accepted candidate. Phase B is no longer current execution state; these decisions remain provenance and semantic constraints for the accepted evidence chain.
+Owns the Human-selected DONE/trust/solution/effect boundaries used by the bounded P4 path. Historical authority is not perpetual authority for new effects.
 
 ### Completion gates / DONE contract
 
@@ -66,59 +77,70 @@ Authoritative contract:
 
 - `PROJECT_COMPLETION_MAP.md`.
 
-Owns the selected DONE gates G-01–G-18, adaptive completion-control decision and distinction between implementation evidence, independent verification and final Human acceptance. Its Phase-A/Phase-B work maps and gap inventories are historical provenance after final completion. Current gate outcome is supplied by the final completion record:
+It owns the definitions and ordering of G-01–G-18 and the Human-owned DONE semantics.
+
+Its older terminal-result/status statements record the earlier accepted exact candidate and are historical outcome text after the 2026-08-19 recheck. For current reproof status, the later dated reconciliation record has precedence. The gate definitions themselves are not changed by this candidate.
+
+Required ordering remains:
 
 ```text
-G-01–G-18: PASS
-PROJECT COMPLETION: PASS
+G-01–G-16
+  -> fresh independent G-17
+  -> exclusive final Human G-18
+  -> project completion
 ```
 
-Where older text says Phase B active, P4 not claimed or final acceptance unavailable, that text is a historical checkpoint and must not be interpreted as current state.
-
-### P4 operational semantics
-
-Authoritative operational policy:
-
-- `docs/product/P4_REPEATABILITY_POLICY.md`.
-
-Owns bounded P4 retry, repeatability, `CONTRACT_ACCEPT`/EFFECT separation, revocation-cutoff execution semantics, failure classification and series requirements. It does not itself create Human acceptance or new consequential authority.
-
-### Architecture / Build Map
-
-Authoritative source:
-
-- `docs/architecture/EXECUTOR_BUILD_MAP.md`.
-
-Owns architectural classification of Executor components and the distinction between architecture and maturity. It does not prove implementation or current completion status.
-
-### Build-order history
-
-Source:
-
-- `docs/EXECUTOR_BUILD_ORDER.md`.
-
-It owns historical implementation sequencing only where consistent with later Human authorization and exact accepted evidence. It is not a current task queue after Executor 1.0 completion.
-
-### Implementation reality
-
-Primary dated snapshot:
-
-- `docs/architecture/IMPLEMENTATION_INVENTORY.md`.
-
-Supporting truth:
-
-- exact code/tests at the relevant SHA;
-- exact GitHub PR/commit/workflow evidence.
-
-The inventory is a dated snapshot. Historical/open candidates do not override current `main` or the final accepted/integration evidence chain.
-
-### Product maturity and proof terminology
+### P4 maturity and endpoint evidence semantics
 
 Authoritative source:
 
 - `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md`.
 
-Owns P-level definitions/evidence terminology. The selected P4 claim is current only because its required evidence and final Human acceptance were established independently; the ladder itself cannot turn CI success into acceptance.
+Owns P-level definitions and required P4 evidence. `ACHIEVED` requires the exact evidence and Human decision required by the ladder; technical CI never self-creates maturity acceptance.
+
+### P4 execution / repeatability policy
+
+Authoritative operational source:
+
+- `docs/product/P4_REPEATABILITY_POLICY.md`.
+
+Owns bounded retry, change-regression, execution-identity binding and CONTRACT_ACCEPT/EFFECT separation. It does not create Human acceptance.
+
+### Request/effect authorization semantics
+
+Authoritative sources:
+
+- `ACTION_AUTHORIZATION_PACKET_v1.0.md`;
+- `EXECUTOR_POLICY.yaml`;
+- the accepted GitHub trust profile and runtime implementation at the exact implementation SHA being evaluated.
+
+A valid authorization packet is readiness for atomic consumption, not proof of effect, merge authority or product acceptance.
+
+### Architecture
+
+Authoritative source:
+
+- `docs/architecture/EXECUTOR_BUILD_MAP.md`.
+
+Architecture does not prove current maturity.
+
+### Implementation reality
+
+Primary sources:
+
+- exact code/tests/workflows at the evaluated SHA;
+- exact GitHub commit/run/artifact/provider evidence;
+- `docs/architecture/IMPLEMENTATION_INVENTORY.md` as a dated supporting snapshot.
+
+Repository location does not by itself create semantic ownership.
+
+### Current repository closure
+
+Current reviewable closure record:
+
+- `evidence/phase-c/REPOSITORY_CLOSURE.md`.
+
+For the run94 reconciliation, G-16 cannot become canonical merely because a branch says `PASS`; it requires exact candidate integration plus a fresh read-only live-repository recheck.
 
 ### Human-AI deliberation
 
@@ -126,66 +148,68 @@ Authoritative pattern:
 
 - `docs/philosophy/HUMAN_AI_DELIBERATION_MODEL.md`.
 
-It is a cross-cutting working model, not a maturity axis or proof source.
+It is a working model, not a proof or maturity source.
 
-### Action Authorization Packet
+## 4. Technical PASS versus Human acceptance
 
-Authoritative semantic contract:
-
-- `ACTION_AUTHORIZATION_PACKET_v1.0.md`.
-
-A valid AAP means only that an exact action packet is ready for governed atomic consumption. It is not proof that the action happened, product acceptance or permission to merge/deploy/release.
-
-## 3. Technical PASS versus product acceptance
-
-`PASS` may be a test result or specifically defined internal technical state. It never means by itself:
+These states never collapse:
 
 ```text
-HUMAN ACCEPTED
-PRODUCT ACCEPTED
-MERGED
-MATURITY LEVEL ACHIEVED
+TECHNICAL PASS
+INDEPENDENT VERIFIER PASS
+HUMAN TRUST-ROOT ACCEPTANCE
+FINAL HUMAN PRODUCT ACCEPTANCE
+MERGE AUTHORITY
+RELEASE / DEPLOY / TAG AUTHORITY
 ```
 
-Executor 1.0 is Human-accepted because the independent Phase-C chain plus the direct Human G-18 provider fact exists, not because any single technical PASS self-certified it.
+The accepted run94 verifier result can support G-13/G-15/G-17 only because its exact verifier extension and manifest were separately accepted as a trust root. It still cannot create G-18.
 
-## 4. Historical evidence versus current evidence
+## 5. Historical evidence versus current evidence
 
-Exact-SHA evidence remains valid historical evidence for the SHA that produced it even when a later finding supersedes the verdict.
+Exact-SHA evidence remains valid for the identity that produced it even when a later finding supersedes a verdict.
 
 ```text
 VERDICT SUPERSEDED != EVIDENCE ERASED
 ```
 
-Historical runs, artifacts, provider receipts and consumed Human decisions cannot silently become fresh authority. The earlier P4 series at `eca7eebbb4bead819cfd35ecd81b3200cc6e461a` remains historical-only. The accepted product identity is the later exact candidate `f60829f...`.
+Consumed authority and historical Human decisions cannot silently become fresh authority for a later exact candidate.
 
-## 5. Repository-state rule
+## 6. Repository-state rule
 
-Canonical repository state comes from merged `main`. Open/draft branch content is non-canonical unless an exact candidate is explicitly being reviewed. Current product completion, however, is a historical acceptance fact bound to the accepted exact candidate and preserved through verified integration; it is not re-decided merely because `main` later advances with governance-only closure records.
+Canonical repository state comes from merged `main`. Open or branch-only reconciliation content is non-canonical unless being reviewed as an exact candidate.
 
-## 6. README rule
-
-`README.md` is navigation and current-status summary. It points to authoritative sources but does not override them. If README conflicts with a dedicated authority source, the dedicated source wins and README must be corrected.
-
-## 7. Naming rule: v1 versus maturity P-levels
-
-`v1` in a filename identifies a document/product-slice version. It does not by itself mean `Executor 1.0`, P4 or production readiness. The current P4/Executor 1.0 claim is valid only through the final evidence/acceptance chain.
-
-## 8. Current terminal boundary
+Therefore, while this v1.3 file remains only on a reconciliation branch:
 
 ```text
-CURRENT HUMAN-ACCEPTED TARGET: P4 REPEATABLE EXECUTOR 1.0
-PRODUCT ACCEPTANCE: COMPLETE
-PROJECT COMPLETION: PASS
-IMPLEMENTATION INTEGRATION: COMPLETE
-ACTIVE COMPLETION GATE: NONE
-ACTIVE PHASE-B IMPLEMENTATION PATH: NONE
+G-02 CANONICAL TRUTH: NOT YET PROMOTED
+G-16 REPOSITORY CLOSURE: NOT YET PROMOTED
+```
+
+After an exact reconciliation candidate is separately Human-authorized and merged, a fresh read-only exact-main audit must confirm G-02/G-16 before those gates are called `PASS`.
+
+## 7. README rule
+
+`README.md` is navigation and status summary. It does not override dedicated authority sources. It must follow the current precedence above and must not present the historical `f60829f...` G-18 as final acceptance for `3cd0c8d...`.
+
+## 8. Current candidate boundary
+
+```text
+SELECTED ENDPOINT: P4 REPEATABLE EXECUTOR 1.0
+CURRENT REPROOF TARGET: 3cd0c8d747fef06f82c01cdab8449c7c8a100038
+FRESH CONSEQUENTIAL SERIES: PASS / 6 EXECUTIONS
+G-13: PASS
+G-15: PASS
+G-17: PASS
+G-02: CANDIDATE / AWAITS CANONICAL INTEGRATION
+G-16: CANDIDATE / AWAITS CANONICAL INTEGRATION
+G-18 FOR CURRENT REPROOF TARGET: NOT SUPPLIED
+PROJECT COMPLETION FOR CURRENT REPROOF TARGET: NOT YET CLAIMED
+MERGE: NOT AUTHORIZED
 RELEASE: NOT AUTHORIZED
 DEPLOYMENT: NOT AUTHORIZED
 TAG: NOT AUTHORIZED
-TARGET PILOT PR MERGES: NOT AUTHORIZED
-NEW SECRETS / CREDENTIALS / PAID SERVICES: NOT AUTHORIZED
-BROADER EXTERNAL EFFECTS: NOT AUTHORIZED
+NEW CAPABILITY: NOT AUTHORIZED
 ```
 
-Future release, deployment, tag, pilot merge or new product-development work is a new phase requiring separate authority; silence or prior P4 acceptance is not authority for those effects.
+The historical Human-accepted `f60829f...` chain remains historical provenance. This candidate neither deletes it nor uses it to bypass the current exact-candidate gates.

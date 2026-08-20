@@ -1,59 +1,129 @@
-# Repository Closure Record — Phase C
+# Repository Closure Record — P4 run94 reconciliation candidate
 
-Date: 2026-08-16
-Authority: `PROJECT_COMPLETION_MAP.md` section 7.2 (`AI_DELEGABLE`) and G-16/GAP-14.
+Date: 2026-08-20  
+Authority: `PROJECT_COMPLETION_MAP.md` G-16 / repository-closure requirement.  
+Status: `CANDIDATE / NOT CANONICAL UNTIL SEPARATELY AUTHORIZED + MERGED`.
 
-## Current status
+## Exact closure target
 
-PR #61 remains the sole active Executor implementation path and is under corrective Phase-B rework. Independent Phase C has rejected multiple exact candidates; all successful runs, artifacts, provider receipts and human decisions tied to rejected SHAs are retained as historical evidence, not current completion proof.
+```text
+REPOSITORY: JTJ07/Executor
+IMPLEMENTATION TARGET: 3cd0c8d747fef06f82c01cdab8449c7c8a100038
+IMPLEMENTATION TREE: c739aaa989a15eaed65996d7a0b5242a0ec26d7e
+FRESH CONSEQUENTIAL RUN: 32404181188
+TRUSTED READ-ONLY VERIFIER RUN: 32407901358
+```
 
-The latest rejected exact candidate is `d11f3dd9d6c484a9c554cd562db46c30e0a333fe` (`FALSE-COMPLETION`, decision-freshness TOCTOU). Earlier rejected/blocked exact candidates remain historical as recorded in `evidence/p4/PILOT_CANDIDATE_MANIFEST.json` and `evidence/phase-c/PHASE_C_HANDOFF.md`.
+This record does not change task semantics or capability and does not authorize merge, G-18, release, deployment or tag.
 
-The corrective branch now requires both a post-precondition local freshness check and GitHub provider-time enforcement: decision expiry is bound as `not_after`, provider reservation time is read from the GitHub reservation commit, and an expired/unverifiable provider-time reservation is spent fail-closed without local effect consumption or target mutation. This remains implementation under proof, not a P4 completion claim.
+## Live repository audit at preparation time
 
-## Active completion path
+Read-only GitHub inspection establishes:
 
-- `JTJ07/Executor#61` — active Phase B completion candidate; draft; not authorized to merge.
-- `JTJ07/scriptops#8` — bounded governed pilot review output; draft; merge not authorized.
-- `JTJ07/creative-os-project-reconstructor#4` — bounded governed pilot review output; draft; merge not authorized.
-- Request issues `JTJ07/Executor#62` through `#65` are durable authority/evidence history and are not temporary work items.
-- Fresh direct-human decision comments required by a later exact candidate are also durable evidence records after use.
+```text
+JTJ07/Executor OPEN PULL REQUESTS: 0
+```
 
-Target pilot PRs may remain open/draft/unmerged because merge is intentionally outside the approved pilot authority. Their presence is not a repository-closure blocker.
+The historical implementation PR stack is not an active completion queue. Closed or merged PRs remain provenance only.
 
-## Archived Executor PRs
+The target review outputs are also not unfinished Executor product work:
 
-The following formerly open work was closed without merge because it is obsolete, superseded, temporary, or preserved only as historical evidence relative to the human-selected P4 path in PR #61:
+```text
+JTJ07/scriptops#8
+  state: CLOSED
+  draft: true
+  merged: false
+  reviewed head: 897de878703a029df814f2551b993c3818defa2a
+  review: APPROVED / 4946578707
 
-- #17, #18, #19, #20, #21 — historical M3/self-test stack;
-- #22, #29 — historical P1/MVP remediation and runtime candidate;
-- #34 — historical product-contract candidate; retained for semantic provenance, not active implementation;
-- #36, #38 — temporary CI/evidence materializers, explicitly never-merge;
-- #51, #52, #53, #54, #55, #56, #57 — historical trust-design/research stack superseded by the human-selected HR-2/HR-3 GitHub trust direction and the bounded implementation in PR #61;
-- #59 — request-formation candidate superseded/integrated by the broader current Phase B path in PR #61.
+JTJ07/creative-os-project-reconstructor#4
+  state: CLOSED
+  draft: true
+  merged: false
+  reviewed head: e59b9d6c1b496bcb6411e712e7c65cc891578ac3
+  review: APPROVED / 4946583370
+```
 
-All closed PRs remain readable and retain their commits, descriptions and discussion as provenance. Closure does not rewrite or erase historical evidence and does not claim that every historical design was merged.
+Their merge is intentionally outside the P4 pilot authority. Closure does not require merging those outputs.
 
-## Temporary issue closure
+## Durable request and authority evidence
 
-- #35 `TEMP: PR32 trusted ledger payload transport` — closed as completed after its transport purpose; provenance remains in the issue and comments.
+Executor issues #64 and #65 are durable request/authority evidence records. They are not temporary implementation work items and may remain open for evidence retention.
 
-## Branch/ref retention policy
-
-Historical implementation branch refs may remain on GitHub for evidence retention. A branch with no open PR and no current completion responsibility is archival, not an active roadmap/critical-path branch.
-
-The authority design creates deterministic provider-backed refs under:
+Provider-backed refs under:
 
 ```text
 refs/heads/executor-authority/<sha256(authority_key)>
 ```
 
-These refs are **durable one-shot authority receipts**, not implementation branches. They are part of origin-to-result evidence and must not be deleted as repository cleanup. Their presence does not represent unfinished critical-path work.
+are durable one-shot authority receipts. They are origin-to-result evidence, not roadmap branches. They must not be deleted, force-moved or reused as cosmetic repository cleanup.
 
-Deleting, force-moving, or reusing an authority receipt ref is outside the supported Executor operator workflow and invalidates the affected evidence chain.
+## P4 preflight / proof branches
 
-An authority ref created at/after its bound expiry remains intentionally retained as spent fail-closed evidence; it must not be deleted to make the decision appear reusable.
+The dependency-change closure created dedicated exact-evidence refs including:
 
-## Current rule
+```text
+preflight/p4-pyyaml-6.0.3-change-stability
+preflight/p4-pyyaml-6.0.3-ref-binding
+proof-design/p4-runtime-image-binding
+proof-design/p4-ref-binding-preflight
+proof-design/p4-run94-trusted-verifier-rebind
+```
 
-The only active Executor implementation PR for the approved completion path is PR #61. Historical closed items and rejected-candidate evidence must not be treated as current implementation/maturity proof unless a verifier explicitly cites them for historical/falsification context. Final closure must be independently rechecked against live GitHub and Saddle state on the final exact candidate.
+These refs retain exact proof identities. Branch existence alone is not an unfinished capability or active critical-path claim. None creates merge/release authority.
+
+The accepted read-only verifier extension is intentionally retained at exact head:
+
+```text
+e73f1d410e663c85f7552ac92a492ef45d6a2901
+```
+
+Its retention is evidence preservation, not an implementation backlog item.
+
+## Historical branch and PR retention rule
+
+Historical implementation branches, rejected candidates and closed PRs may remain readable. The closure test is whether they have current semantic responsibility for the selected claim, not whether every Git ref has been deleted.
+
+```text
+HISTORICAL REF PRESENT != ACTIVE PRODUCT WORK
+CLOSED / REJECTED EVIDENCE != CURRENT COMPLETION PROOF
+VERDICT SUPERSEDED != EVIDENCE ERASED
+```
+
+No cleanup action may destroy evidence required to replay CONTRACT_ACCEPT, EFFECT or result bindings.
+
+## Current active closure item
+
+The only active claim-state work identified by this audit is the exact reconciliation candidate being prepared from `3cd0c8d...`.
+
+That means repository closure is not yet allowed to self-certify `PASS` while the correction itself is only branch content.
+
+```text
+G-16 BEFORE RECONCILIATION MERGE:
+CANDIDATE / BLOCKED ONLY ON CANONICAL INTEGRATION OF THE EXACT RECONCILIATION STATE
+```
+
+If a later Human separately authorizes merge of the exact reconciliation candidate, the required next action is a read-only post-merge audit that verifies:
+
+1. `main` contains exactly the reviewed reconciliation state;
+2. no new open Executor PR or undocumented critical-path blocker appeared;
+3. branch-only proof refs remain classified as evidence retention, not active work;
+4. issues #64/#65 and authority refs remain durable evidence, not reuseable authority;
+5. no claim surface reintroduced historical G-18 as final acceptance for `3cd0c8d...`.
+
+Only that post-merge read-only audit may promote G-16 to `PASS` for the current reproof state.
+
+## Boundary
+
+This repository-closure candidate does not authorize or perform:
+
+- merge of this reconciliation branch;
+- G-18 / `EXECUTOR 1.0: ACCEPT` for `3cd0c8d...`;
+- merge of ScriptOps #8 or Reconstructor #4;
+- consequential rerun/retry;
+- new CONTRACT_ACCEPT or EFFECT consumption;
+- deletion/force-move/reuse of authority refs;
+- release, deployment or tag;
+- new product capability or architecture expansion.
+
+The record exists only to make G-16 reviewable against live repository state while preserving all durable evidence.
