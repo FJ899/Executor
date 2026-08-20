@@ -1,11 +1,11 @@
 ---
 document: "Executor Project Completion Map"
-version: "1.2"
-status: "FINAL HUMAN ACCEPTED / PROJECT COMPLETION PASS / INTEGRATED ON MAIN"
-date: "2026-08-19"
+version: "1.3"
+status: "FINAL HUMAN ACCEPTED / PROJECT COMPLETION PASS / RUN94 G-18 RECONCILED"
+date: "2026-08-20"
 target_repository: "JTJ07/Executor"
 baseline_branch: "main"
-baseline_sha: "5e254811023553d1abe8bdbb3535b8150aaf19ad"
+baseline_sha: "a7fc272e09a2ffb5c06a98e26ed6ef9667cd4f89"
 protocol: "JTJ07/Saddle/evidence/PROJECT_COMPLETION_AUTONOMY_TEST_PROTOCOL_2026-08-15.md"
 phase: "COMPLETE / HUMAN ACCEPTED / INTEGRATED"
 implementation_changes: "CURRENT PRODUCT PHASE CLOSED / FUTURE EFFECTS REQUIRE SEPARATE HUMAN AUTHORITY"
@@ -17,16 +17,19 @@ implementation_changes: "CURRENT PRODUCT PHASE CLOSED / FUTURE EFFECTS REQUIRE S
 
 This map remains the Human-approved DONE/gate contract and preserves the Phase-A/Phase-B execution history. It is **not** a current task queue after final completion.
 
-Current terminal facts are source-bound in `docs/governance/EXECUTOR_1_0_FINAL_COMPLETION_RECORD_2026-08-18.md` and `evidence/phase-c/EXECUTOR_1_0_POST_INTEGRATION_CLOSURE_2026-08-18.md`:
+Current terminal facts are source-bound in `docs/governance/EXECUTOR_1_0_FINAL_HUMAN_ACCEPTANCE_RECORD_2026-08-20.md`, with the pre-G-18 Run94 closure state in `evidence/phase-c/P4_RUN94_FINAL_CLOSURE_RECONCILIATION_2026-08-20.md`. The earlier 2026-08-18 completion/integration records remain historical provenance for their own exact identities.
 
 ```text
 SELECTED ENDPOINT: P4 REPEATABLE EXECUTOR 1.0
 G-01–G-18: PASS
 PROJECT COMPLETION: PASS
 EXECUTOR 1.0: HUMAN ACCEPTED
-EXACT HUMAN-ACCEPTED CANDIDATE: f60829f90ea2f69dc501582daf109b59676be07e
+EXACT HUMAN-ACCEPTED CANDIDATE: 3cd0c8d747fef06f82c01cdab8449c7c8a100038
+EXACT HUMAN-ACCEPTED TREE: c739aaa989a15eaed65996d7a0b5242a0ec26d7e
+FRESH CONSEQUENTIAL RUN: 32404181188
+TRUSTED INDEPENDENT VERIFIER RUN: 32407901358
 IMPLEMENTATION INTEGRATION: COMPLETE
-CURRENT MAIN AFTER POST-INTEGRATION CLOSURE: d115578cf05ed7edf55c50a2b5d29af16d13fb4d
+CANONICAL MAIN AT FINAL ACCEPTANCE: a7fc272e09a2ffb5c06a98e26ed6ef9667cd4f89
 ACTIVE COMPLETION GATE: NONE
 ```
 
@@ -35,6 +38,7 @@ Any Phase-A/Phase-B text below that says `current`, `gap`, `blocker`, `P4 NOT CL
 Still not authorized by completion/acceptance:
 
 ```text
+FURTHER MERGE
 RELEASE / DEPLOYMENT / TAG
 TARGET PILOT PR MERGES
 NEW SECRETS / CREDENTIALS / PAID SERVICES
@@ -44,7 +48,7 @@ NEW PRODUCT-DEVELOPMENT PHASE
 
 ## 0. Status and reading rules
 
-This document is the human-approved completion map. `PHASE_B_AUTHORIZATION.md` froze the selected semantic forks and activated the historical Phase-B work that later produced the accepted product candidate. Historical Phase-A/Phase-B inventory, gaps and path analysis are intentionally preserved below as provenance. They no longer describe the current completion state.
+This document is the human-approved completion map. `PHASE_B_AUTHORIZATION.md` froze the selected semantic forks and activated the historical Phase-B work that later produced the accepted product path. Historical Phase-A/Phase-B inventory, gaps and path analysis are intentionally preserved below as provenance. They no longer describe the current completion state.
 
 Semantic labels used below:
 
@@ -64,7 +68,7 @@ EXECUTION != PROOF
 AI RECOMMENDATION != HUMAN DECISION
 ```
 
-The human selected HR-1 C, HR-2 A, HR-3 GitHub, HR-4 A and HR-5 C on 2026-08-16. The exact authority limits are recorded in `PHASE_B_AUTHORIZATION.md`. Final product acceptance was later separately supplied by the Human and is recorded in the final completion record. Release remains separately Human-owned and is not authorized.
+The human selected HR-1 C, HR-2 A, HR-3 GitHub, HR-4 A and HR-5 C on 2026-08-16. The exact authority limits are recorded in `PHASE_B_AUTHORIZATION.md`. The current final Human acceptance is separately recorded in `docs/governance/EXECUTOR_1_0_FINAL_HUMAN_ACCEPTANCE_RECORD_2026-08-20.md`. Release remains separately Human-owned and is not authorized.
 
 ### 0.1 Adaptive completion control
 
@@ -137,7 +141,7 @@ OPEN CANDIDATE WORK
 MATURITY / PROOF
 ```
 
-After final completion, the current product-completion result is governed by the final completion and post-integration closure records, while the map below remains the DONE contract and historical execution provenance.
+After final completion, the current product-completion result is governed by the 2026-08-20 final Human-acceptance record together with the Run94 closure/evidence chain. The 2026-08-18 final-completion and post-integration records remain historical provenance, while the map below remains the DONE contract and historical execution provenance.
 
 ## 2. Recovered project goal
 
@@ -456,7 +460,7 @@ A future broader production/release phase may have new blockers, but they must n
 
 ## 9. Final PASS gates
 
-At the accepted completion candidate/evidence chain, every applicable gate is recorded as `PASS` in the final completion record:
+At the accepted completion candidate/evidence chain, every applicable gate is recorded as `PASS` in the current final Human-acceptance record:
 
 | Gate | Required evidence |
 |---|---|

@@ -1,0 +1,83 @@
+name: P4 run94 final G-18 persistence reconciliation candidate
+
+on:
+  push:
+    branches:
+      - reconcile/p4-run94-final-g18-persistence
+
+permissions:
+  contents: read
+
+jobs:
+  verify-final-g18-persistence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Verify exact checkout identity
+        run: test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+
+      - name: Verify authorized base ancestry
+        run: git merge-base --is-ancestor a7fc272e09a2ffb5c06a98e26ed6ef9667cd4f89 HEAD
+
+      - name: Verify bounded persistence diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-only a7fc272e09a2ffb5c06a98e26ed6ef9667cd4f89...HEAD | sort > /tmp/actual.txt
+          cat > /tmp/expected.txt <<'EOF'
+          .github/workflows/p4-run94-final-g18-persistence.yml
+          PROJECT_COMPLETION_MAP.md
+          README.md
+          docs/governance/DOCUMENT_AUTHORITY.md
+          docs/governance/EXECUTOR_1_0_FINAL_HUMAN_ACCEPTANCE_RECORD_2026-08-20.md
+          tests/test_p4_run94_final_g18_persistence.py
+          EOF
+          sort -o /tmp/expected.txt /tmp/expected.txt
+          diff -u /tmp/expected.txt /tmp/actual.txt
+
+      - name: Verify no runtime or capability path changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git diff --name-only a7fc272e09a2ffb5c06a98e26ed6ef9667cd4f89...HEAD -- executor schemas project_contracts tasks test_contracts tools)"
+
+      - name: Verify historical 2026-08-18 records are byte-preserved
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse a7fc272e09a2ffb5c06a98e26ed6ef9667cd4f89:docs/governance/EXECUTOR_1_0_FINAL_COMPLETION_RECORD_2026-08-18.md)" = "$(git rev-parse HEAD:docs/governance/EXECUTOR_1_0_FINAL_COMPLETION_RECORD_2026-08-18.md)"
+          test "$(git rev-parse a7fc272e09a2ffb5c06a98e26ed6ef9667cd4f89:evidence/phase-c/EXECUTOR_1_0_POST_INTEGRATION_CLOSURE_2026-08-18.md)" = "$(git rev-parse HEAD:evidence/phase-c/EXECUTOR_1_0_POST_INTEGRATION_CLOSURE_2026-08-18.md)"
+          test "$(git rev-parse a7fc272e09a2ffb5c06a98e26ed6ef9667cd4f89:evidence/phase-c/P4_RUN94_FINAL_CLOSURE_RECONCILIATION_2026-08-20.md)" = "$(git rev-parse HEAD:evidence/phase-c/P4_RUN94_FINAL_CLOSURE_RECONCILIATION_2026-08-20.md)"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run focused G-18 persistence tests
+        run: python -m unittest tests.test_p4_run94_final_g18_persistence -v
+
+      - name: Run full repository test suite
+        run: python -m unittest discover -s tests -v
+
+      - name: Non-consequential boundary summary
+        shell: bash
+        run: |
+          echo "P4_RUN94_FINAL_G18_PERSISTENCE_RECONCILIATION_CANDIDATE=PASS"
+          echo "BASE_MAIN=a7fc272e09a2ffb5c06a98e26ed6ef9667cd4f89"
+          echo "ACCEPTED_IMPLEMENTATION=3cd0c8d747fef06f82c01cdab8449c7c8a100038"
+          echo "CONSEQUENTIAL_RUN=32404181188"
+          echo "TRUSTED_VERIFIER_RUN=32407901358"
+          echo "G18=PERSISTED_AS_PASS"
+          echo "CONSEQUENTIAL_EXECUTIONS=0"
+          echo "EFFECT_CONSUMPTIONS=0"
+          echo "HUMAN_ACCEPT_CONSUMPTIONS=0"
+          echo "MERGE=0"
+          echo "RELEASE=0"
+          echo "DEPLOY=0"
+          echo "TAG=0"
