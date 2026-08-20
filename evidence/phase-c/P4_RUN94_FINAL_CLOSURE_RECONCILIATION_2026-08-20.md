@@ -1,7 +1,7 @@
 ---
 document: "P4 Run94 Final Closure Reconciliation"
-version: "1.0-candidate"
-status: "NON-CANONICAL CANDIDATE / G-18 OPEN"
+version: "1.0-post-merge"
+status: "G-02 PASS / G-18 OPEN"
 date: "2026-08-20"
 repository: "JTJ07/Executor"
 implementation_candidate: "3cd0c8d747fef06f82c01cdab8449c7c8a100038"
@@ -11,7 +11,9 @@ trusted_verifier_run: 32407901358
 trusted_verifier_extension_commit: "e73f1d410e663c85f7552ac92a492ef45d6a2901"
 trusted_verifier_extension_sha256: "74d4b9f7e4acaa5bfb670cfe089bc087bf95a285b56552f88507cda4e5785cf6"
 trusted_verifier_manifest_sha256: "050358461cbebe1cb11a1611635243a255440aad582310493cf5034eaec15568"
-claim_reconciliation_authority: "CANDIDATE_ONLY"
+canonicalized_by_pr: 77
+canonical_merge_commit: "96af1f1c4ace80ca821bb0aaeb17899c6c1039dd"
+claim_reconciliation_authority: "CANONICALIZED_BY_AUTHORIZED_MERGE_PR_77"
 g18_authority: "NONE"
 merge_authority: "NONE"
 release_authority: "NONE"
@@ -23,11 +25,11 @@ tag_authority: "NONE"
 
 ## 1. Purpose and authority boundary
 
-This record is a non-consequential reconciliation candidate for the exact P4 implementation candidate `3cd0c8d747fef06f82c01cdab8449c7c8a100038` after the fresh dependency-change series and the separately Human-accepted read-only verifier trust root.
+This record states the post-merge reconciliation status for the exact P4 implementation candidate `3cd0c8d747fef06f82c01cdab8449c7c8a100038` after the fresh dependency-change series, the separately Human-accepted read-only verifier trust root, and the separately authorized merge of PR #77.
 
-It does not create G-18, final Human acceptance, project completion, merge authority, release authority, deployment authority or tag authority. It does not rewrite the historical Human acceptance of `f60829f90ea2f69dc501582daf109b59676be07e`; that remains a historical provider/normative fact for its exact identity.
+It does not create G-18, final Human acceptance, project completion, further merge authority, release authority, deployment authority or tag authority. It does not rewrite the historical Human acceptance of `f60829f90ea2f69dc501582daf109b59676be07e`; that remains a historical provider/normative fact for its exact identity.
 
-This candidate exists to remove stale finish-line wording and to make the current proof state explicit before any later Human G-18 decision or canonical merge.
+PR #77 was merged from exact head `a567849bcbe686abcdb4511b091e6ae55d227fdf` into exact base `03ec27d3015b5c086a5dc6db7dc558208fe2a478`, producing canonical merge commit `96af1f1c4ace80ca821bb0aaeb17899c6c1039dd`. This status correction aligns the persisted wording with that already-completed provider fact.
 
 ## 2. Exact current proof identities
 
@@ -48,6 +50,12 @@ TRUSTED READ-ONLY VERIFIER:
   EXTENSION SHA256 74d4b9f7e4acaa5bfb670cfe089bc087bf95a285b56552f88507cda4e5785cf6
   MANIFEST SHA256  050358461cbebe1cb11a1611635243a255440aad582310493cf5034eaec15568
   HUMAN TRUST-ROOT ACCEPTANCE PRESENT
+
+CANONICAL RECONCILIATION MERGE:
+  PR    77
+  HEAD  a567849bcbe686abcdb4511b091e6ae55d227fdf
+  BASE  03ec27d3015b5c086a5dc6db7dc558208fe2a478
+  MERGE 96af1f1c4ace80ca821bb0aaeb17899c6c1039dd
 ```
 
 The verifier remains read-only and candidate-generated PASS markers remain non-authoritative. The Human separately accepted the exact verifier extension as the trust root for read-only G-17 recomputation.
@@ -98,7 +106,7 @@ The trusted verifier independently re-derived the run metadata, immutable artifa
 
 For G-16, the relevant question is whether unfinished technical/proof work remains on the accepted P4 claim path before final Human acceptance.
 
-At this candidate state:
+At this post-merge evidence state:
 
 - the fresh six-run dependency-change proof is complete;
 - Human review of all six results is complete;
@@ -118,13 +126,13 @@ UNFINISHED TECHNICAL CRITICAL-PATH WORK BEFORE G-18: 0
 
 G-18 itself remains a separate Human-owned gate and is not counted as unfinished technical repository work.
 
-## 6. Gate matrix for this candidate
+## 6. Gate matrix for the post-merge state
 
-This record does not weaken any gate. It reconciles the current evidence state against the existing gate meanings.
+This record does not weaken any gate. It reconciles the current evidence state against the existing gate meanings and the completed authorized merge of PR #77.
 
 ```text
 G-01: PASS
-G-02: CANDIDATE_READY_NOT_CANONICAL
+G-02: PASS
 G-03: PASS
 G-04: PASS
 G-05: PASS
@@ -146,16 +154,15 @@ PROJECT COMPLETION: BLOCKED ONLY ON G-18
 EXECUTOR 1.0 FINAL ACCEPTANCE FOR 3cd0c8d...: NOT YET CREATED
 ```
 
-`G-02: CANDIDATE_READY_NOT_CANONICAL` is deliberate. This branch may contain the exact reconciliation wording, but canonical truth cannot be updated until a later separately authorized merge/integration action. No candidate branch can self-promote its own wording into canon.
+`G-02: PASS` reflects the already-completed authorized canonicalization event: PR #77 merged exact head `a567849bcbe686abcdb4511b091e6ae55d227fdf` into exact base `03ec27d3015b5c086a5dc6db7dc558208fe2a478`, advancing `main` to `96af1f1c4ace80ca821bb0aaeb17899c6c1039dd`. This wording correction does not create G-18 or any new execution authority.
 
 ## 7. Claim wording that is safe before G-18
 
-Allowed current wording for this candidate:
+Allowed current wording:
 
 ```text
 P4 TECHNICAL / PHASE-C EVIDENCE FOR 3cd0c8d...: PASS
-G-01, G-03–G-17: PASS
-G-02: CANDIDATE READY / NOT CANONICAL
+G-01–G-17: PASS
 G-18: OPEN / HUMAN ONLY
 PROJECT COMPLETION: BLOCKED ONLY ON G-18
 ```
@@ -182,13 +189,13 @@ This record and its CI do not authorize or perform:
 - G-18 or final Human acceptance;
 - consequential execution or retry;
 - CONTRACT_ACCEPT or EFFECT consumption;
-- merge of this branch or any target pilot PR;
+- any further merge, including target pilot PRs;
 - release, deploy or tag;
 - new capability or architecture;
 - new model/provider/dependency change;
 - rewriting historical evidence.
 
-## 10. Candidate verdict
+## 10. Post-merge reconciliation verdict
 
 ```text
 RUN94 SIX-RUN CHANGE-STABILITY PROOF: PASS
@@ -197,8 +204,8 @@ G-13: PASS
 G-15: PASS
 G-16: PASS
 G-17: PASS
-G-02: CANDIDATE_READY_NOT_CANONICAL
+G-02: PASS
 G-18: OPEN_HUMAN_ONLY
 PROJECT COMPLETION: BLOCKED ONLY ON G-18
-CLAIM RECONCILIATION: CANDIDATE ONLY / NOT MERGED
+CLAIM RECONCILIATION: CANONICALIZED BY AUTHORIZED MERGE PR #77
 ```
