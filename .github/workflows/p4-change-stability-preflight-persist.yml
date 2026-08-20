@@ -1,0 +1,278 @@
+name: P4 change-stability preflight evidence persistence
+
+on:
+  push:
+    branches:
+      - preflight-run/p4-pyyaml-6.0.3
+
+permissions:
+  contents: write
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      BASE_SHA: 03ec27d3015b5c086a5dc6db7dc558208fe2a478
+      CANDIDATE_SHA: 46ca62f02bca717d39426127beb830b4c274552a
+      CANDIDATE_TREE: 11bee39356d16c30a6efb56f5d8383834a25b0fa
+      CANDIDATE_WORKFLOW_BLOB: 30357adc1b1cd0717682d6bfd381fb4e4212e382
+      OLD_BASE_DIGEST: sha256:2e32f7d302adc1c37428355c1e646897c0c53f4fd60b6a551245fb90ee129f91
+      OLD_PYYAML_WHEEL_SHA256: 3ad2a3decf9aaba3d29c8f537ac4b243e36bef957511b4766cb0057d32b0be85
+      NEW_PYYAML_WHEEL_SHA256: b8bb0864c5a28024fac8a632c443c87c5aa6f215c0b126c449ae1a150412f31d
+      OLD_SCRIPTOPS_IMAGE: sha256:64b16275b427cc370fb9a6066ef3921fbedd9523b5779574a492f68f9d2d760e
+      SCRIPTOPS_SHA: daa6e5dc210e09171a530eeffe5601e0e74ae041
+      SCRIPTOPS_TREE: ba0b99bd99682dcc7a942537b502a7a72151fa09
+      RECONSTRUCTOR_SHA: defc7b029097284f94136fec54b75c313ac12f68
+      RECONSTRUCTOR_TREE: 5960d74773b19456863ac66084385b7619aa4285
+      RESULT_PATH: evidence/preflight/p4-change-stability-46ca62f02bca717d39426127beb830b4c274552a
+    steps:
+      - name: Checkout preflight controller branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: true
+          path: controller
+
+      - name: Checkout exact Executor candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: candidate
+
+      - name: Set up CPython 3.11
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+
+      - name: Execute non-consequential preflight only
+        shell: bash
+        run: |
+          set +e
+          out="$RUNNER_TEMP/p4-change-preflight-persist"
+          mkdir -p "$out"
+          result=PASS
+          failures="$out/failures.txt"
+          : > "$failures"
+          fail() {
+            result=BLOCKED
+            printf '%s\n' "$1" | tee -a "$failures"
+          }
+
+          printf '%s\n' "${{ github.sha }}" > "$out/preflight-controller-head.txt"
+          if grep -E 'github-pilot-decide|materialize-pilot-proposal|run-pilot' controller/.github/workflows/p4-change-stability-preflight-persist.yml; then
+            fail 'PREFLIGHT_CONTROLLER_CONTAINS_CONSEQUENTIAL_PILOT_CALL'
+          fi
+
+          actual_head="$(git -C candidate rev-parse HEAD 2>/dev/null)"
+          actual_tree="$(git -C candidate rev-parse 'HEAD^{tree}' 2>/dev/null)"
+          printf '%s\n' "$actual_head" > "$out/candidate-head.txt"
+          printf '%s\n' "$actual_tree" > "$out/candidate-tree.txt"
+          test "$actual_head" = "$CANDIDATE_SHA" || fail 'CANDIDATE_HEAD_MISMATCH'
+          test "$actual_tree" = "$CANDIDATE_TREE" || fail 'CANDIDATE_TREE_MISMATCH'
+          test -z "$(git -C candidate status --porcelain --untracked-files=all)" || fail 'CANDIDATE_NOT_CLEAN'
+
+          workflow_blob="$(git -C candidate hash-object .github/workflows/p4-real-pilots-one-shot.yml 2>/dev/null)"
+          printf '%s\n' "$workflow_blob" > "$out/candidate-workflow-blob.txt"
+          test "$workflow_blob" = "$CANDIDATE_WORKFLOW_BLOB" || fail 'CANDIDATE_WORKFLOW_BLOB_MISMATCH'
+          sha256sum candidate/.github/workflows/p4-real-pilots-one-shot.yml > "$out/candidate-workflow-sha256.txt" 2>&1 || fail 'CANDIDATE_WORKFLOW_SHA256_FAILED'
+
+          git -C candidate diff --name-only "$BASE_SHA" "$CANDIDATE_SHA" > "$out/changed-paths.txt" 2>&1 || fail 'CANDIDATE_CHANGED_PATHS_FAILED'
+          printf '%s\n' '.github/workflows/p4-real-pilots-one-shot.yml' > "$out/expected-paths.txt"
+          diff -u "$out/expected-paths.txt" "$out/changed-paths.txt" > "$out/changed-paths.diff" 2>&1 || fail 'CANDIDATE_SCOPE_NOT_SINGLE_WORKFLOW_PATH'
+          git -C candidate diff --no-ext-diff --no-textconv "$BASE_SHA" "$CANDIDATE_SHA" -- .github/workflows/p4-real-pilots-one-shot.yml > "$out/candidate.diff" 2>&1 || fail 'CANDIDATE_DIFF_FAILED'
+          python - "$PWD/candidate" "$BASE_SHA" > "$out/dependency-diff-proof.txt" 2>&1 <<'PY'
+          import pathlib, subprocess, sys
+          repo = pathlib.Path(sys.argv[1])
+          base = sys.argv[2]
+          path = '.github/workflows/p4-real-pilots-one-shot.yml'
+          old = subprocess.check_output(['git','-C',str(repo),'show',f'{base}:{path}'])
+          new = (repo / path).read_bytes()
+          old_token = b'PyYAML==6.0.2'
+          new_token = b'PyYAML==6.0.3'
+          assert old.count(old_token) == 1
+          assert new.count(new_token) == 1
+          assert old.replace(old_token, new_token, 1) == new
+          assert old.count(b'python:3.11-slim-bookworm') == new.count(b'python:3.11-slim-bookworm')
+          print('ONLY_TEXTUAL_CHANGE=PyYAML==6.0.2->PyYAML==6.0.3')
+          PY
+          test $? -eq 0 || fail 'DEPENDENCY_DIFF_NOT_EXACT_ONE_TOKEN_REPLACEMENT'
+
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          tool_dir="$RUNNER_TEMP/actionlint"
+          mkdir -p "$tool_dir"
+          curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" 'https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz' > "$out/actionlint-download.txt" 2>&1
+          if test $? -ne 0; then
+            fail 'ACTIONLINT_DOWNLOAD_FAILED'
+          else
+            printf '%s  %s\n' '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' "$archive" | sha256sum -c - > "$out/actionlint-hash-check.txt" 2>&1
+            if test $? -ne 0; then
+              fail 'ACTIONLINT_HASH_MISMATCH'
+            else
+              tar -xzf "$archive" -C "$tool_dir" actionlint
+              "$tool_dir/actionlint" -shellcheck= candidate/.github/workflows/p4-real-pilots-one-shot.yml > "$out/actionlint-candidate.txt" 2>&1 || fail 'ACTIONLINT_CANDIDATE_FAILED'
+            fi
+          fi
+
+          mkdir -p "$RUNNER_TEMP/pyyaml-wheel"
+          python -m pip download --only-binary=:all: --no-deps --dest "$RUNNER_TEMP/pyyaml-wheel" 'PyYAML==6.0.3' > "$out/pyyaml-download.txt" 2>&1
+          if test $? -ne 0; then
+            fail 'PYYAML_603_PROVIDER_DOWNLOAD_FAILED'
+          else
+            wheel="$(find "$RUNNER_TEMP/pyyaml-wheel" -maxdepth 1 -type f -name 'pyyaml-6.0.3-cp311-cp311-manylinux*x86_64.whl' -print -quit)"
+            printf '%s\n' "$wheel" > "$out/pyyaml-6.0.3-wheel-file.txt"
+            if test -z "$wheel"; then
+              fail 'PYYAML_603_EXPECTED_CP311_X86_64_WHEEL_NOT_RESOLVED'
+            else
+              sha256sum "$wheel" > "$out/pyyaml-6.0.3-wheel-sha256.txt"
+              test "$(sha256sum "$wheel" | awk '{print $1}')" = "$NEW_PYYAML_WHEEL_SHA256" || fail 'PYYAML_603_PROVIDER_SHA256_MISMATCH'
+            fi
+          fi
+          printf '%s\n' "$OLD_PYYAML_WHEEL_SHA256" > "$out/old-pyyaml-wheel-sha256.txt"
+          printf '%s\n' "$NEW_PYYAML_WHEEL_SHA256" > "$out/new-pyyaml-wheel-sha256.txt"
+
+          docker pull python:3.11-slim-bookworm > "$out/base-pull.txt" 2>&1
+          if test $? -ne 0; then
+            fail 'BASE_IMAGE_PULL_FAILED'
+          else
+            docker image inspect --format='{{.Id}}' python:3.11-slim-bookworm > "$out/base-image-id.txt" 2>&1
+            docker image inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' python:3.11-slim-bookworm > "$out/base-repodigests.txt" 2>&1
+            grep -Fx "python@${OLD_BASE_DIGEST}" "$out/base-repodigests.txt" > "$out/base-digest-match.txt" 2>&1 || fail 'BASE_DIGEST_CHANGED_FROM_ACCEPTED_RUN91'
+          fi
+
+          cat > "$RUNNER_TEMP/p4-scriptops.Dockerfile" <<'DOCKERFILE'
+          FROM python:3.11-slim-bookworm
+          RUN apt-get update \
+              && apt-get install -y --no-install-recommends git \
+              && rm -rf /var/lib/apt/lists/* \
+              && python -m pip install --no-cache-dir PyYAML==6.0.3
+          DOCKERFILE
+          docker build --pull -f "$RUNNER_TEMP/p4-scriptops.Dockerfile" -t executor-scriptops-preflight:pyyaml-6.0.3 candidate > "$out/new-image-build.txt" 2>&1
+          if test $? -ne 0; then
+            fail 'PYYAML_603_SCRIPTOPS_IMAGE_BUILD_FAILED'
+          else
+            docker image inspect --format='{{.Id}}' executor-scriptops-preflight:pyyaml-6.0.3 > "$out/new-image-id.txt" 2>&1 || fail 'NEW_IMAGE_ID_RESOLUTION_FAILED'
+            docker image inspect executor-scriptops-preflight:pyyaml-6.0.3 > "$out/new-image-inspect.json" 2>&1 || fail 'NEW_IMAGE_INSPECT_FAILED'
+            grep -F 'pyyaml-6.0.3-cp311-cp311-manylinux' "$out/new-image-build.txt" > "$out/new-image-wheel-resolution.txt" 2>&1 || fail 'NEW_IMAGE_BUILD_DID_NOT_SOURCE_BOUND_CP311_PYYAML_603_WHEEL'
+            docker run --rm executor-scriptops-preflight:pyyaml-6.0.3 python -c 'import yaml; assert yaml.__version__ == "6.0.3"; print(yaml.__version__)' > "$out/new-image-pyyaml-version.txt" 2>&1 || fail 'NEW_IMAGE_PYYAML_VERSION_CHECK_FAILED'
+            docker run --rm executor-scriptops-preflight:pyyaml-6.0.3 git --version > "$out/new-image-git-version.txt" 2>&1 || fail 'NEW_IMAGE_GIT_MISSING'
+
+            cat > "$out/expected-apt-runtime-packages.txt" <<'PKGS'
+            git=1:2.39.5-0+deb12u3
+            git-man=1:2.39.5-0+deb12u3
+            libbrotli1=1.0.9-2+b6
+            libcurl3-gnutls=7.88.1-10+deb12u15
+            liberror-perl=0.17029-2
+            libexpat1=2.5.0-1+deb12u2
+            libgdbm-compat4=1.23-3
+            libldap-2.5-0=2.5.13+dfsg-5
+            libnghttp2-14=1.52.0-1+deb12u3
+            libperl5.36=5.36.0-7+deb12u3
+            libpsl5=0.21.2-1
+            librtmp1=2.4+20151223.gitfa8646d.1-2+b2
+            libsasl2-2=2.1.28+dfsg-10
+            libsasl2-modules-db=2.1.28+dfsg-10
+            libssh2-1=1.10.0-3+b1
+            perl=5.36.0-7+deb12u3
+            perl-modules-5.36=5.36.0-7+deb12u3
+            PKGS
+            sed -i 's/^            //' "$out/expected-apt-runtime-packages.txt"
+            LC_ALL=C sort "$out/expected-apt-runtime-packages.txt" -o "$out/expected-apt-runtime-packages.txt"
+            docker run --rm executor-scriptops-preflight:pyyaml-6.0.3 sh -c 'dpkg-query -W -f="${Package}=${Version}\n" git git-man libbrotli1 libcurl3-gnutls liberror-perl libexpat1 libgdbm-compat4 libldap-2.5-0 libnghttp2-14 libperl5.36 libpsl5 librtmp1 libsasl2-2 libsasl2-modules-db libssh2-1 perl perl-modules-5.36 | LC_ALL=C sort' > "$out/actual-apt-runtime-packages.txt" 2>&1
+            if test $? -ne 0; then
+              fail 'NEW_IMAGE_APT_PACKAGE_MANIFEST_FAILED'
+            else
+              diff -u "$out/expected-apt-runtime-packages.txt" "$out/actual-apt-runtime-packages.txt" > "$out/apt-runtime-package-diff.txt" 2>&1 || fail 'MATERIAL_APT_RUNTIME_DEPENDENCY_CHANGED_SINCE_ACCEPTED_RUN91'
+            fi
+          fi
+
+          rm -rf "$RUNNER_TEMP/scriptops" "$RUNNER_TEMP/reconstructor"
+          git clone https://github.com/JTJ07/scriptops.git "$RUNNER_TEMP/scriptops" > "$out/scriptops-clone.txt" 2>&1
+          if test $? -ne 0; then
+            fail 'SCRIPTOPS_READ_ONLY_CLONE_FAILED'
+          else
+            git -C "$RUNNER_TEMP/scriptops" checkout "$SCRIPTOPS_SHA" >> "$out/scriptops-clone.txt" 2>&1
+            test "$(git -C "$RUNNER_TEMP/scriptops" rev-parse HEAD)" = "$SCRIPTOPS_SHA" || fail 'SCRIPTOPS_HEAD_CHANGED'
+            test "$(git -C "$RUNNER_TEMP/scriptops" rev-parse 'HEAD^{tree}')" = "$SCRIPTOPS_TREE" || fail 'SCRIPTOPS_TREE_CHANGED'
+            printf '%s\n%s\n' "$SCRIPTOPS_SHA" "$SCRIPTOPS_TREE" > "$out/scriptops-source-identity.txt"
+          fi
+          git clone https://github.com/JTJ07/creative-os-project-reconstructor.git "$RUNNER_TEMP/reconstructor" > "$out/reconstructor-clone.txt" 2>&1
+          if test $? -ne 0; then
+            fail 'RECONSTRUCTOR_READ_ONLY_CLONE_FAILED'
+          else
+            git -C "$RUNNER_TEMP/reconstructor" checkout "$RECONSTRUCTOR_SHA" >> "$out/reconstructor-clone.txt" 2>&1
+            test "$(git -C "$RUNNER_TEMP/reconstructor" rev-parse HEAD)" = "$RECONSTRUCTOR_SHA" || fail 'RECONSTRUCTOR_HEAD_CHANGED'
+            test "$(git -C "$RUNNER_TEMP/reconstructor" rev-parse 'HEAD^{tree}')" = "$RECONSTRUCTOR_TREE" || fail 'RECONSTRUCTOR_TREE_CHANGED'
+            printf '%s\n%s\n' "$RECONSTRUCTOR_SHA" "$RECONSTRUCTOR_TREE" > "$out/reconstructor-source-identity.txt"
+          fi
+
+          (
+            cd candidate || exit 1
+            python -m compileall -q executor &&
+            python -m pip wheel . --no-deps --no-build-isolation --wheel-dir dist &&
+            python -m venv .venv-smoke &&
+            .venv-smoke/bin/python -m pip install --no-index dist/*.whl &&
+            .venv-smoke/bin/creative-os-executor --help &&
+            python -m unittest discover -s tests -v &&
+            python -m executor.cli validate-project project_contracts/executor-self.yaml --policy EXECUTOR_POLICY.yaml --base-dir . &&
+            python -m executor.cli validate-task tasks/examples/EXECUTOR_TASK_FIXTURE-001.yaml --policy EXECUTOR_POLICY.yaml --base-dir . --repository-root JTJ07/Executor=. &&
+            python -m executor.cli validate-test test_contracts/examples/valid_test.yaml --base-dir tests/fixtures --holdout-evidence tests/fixtures/holdout_evidence.json
+          ) > "$out/foundation-validation.txt" 2>&1
+          test $? -eq 0 || fail 'EXECUTOR_FOUNDATION_VALIDATION_FAILED'
+
+          (
+            cd candidate || exit 1
+            export RUN_DOCKER_TESTS=1
+            export HOST_EXECUTOR_SECRET=must-not-reach-container
+            export EXECUTOR_SANDBOX_IMAGE="$(docker image inspect --format='{{.Id}}' python:3.11-slim-bookworm)"
+            python -m unittest tests.test_sandbox_integration -v
+            test -z "$(docker ps -aq --filter label=creative-os-executor-test=true)"
+          ) > "$out/sandbox-validation.txt" 2>&1
+          test $? -eq 0 || fail 'EXECUTOR_SANDBOX_VALIDATION_FAILED'
+
+          cat > "$out/preflight-summary.txt" <<EOF
+          RESULT=$result
+          BASE_SHA=$BASE_SHA
+          CANDIDATE_SHA=$CANDIDATE_SHA
+          CANDIDATE_TREE=$CANDIDATE_TREE
+          CANDIDATE_WORKFLOW_BLOB=$CANDIDATE_WORKFLOW_BLOB
+          OLD_DEPENDENCY=PyYAML==6.0.2
+          NEW_DEPENDENCY=PyYAML==6.0.3
+          OLD_PYYAML_WHEEL_SHA256=$OLD_PYYAML_WHEEL_SHA256
+          NEW_PYYAML_WHEEL_SHA256=$NEW_PYYAML_WHEEL_SHA256
+          OLD_IMAGE=$OLD_SCRIPTOPS_IMAGE
+          NEW_IMAGE=$(cat "$out/new-image-id.txt" 2>/dev/null || printf 'UNRESOLVED')
+          SCRIPTOPS_SHA=$SCRIPTOPS_SHA
+          SCRIPTOPS_TREE=$SCRIPTOPS_TREE
+          RECONSTRUCTOR_SHA=$RECONSTRUCTOR_SHA
+          RECONSTRUCTOR_TREE=$RECONSTRUCTOR_TREE
+          CONSEQUENTIAL_EXECUTIONS=0
+          EFFECT_CONSUMPTIONS=0
+          HUMAN_ACCEPTS_CREATED=0
+          EOF
+          printf '%s\n' "$result" > "$out/result.txt"
+          exit 0
+
+      - name: Persist source-bound preflight evidence on validation branch
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-change-preflight-persist"
+          mkdir -p "controller/$RESULT_PATH"
+          cp -a "$out"/. "controller/$RESULT_PATH/"
+          git -C controller config user.name 'github-actions[bot]'
+          git -C controller config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C controller add -- "$RESULT_PATH"
+          git -C controller commit -m 'Record non-consequential P4 change-stability preflight evidence'
+          git -C controller push origin HEAD:preflight-run/p4-pyyaml-6.0.3
+
+      - name: Enforce preflight verdict
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat "$RUNNER_TEMP/p4-change-preflight-persist/result.txt")" = PASS
