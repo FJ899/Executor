@@ -105,8 +105,12 @@ jobs:
           output = pathlib.Path(sys.argv[2])
           workflow_path = root / '.github/workflows/p4-real-pilots-one-shot.yml'
           runtime_path = root / 'executor/pilot_runtime.py'
+          cli_path = root / 'executor/cli.py'
+          environment_path = root / 'executor/execution_environment.py'
           workflow = workflow_path.read_text(encoding='utf-8')
           runtime = runtime_path.read_text(encoding='utf-8')
+          cli = cli_path.read_text(encoding='utf-8')
+          environment = environment_path.read_text(encoding='utf-8')
 
           historical_preflight_image_ids = (
               'sha256:d13eb12ec154cf688b9fe28f1db91fd90a62e2f036088a1dc90078196f82fabf',
@@ -129,6 +133,7 @@ jobs:
           required_runtime_fragments = (
               'validate_execution_environment(',
               'image_id=image,',
+              'self.spec = build_pilot_sandbox_spec(contract, image)',
               '"execution_environment": self.execution_environment,',
               '"execution_environment_sha256": self.execution_environment_sha256,',
               '"EXECUTION_ENVIRONMENT_SHA256",',
@@ -136,6 +141,22 @@ jobs:
           )
           for fragment in required_runtime_fragments:
               assert fragment in runtime, fragment
+
+          required_cli_fragments = (
+              'environment = build_github_actions_environment(',
+              'image_id=args.image,',
+              'image=args.image,',
+              'execution_environment=environment,',
+          )
+          for fragment in required_cli_fragments:
+              assert fragment in cli, fragment
+
+          required_environment_fragments = (
+              '"sandbox_image_id": image_id,',
+              'if value["sandbox_image_id"] != image_id or _IMAGE_ID.fullmatch(image_id) is None:',
+          )
+          for fragment in required_environment_fragments:
+              assert fragment in environment, fragment
 
           scriptops_block = workflow.split('  reconstructor-pilot-series:', 1)[0]
           assert scriptops_block.count('--image "$EXECUTOR_SANDBOX_IMAGE"') == 1
@@ -155,6 +176,9 @@ jobs:
               'fixed_historical_preflight_image_requirement': False,
               'candidate_records_image_id': True,
               'candidate_passes_resolved_image_to_runtime': True,
+              'cli_binds_resolved_image_to_execution_environment': True,
+              'execution_environment_validates_exact_sandbox_image_id': True,
+              'runtime_sandbox_uses_same_exact_image_id': True,
               'runtime_binds_sandbox_image_id': True,
               'runtime_binds_execution_environment_sha256_to_effect_authority': True,
               'candidate_uploads_image_and_result_evidence': True,
