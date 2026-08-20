@@ -4,13 +4,11 @@ deb597dc68c0: Pulling fs layer
 130f4b90e660: Pulling fs layer
 6760bfe2ff00: Pulling fs layer
 6760bfe2ff00: Waiting
-deb597dc68c0: Verifying Checksum
 deb597dc68c0: Download complete
 6760bfe2ff00: Verifying Checksum
 6760bfe2ff00: Download complete
 130f4b90e660: Verifying Checksum
 130f4b90e660: Download complete
-039e6f9f9752: Verifying Checksum
 039e6f9f9752: Download complete
 039e6f9f9752: Pull complete
 deb597dc68c0: Pull complete
