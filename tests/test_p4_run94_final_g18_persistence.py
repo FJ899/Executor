@@ -45,11 +45,13 @@ class FinalG18PersistenceTests(unittest.TestCase):
             self.assertIn("G-01–G-18: PASS", text, path)
             self.assertIn("PROJECT COMPLETION: PASS", text, path)
 
-    def test_current_status_surfaces_preserve_historical_2026_08_18_records(self) -> None:
-        for path in ("README.md", "PROJECT_COMPLETION_MAP.md", "docs/governance/DOCUMENT_AUTHORITY.md", NEW_RECORD):
+    def test_historical_2026_08_18_records_are_preserved_as_history(self) -> None:
+        for path in ("README.md", "docs/governance/DOCUMENT_AUTHORITY.md", NEW_RECORD):
             text = read(path)
             self.assertIn(HISTORICAL_RECORD, text, path)
             self.assertIn(HISTORICAL_CLOSURE, text, path)
+        completion_map = read("PROJECT_COMPLETION_MAP.md")
+        self.assertIn("earlier 2026-08-18 completion/integration records remain historical provenance", completion_map)
 
     def test_readme_binds_fresh_runs_and_current_main(self) -> None:
         text = read("README.md")
