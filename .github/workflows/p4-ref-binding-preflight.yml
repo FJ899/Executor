@@ -1,0 +1,206 @@
+name: P4 ref-binding non-consequential preflight
+
+on:
+  push:
+    branches:
+      - proof-design/p4-ref-binding-preflight
+
+permissions:
+  contents: read
+
+jobs:
+  ref-binding-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      BASE_SHA: 03ec27d3015b5c086a5dc6db7dc558208fe2a478
+      OLD_CANDIDATE_SHA: 46ca62f02bca717d39426127beb830b4c274552a
+      OLD_CANDIDATE_TREE: 11bee39356d16c30a6efb56f5d8383834a25b0fa
+      OLD_WORKFLOW_BLOB: 30357adc1b1cd0717682d6bfd381fb4e4212e382
+      NEW_CANDIDATE_SHA: 3cd0c8d747fef06f82c01cdab8449c7c8a100038
+      NEW_CANDIDATE_TREE: c739aaa989a15eaed65996d7a0b5242a0ec26d7e
+      NEW_WORKFLOW_BLOB: d226ae4f74ec7ae7a1bfc2acd53a392b257ed6a5
+      DEDICATED_REF: refs/heads/preflight/p4-pyyaml-6.0.3-ref-binding
+      HISTORICAL_REF: refs/heads/phase-b/p4-repeatable-executor-1.0
+      ACTIONLINT_VERSION: 1.7.12
+    steps:
+      - name: Checkout preflight controller
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: controller
+
+      - name: Checkout old candidate read-only
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ env.OLD_CANDIDATE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: old-candidate
+
+      - name: Checkout ref-bound candidate read-only
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ env.NEW_CANDIDATE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: candidate
+
+      - name: Prove controller is non-consequential and isolated
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-ref-binding-preflight"
+          mkdir -p "$out"
+          test "$(git -C controller rev-parse HEAD)" = "${{ github.sha }}"
+          test -z "$(git -C controller status --porcelain --untracked-files=all)"
+          git -C controller diff --name-only "$BASE_SHA" "${{ github.sha }}" > "$out/controller-changed-paths.txt"
+          printf '%s\n' '.github/workflows/p4-ref-binding-preflight.yml' > "$out/controller-expected-paths.txt"
+          diff -u "$out/controller-expected-paths.txt" "$out/controller-changed-paths.txt"
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('controller/.github/workflows/p4-ref-binding-preflight.yml').read_text(encoding='utf-8')
+          assert 'permissions:\n  contents: read' in text
+          forbidden = [
+              'github' + '-pilot-decide',
+              'materialize' + '-pilot-proposal',
+              'run' + '-pilot',
+          ]
+          for token in forbidden:
+              assert token not in text, token
+          PY
+
+      - name: Re-bind old and new exact candidate identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-ref-binding-preflight"
+          test "$(git -C old-candidate rev-parse HEAD)" = "$OLD_CANDIDATE_SHA"
+          test "$(git -C old-candidate rev-parse 'HEAD^{tree}')" = "$OLD_CANDIDATE_TREE"
+          test "$(git -C old-candidate hash-object .github/workflows/p4-real-pilots-one-shot.yml)" = "$OLD_WORKFLOW_BLOB"
+          test "$(git -C candidate rev-parse HEAD)" = "$NEW_CANDIDATE_SHA"
+          test "$(git -C candidate rev-parse 'HEAD^{tree}')" = "$NEW_CANDIDATE_TREE"
+          test "$(git -C candidate hash-object .github/workflows/p4-real-pilots-one-shot.yml)" = "$NEW_WORKFLOW_BLOB"
+          test "$(git -C candidate rev-parse HEAD^)" = "$OLD_CANDIDATE_SHA"
+          test -z "$(git -C old-candidate status --porcelain --untracked-files=all)"
+          test -z "$(git -C candidate status --porcelain --untracked-files=all)"
+          sha256sum candidate/.github/workflows/p4-real-pilots-one-shot.yml | tee "$out/new-workflow-sha256.txt"
+
+      - name: Prove minimal ref-binding delta and unchanged task semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-ref-binding-preflight"
+          git -C candidate diff --name-only "$OLD_CANDIDATE_SHA" "$NEW_CANDIDATE_SHA" > "$out/ref-binding-changed-paths.txt"
+          printf '%s\n' '.github/workflows/p4-real-pilots-one-shot.yml' > "$out/ref-binding-expected-paths.txt"
+          diff -u "$out/ref-binding-expected-paths.txt" "$out/ref-binding-changed-paths.txt"
+          git -C candidate diff --no-ext-diff --no-textconv "$OLD_CANDIDATE_SHA" "$NEW_CANDIDATE_SHA" -- .github/workflows/p4-real-pilots-one-shot.yml > "$out/ref-binding.diff"
+          python - "$PWD/old-candidate" "$PWD/candidate" <<'PY'
+          import pathlib, sys
+          old_root = pathlib.Path(sys.argv[1])
+          new_root = pathlib.Path(sys.argv[2])
+          path = pathlib.Path('.github/workflows/p4-real-pilots-one-shot.yml')
+          old = (old_root / path).read_text(encoding='utf-8')
+          new = (new_root / path).read_text(encoding='utf-8')
+          old_guard = "refs/heads/phase-b/p4-repeatable-executor-1.0"
+          new_guard = "refs/heads/preflight/p4-pyyaml-6.0.3-ref-binding"
+          assert old.count(old_guard) == 2
+          assert new.count(new_guard) == 2
+          assert new.count(old_guard) == 0
+          assert old.replace(old_guard, new_guard) == new
+          assert old.count('PyYAML==6.0.3') == 1
+          assert new.count('PyYAML==6.0.3') == 1
+          for token in (
+              'daa6e5dc210e09171a530eeffe5601e0e74ae041',
+              'ba0b99bd99682dcc7a942537b502a7a72151fa09',
+              'defc7b029097284f94136fec54b75c313ac12f68',
+              '5960d74773b19456863ac66084385b7619aa4285',
+              'evidence/p4/candidates/scriptops-solution-candidate.json',
+              'evidence/p4/candidates/reconstructor-solution-candidate-corrected.json',
+          ):
+              assert old.count(token) == new.count(token) and token in new, token
+          PY
+
+      - name: Prove historical phase-b ref was not moved and dedicated ref is exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-ref-binding-preflight"
+          dedicated="$(git -C candidate rev-parse refs/remotes/origin/preflight/p4-pyyaml-6.0.3-ref-binding)"
+          historical="$(git -C candidate rev-parse refs/remotes/origin/phase-b/p4-repeatable-executor-1.0)"
+          test "$dedicated" = "$NEW_CANDIDATE_SHA"
+          test "$historical" != "$NEW_CANDIDATE_SHA"
+          printf 'DEDICATED_REF_SHA=%s\nHISTORICAL_REF_SHA=%s\n' "$dedicated" "$historical" | tee "$out/ref-identities.txt"
+
+      - name: Prove manual-only gate remains intact
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-ref-binding-preflight"
+          python - "$PWD/candidate" <<'PY' | tee "$out/manual-gate-proof.txt"
+          from pathlib import Path
+          text = Path('candidate/.github/workflows/p4-real-pilots-one-shot.yml').read_text(encoding='utf-8')
+          assert 'workflow_dispatch:' in text
+          assert 'push:' not in text.split('permissions:', 1)[0]
+          assert text.count("github.ref == 'refs/heads/preflight/p4-pyyaml-6.0.3-ref-binding'") == 2
+          assert text.count('required: true') == 6
+          assert 'Each dispatch must supply six fresh direct-human' in text
+          print('MANUAL_ONLY_GATE=PASS')
+          print('FRESH_ACCEPT_INPUTS_REQUIRED=6')
+          print('DEDICATED_REF_GUARDS=2')
+          PY
+
+      - name: Run pinned actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-ref-binding-preflight"
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          tool_dir="$RUNNER_TEMP/actionlint"
+          mkdir -p "$tool_dir"
+          curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          printf '%s  %s\n' '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' "$archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$tool_dir" actionlint
+          "$tool_dir/actionlint" -version | tee "$out/actionlint-version.txt"
+          "$tool_dir/actionlint" -shellcheck= controller/.github/workflows/p4-ref-binding-preflight.yml candidate/.github/workflows/p4-real-pilots-one-shot.yml 2>&1 | tee "$out/actionlint.txt"
+
+      - name: Set up Python for non-consequential tests
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Run non-consequential Executor tests only
+        shell: bash
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-ref-binding-preflight"
+          python -m compileall -q executor
+          python -m unittest discover -s tests -v 2>&1 | tee "$out/unit-tests.txt"
+
+      - name: Final fail-closed preflight summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-ref-binding-preflight"
+          test -z "$(git -C candidate status --porcelain --untracked-files=all)"
+          cat > "$out/summary.txt" <<'SUMMARY'
+          REF_BINDING_PREFLIGHT=PASS
+          CONSEQUENTIAL_EXECUTIONS=0
+          EFFECT_CONSUMPTIONS=0
+          HUMAN_ACCEPT_CONSUMPTIONS=0
+          TARGET_MUTATION=0
+          HISTORICAL_PHASE_B_REF_FORCE_MOVE=0
+          TASK_SEMANTICS_CHANGE=0
+          CAPABILITY_CHANGE=0
+          SUMMARY
+
+      - name: Upload ref-binding preflight evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: p4-ref-binding-preflight-evidence
+          if-no-files-found: error
+          path: ${{ runner.temp }}/p4-ref-binding-preflight/**
