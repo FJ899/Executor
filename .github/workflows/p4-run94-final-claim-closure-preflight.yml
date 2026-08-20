@@ -1,0 +1,196 @@
+name: P4 run94 final claim and repository-closure preflight
+
+on:
+  push:
+    branches:
+      - proof-design/p4-run94-final-claim-closure
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  issues: read
+
+jobs:
+  final-claim-closure-preflight:
+    if: ${{ github.ref == 'refs/heads/proof-design/p4-run94-final-claim-closure' }}
+    runs-on: ubuntu-24.04
+    env:
+      BASE_HEAD: 3cd0c8d747fef06f82c01cdab8449c7c8a100038
+      CLAIM_HEAD: 99a1516a0485f220dc2f13fb784aca1f6f2741c9
+      CLAIM_TREE: 4f7922e370be908e9057fd44745259e81220d411
+      TRUSTED_VERIFIER_HEAD: e73f1d410e663c85f7552ac92a492ef45d6a2901
+      TRUSTED_RUN_ID: "32407901358"
+      CONSEQUENTIAL_RUN_ID: "32404181188"
+      SCRIPTOPS_HEAD: 897de878703a029df814f2551b993c3818defa2a
+      RECONSTRUCTOR_HEAD: e59b9d6c1b496bcb6411e712e7c65cc891578ac3
+
+    steps:
+      - name: Checkout exact proof controller
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prove controller and candidate identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = "$CLAIM_HEAD"
+          test "$(git rev-parse "$CLAIM_HEAD^{tree}")" = "$CLAIM_TREE"
+          test "$(git rev-parse "$CLAIM_HEAD^")" = "$BASE_HEAD"
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+      - name: Prove claim candidate is docs/evidence only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import subprocess
+          expected = {
+              'README.md',
+              'docs/governance/DOCUMENT_AUTHORITY.md',
+              'evidence/phase-c/P4_RUN94_FINAL_CLAIM_RECONCILIATION_2026-08-20.md',
+              'evidence/phase-c/REPOSITORY_CLOSURE.md',
+          }
+          out = subprocess.check_output(['git', 'diff', '--name-only', '3cd0c8d747fef06f82c01cdab8449c7c8a100038', '99a1516a0485f220dc2f13fb784aca1f6f2741c9'], text=True)
+          actual = {x for x in out.splitlines() if x}
+          assert actual == expected, (actual, expected)
+          PY
+          test "$(git rev-parse "$BASE_HEAD:.github/workflows/p4-real-pilots-one-shot.yml")" = "$(git rev-parse "$CLAIM_HEAD:.github/workflows/p4-real-pilots-one-shot.yml")"
+          test "$(git rev-parse "$BASE_HEAD:EXECUTOR_POLICY.yaml")" = "$(git rev-parse "$CLAIM_HEAD:EXECUTOR_POLICY.yaml")"
+          test "$(git rev-parse "$BASE_HEAD:tools/finish_line_verifier/verify.py")" = "cee2a7e67466088588c24a0ca4b6e9879def676a"
+          test "$(git rev-parse "$CLAIM_HEAD:tools/finish_line_verifier/verify.py")" = "cee2a7e67466088588c24a0ca4b6e9879def676a"
+          test "$(git rev-parse "$BASE_HEAD:tools/finish_line_verifier/acceptance_manifest.json")" = "33b901dd1aa44c3f94548a745aeeb877473f836d"
+          test "$(git rev-parse "$CLAIM_HEAD:tools/finish_line_verifier/acceptance_manifest.json")" = "33b901dd1aa44c3f94548a745aeeb877473f836d"
+
+      - name: Prove reconciliation preserves gate and authority boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(
+            README.md
+            docs/governance/DOCUMENT_AUTHORITY.md
+            evidence/phase-c/P4_RUN94_FINAL_CLAIM_RECONCILIATION_2026-08-20.md
+            evidence/phase-c/REPOSITORY_CLOSURE.md
+          )
+          grep -F 'G-13: PASS' evidence/phase-c/P4_RUN94_FINAL_CLAIM_RECONCILIATION_2026-08-20.md
+          grep -F 'G-15: PASS' evidence/phase-c/P4_RUN94_FINAL_CLAIM_RECONCILIATION_2026-08-20.md
+          grep -F 'G-17: PASS' evidence/phase-c/P4_RUN94_FINAL_CLAIM_RECONCILIATION_2026-08-20.md
+          grep -F 'G-18: NOT SUPPLIED' evidence/phase-c/P4_RUN94_FINAL_CLAIM_RECONCILIATION_2026-08-20.md
+          grep -F 'G-02 BEFORE MERGE: CANDIDATE / NOT YET CANONICAL' evidence/phase-c/P4_RUN94_FINAL_CLAIM_RECONCILIATION_2026-08-20.md
+          grep -F 'G-16: CANDIDATE / BLOCKED ONLY ON INTEGRATION OF THIS EXACT CLAIM-STATE RECONCILIATION' evidence/phase-c/P4_RUN94_FINAL_CLAIM_RECONCILIATION_2026-08-20.md
+          grep -F 'G-18 FOR CURRENT REPROOF TARGET: NOT SUPPLIED' docs/governance/DOCUMENT_AUTHORITY.md
+          grep -F 'G-18 FOR 3cd0c8d...: NOT SUPPLIED' README.md
+          grep -F 'MERGE AUTHORITY: "NONE"' evidence/phase-c/P4_RUN94_FINAL_CLAIM_RECONCILIATION_2026-08-20.md
+          if grep -F 'G-18: PASS' "${files[@]}"; then exit 1; fi
+          if grep -F 'PROJECT COMPLETION: PASS' "${files[@]}"; then exit 1; fi
+          for token in github-pilot-decide materialize-pilot-proposal run-pilot; do
+            if grep -F "$token" .github/workflows/p4-run94-final-claim-closure-preflight.yml; then exit 1; fi
+          done
+
+      - name: Rebind trusted runs and immutable artifacts read-only
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-final-claim-closure"
+          mkdir -p "$out"
+          auth="Authorization: Bearer $GH_TOKEN"
+          accept="Accept: application/vnd.github+json"
+          api="https://api.github.com/repos/JTJ07/Executor"
+          curl --fail --silent --show-error --location -H "$auth" -H "$accept" "$api/actions/runs/$TRUSTED_RUN_ID" > "$out/trusted-run.json"
+          curl --fail --silent --show-error --location -H "$auth" -H "$accept" "$api/actions/runs/$TRUSTED_RUN_ID/artifacts?per_page=100" > "$out/trusted-artifacts.json"
+          curl --fail --silent --show-error --location -H "$auth" -H "$accept" "$api/actions/runs/$CONSEQUENTIAL_RUN_ID" > "$out/consequential-run.json"
+          curl --fail --silent --show-error --location -H "$auth" -H "$accept" "$api/actions/runs/$CONSEQUENTIAL_RUN_ID/artifacts?per_page=100" > "$out/consequential-artifacts.json"
+          python - "$out" <<'PY'
+          import json, pathlib, sys
+          out = pathlib.Path(sys.argv[1])
+          trusted = json.loads((out/'trusted-run.json').read_text())
+          assert trusted['id'] == 32407901358
+          assert trusted['head_sha'] == 'e73f1d410e663c85f7552ac92a492ef45d6a2901'
+          assert trusted['event'] == 'push' and trusted['status'] == 'completed' and trusted['conclusion'] == 'success' and trusted['run_attempt'] == 1
+          ta = json.loads((out/'trusted-artifacts.json').read_text())['artifacts']
+          t = {x['id']: x for x in ta}
+          assert t[9420977465]['digest'] == 'sha256:dbe3f35f7d9761959634ebbc6182a0987d74e9a8d359bb91ba95f804c19cfd21'
+          consequential = json.loads((out/'consequential-run.json').read_text())
+          assert consequential['id'] == 32404181188
+          assert consequential['head_sha'] == '3cd0c8d747fef06f82c01cdab8449c7c8a100038'
+          assert consequential['event'] == 'workflow_dispatch' and consequential['status'] == 'completed' and consequential['conclusion'] == 'success' and consequential['run_attempt'] == 1
+          ca = json.loads((out/'consequential-artifacts.json').read_text())['artifacts']
+          c = {x['id']: x for x in ca}
+          assert c[9419652927]['digest'] == 'sha256:b26cae6737cdd01d1d63fdaa0addba493d77f6a385ce225f8f4a26c87fc89b87'
+          assert c[9419647722]['digest'] == 'sha256:b76d52f569531e537cacc950a30e0ffd9206f09f24dda9926ce20e83aa358f7d'
+          PY
+
+      - name: Audit live repository closure read-only
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-final-claim-closure"
+          auth="Authorization: Bearer $GH_TOKEN"
+          accept="Accept: application/vnd.github+json"
+          curl --fail --silent --show-error --location -H "$auth" -H "$accept" 'https://api.github.com/repos/JTJ07/Executor/pulls?state=open&per_page=100' > "$out/executor-open-prs.json"
+          curl --fail --silent --show-error --location -H "$auth" -H "$accept" 'https://api.github.com/repos/JTJ07/scriptops/pulls/8' > "$out/scriptops-pr8.json"
+          curl --fail --silent --show-error --location -H "$auth" -H "$accept" 'https://api.github.com/repos/JTJ07/creative-os-project-reconstructor/pulls/4' > "$out/reconstructor-pr4.json"
+          curl --fail --silent --show-error --location -H "$auth" -H "$accept" 'https://api.github.com/repos/JTJ07/Executor/issues/64' > "$out/issue64.json"
+          curl --fail --silent --show-error --location -H "$auth" -H "$accept" 'https://api.github.com/repos/JTJ07/Executor/issues/65' > "$out/issue65.json"
+          python - "$out" <<'PY'
+          import json, pathlib, sys
+          out = pathlib.Path(sys.argv[1])
+          assert json.loads((out/'executor-open-prs.json').read_text()) == []
+          s = json.loads((out/'scriptops-pr8.json').read_text())
+          r = json.loads((out/'reconstructor-pr4.json').read_text())
+          assert s['state'] == 'closed' and s['merged_at'] is None and s['head']['sha'] == '897de878703a029df814f2551b993c3818defa2a'
+          assert r['state'] == 'closed' and r['merged_at'] is None and r['head']['sha'] == 'e59b9d6c1b496bcb6411e712e7c65cc891578ac3'
+          i64 = json.loads((out/'issue64.json').read_text())
+          i65 = json.loads((out/'issue65.json').read_text())
+          assert i64['number'] == 64 and i65['number'] == 65
+          PY
+
+      - name: Run non-consequential repository tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q executor
+          python -m unittest discover -s tests -v
+
+      - name: Emit fail-closed proof summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-final-claim-closure"
+          cat > "$out/summary.txt" <<'EOF'
+          FINAL_CLAIM_REPOSITORY_CLOSURE_PREFLIGHT=PASS
+          CLAIM_CANDIDATE=99a1516a0485f220dc2f13fb784aca1f6f2741c9
+          CLAIM_TREE=4f7922e370be908e9057fd44745259e81220d411
+          IMPLEMENTATION_TARGET=3cd0c8d747fef06f82c01cdab8449c7c8a100038
+          G13_EVIDENCE=PASS
+          G15_EVIDENCE=PASS
+          G17_EVIDENCE=PASS
+          G02=NOT_PROMOTED_UNTIL_CANONICAL_INTEGRATION_AND_READ_ONLY_RECHECK
+          G16=NOT_PROMOTED_UNTIL_CANONICAL_INTEGRATION_AND_READ_ONLY_RECHECK
+          G18=NOT_AUTHORIZED
+          CONSEQUENTIAL_EXECUTIONS=0
+          EFFECT_CONSUMPTIONS=0
+          HUMAN_ACCEPT_CONSUMPTIONS=0
+          CLAIM_RECONCILIATION_CANONICAL_WRITE=0
+          MERGE=0
+          RELEASE=0
+          DEPLOY=0
+          TAG=0
+          CAPABILITY_CHANGE=0
+          EOF
+          cat "$out/summary.txt"
+
+      - name: Upload non-consequential closure evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: p4-run94-final-claim-closure-preflight-evidence
+          path: ${{ runner.temp }}/p4-final-claim-closure/**
+          if-no-files-found: error
