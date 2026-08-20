@@ -1,0 +1,4 @@
+NON_CONSEQUENTIAL_PREFLIGHT_TRIGGER
+candidate=46ca62f02bca717d39426127beb830b4c274552a
+consequential_executions=0
+effect_consumptions=0
