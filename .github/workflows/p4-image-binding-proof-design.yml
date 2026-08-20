@@ -1,0 +1,216 @@
+name: P4 image-binding proof-design reconciliation
+
+on:
+  push:
+    branches:
+      - proof-design/p4-runtime-image-binding
+
+permissions:
+  contents: read
+
+jobs:
+  proof-design:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      BASE_SHA: 03ec27d3015b5c086a5dc6db7dc558208fe2a478
+      CANDIDATE_SHA: 46ca62f02bca717d39426127beb830b4c274552a
+      CANDIDATE_TREE: 11bee39356d16c30a6efb56f5d8383834a25b0fa
+      CANDIDATE_WORKFLOW_BLOB: 30357adc1b1cd0717682d6bfd381fb4e4212e382
+      CANDIDATE_WORKFLOW_SHA256: 58d0318cf851d54fb7c96df03e384dacc8be8720805db74c214d6f5e596e3204
+      NEW_PYYAML_WHEEL_SHA256: b8bb0864c5a28024fac8a632c443c87c5aa6f215c0b126c449ae1a150412f31d
+      ACTIONLINT_VERSION: 1.7.12
+    steps:
+      - name: Checkout proof-design controller
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: controller
+
+      - name: Checkout exact consequential candidate read-only
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: candidate
+
+      - name: Prove controller is non-consequential and minimal
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-image-binding-proof-design"
+          mkdir -p "$out"
+          test "$(git -C controller rev-parse HEAD)" = "${{ github.sha }}"
+          test -z "$(git -C controller status --porcelain --untracked-files=all)"
+          git -C controller diff --name-only "$BASE_SHA" "${{ github.sha }}" > "$out/controller-changed-paths.txt"
+          printf '%s\n' '.github/workflows/p4-image-binding-proof-design.yml' > "$out/controller-expected-paths.txt"
+          diff -u "$out/controller-expected-paths.txt" "$out/controller-changed-paths.txt"
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('controller/.github/workflows/p4-image-binding-proof-design.yml').read_text(encoding='utf-8')
+          forbidden = [
+              'github' + '-pilot-decide',
+              'materialize' + '-pilot-proposal',
+              'run' + '-pilot',
+          ]
+          for token in forbidden:
+              assert token not in text, token
+          assert 'permissions:\n  contents: read' in text
+          PY
+
+      - name: Re-bind exact candidate identity and dependency-only diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-image-binding-proof-design"
+          test "$(git -C candidate rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test "$(git -C candidate rev-parse 'HEAD^{tree}')" = "$CANDIDATE_TREE"
+          test -z "$(git -C candidate status --porcelain --untracked-files=all)"
+          test "$(git -C candidate hash-object .github/workflows/p4-real-pilots-one-shot.yml)" = "$CANDIDATE_WORKFLOW_BLOB"
+          test "$(sha256sum candidate/.github/workflows/p4-real-pilots-one-shot.yml | awk '{print $1}')" = "$CANDIDATE_WORKFLOW_SHA256"
+          git -C candidate diff --name-only "$BASE_SHA" "$CANDIDATE_SHA" > "$out/candidate-changed-paths.txt"
+          printf '%s\n' '.github/workflows/p4-real-pilots-one-shot.yml' > "$out/candidate-expected-paths.txt"
+          diff -u "$out/candidate-expected-paths.txt" "$out/candidate-changed-paths.txt"
+          git -C candidate diff --no-ext-diff --no-textconv "$BASE_SHA" "$CANDIDATE_SHA" -- .github/workflows/p4-real-pilots-one-shot.yml > "$out/candidate.diff"
+          python - "$PWD/candidate" "$BASE_SHA" <<'PY'
+          import pathlib, subprocess, sys
+          repo = pathlib.Path(sys.argv[1])
+          base = sys.argv[2]
+          path = '.github/workflows/p4-real-pilots-one-shot.yml'
+          old = subprocess.check_output(['git', '-C', str(repo), 'show', f'{base}:{path}'])
+          new = (repo / path).read_bytes()
+          old_token = b'PyYAML==6.0.2'
+          new_token = b'PyYAML==6.0.3'
+          assert old.count(old_token) == 1
+          assert new.count(new_token) == 1
+          assert old.replace(old_token, new_token, 1) == new
+          assert old_token not in new
+          PY
+
+      - name: Prove exact runtime image is bound by the consequential candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-image-binding-proof-design"
+          python - "$PWD/candidate" "$out/image-binding-proof.json" <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          output = pathlib.Path(sys.argv[2])
+          workflow_path = root / '.github/workflows/p4-real-pilots-one-shot.yml'
+          runtime_path = root / 'executor/pilot_runtime.py'
+          workflow = workflow_path.read_text(encoding='utf-8')
+          runtime = runtime_path.read_text(encoding='utf-8')
+
+          historical_preflight_image_ids = (
+              'sha256:d13eb12ec154cf688b9fe28f1db91fd90a62e2f036088a1dc90078196f82fabf',
+              'sha256:e62ec36631d977ff0febd2b57ca884b47e0dfbcfae51686bb28328ebce063359',
+              'sha256:309cefd611bedc632ccd6030953f496cdf8d0b04adc9a70d33e12b937c62beff',
+          )
+          for image_id in historical_preflight_image_ids:
+              assert image_id not in workflow
+          assert 'EXPECTED_NEW_IMAGE' not in workflow
+
+          required_workflow_fragments = (
+              "docker image inspect --format='{{.Id}}' executor-scriptops-pilot:pyyaml-git > scriptops-image-id.txt",
+              '--image "$EXECUTOR_SANDBOX_IMAGE"',
+              'scriptops-image-id.txt',
+              '"execution_environment": result.get("execution_environment")',
+          )
+          for fragment in required_workflow_fragments:
+              assert fragment in workflow, fragment
+
+          required_runtime_fragments = (
+              'validate_execution_environment(',
+              'image_id=image,',
+              '"execution_environment": self.execution_environment,',
+              '"execution_environment_sha256": self.execution_environment_sha256,',
+              '"EXECUTION_ENVIRONMENT_SHA256",',
+              '"sandbox_image_id": self.execution_environment["sandbox_image_id"],',
+          )
+          for fragment in required_runtime_fragments:
+              assert fragment in runtime, fragment
+
+          scriptops_block = workflow.split('  reconstructor-pilot-series:', 1)[0]
+          assert scriptops_block.count('--image "$EXECUTOR_SANDBOX_IMAGE"') == 1
+          assert scriptops_block.count('docker image inspect --format=\'{{.Id}}\' executor-scriptops-pilot:pyyaml-git') >= 2
+          assert 'PyYAML==6.0.3' in scriptops_block
+
+          payload = {
+              'verdict': 'PASS',
+              'candidate_sha': '46ca62f02bca717d39426127beb830b4c274552a',
+              'candidate_tree': '11bee39356d16c30a6efb56f5d8383834a25b0fa',
+              'workflow_blob': '30357adc1b1cd0717682d6bfd381fb4e4212e382',
+              'workflow_sha256': hashlib.sha256(workflow_path.read_bytes()).hexdigest(),
+              'dependency': 'PyYAML==6.0.3',
+              'provider_artifact_sha256': 'b8bb0864c5a28024fac8a632c443c87c5aa6f215c0b126c449ae1a150412f31d',
+              'preflight_image_rebuild_identity': 'NON_AUTHORITATIVE_FOR_FUTURE_EXECUTION',
+              'future_execution_image_identity': 'RESOLVE_ONCE_IN_CONSEQUENTIAL_SCRIPTOPS_JOB_AND_BIND_EXACT_SHA256_TO_ALL_THREE_RESULTS',
+              'fixed_historical_preflight_image_requirement': False,
+              'candidate_records_image_id': True,
+              'candidate_passes_resolved_image_to_runtime': True,
+              'runtime_binds_sandbox_image_id': True,
+              'runtime_binds_execution_environment_sha256_to_effect_authority': True,
+              'candidate_uploads_image_and_result_evidence': True,
+          }
+          output.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          PY
+          cat "$out/image-binding-proof.json"
+
+      - name: Run pinned actionlint on controller and exact candidate workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-image-binding-proof-design"
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          tool_dir="$RUNNER_TEMP/actionlint"
+          mkdir -p "$tool_dir"
+          curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          printf '%s  %s\n' '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' "$archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$tool_dir" actionlint
+          "$tool_dir/actionlint" -version | tee "$out/actionlint-version.txt"
+          "$tool_dir/actionlint" -shellcheck= controller/.github/workflows/p4-image-binding-proof-design.yml candidate/.github/workflows/p4-real-pilots-one-shot.yml 2>&1 | tee "$out/actionlint.txt"
+
+      - name: Set up Python for non-consequential candidate tests
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+
+      - name: Run non-consequential Executor tests only
+        shell: bash
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-image-binding-proof-design"
+          python -m compileall -q executor
+          python -m unittest discover -s tests -v 2>&1 | tee "$out/unit-tests.txt"
+
+      - name: Final fail-closed proof-design summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p4-image-binding-proof-design"
+          test -z "$(git -C candidate status --porcelain --untracked-files=all)"
+          cat > "$out/summary.txt" <<'SUMMARY'
+          PROOF_DESIGN=PASS
+          CONSEQUENTIAL_EXECUTIONS=0
+          EFFECT_CONSUMPTIONS=0
+          HUMAN_ACCEPT_CONSUMPTIONS=0
+          TARGET_MUTATION=0
+          PREFLIGHT_REBUILD_IMAGE_ID=NON_AUTHORITATIVE_FOR_FUTURE_EXECUTION
+          FUTURE_IMAGE_BINDING=EXACT_IMAGE_RESOLVED_IN_CONSEQUENTIAL_JOB_AND_BOUND_IN_RUNTIME_EVIDENCE
+          SUMMARY
+
+      - name: Upload proof-design evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: p4-image-binding-proof-design-evidence
+          if-no-files-found: error
+          path: ${{ runner.temp }}/p4-image-binding-proof-design/**
