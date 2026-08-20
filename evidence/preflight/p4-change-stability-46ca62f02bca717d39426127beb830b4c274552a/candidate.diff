@@ -1,0 +1,13 @@
+diff --git a/.github/workflows/p4-real-pilots-one-shot.yml b/.github/workflows/p4-real-pilots-one-shot.yml
+index 8bf3cbc..30357ad 100644
+--- a/.github/workflows/p4-real-pilots-one-shot.yml
++++ b/.github/workflows/p4-real-pilots-one-shot.yml
+@@ -89,7 +89,7 @@ jobs:
+           RUN apt-get update \
+               && apt-get install -y --no-install-recommends git \
+               && rm -rf /var/lib/apt/lists/* \
+-              && python -m pip install --no-cache-dir PyYAML==6.0.2
++              && python -m pip install --no-cache-dir PyYAML==6.0.3
+           DOCKERFILE
+           docker build --pull -f "$RUNNER_TEMP/p4-scriptops.Dockerfile" -t executor-scriptops-pilot:pyyaml-git .
+ 
