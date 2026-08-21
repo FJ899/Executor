@@ -32,17 +32,17 @@ class SemanticFreshnessSurfaceTests(unittest.TestCase):
         text = self.read("CREATIVE_OS_EXECUTOR_BUILD_INSTRUCTION_v0.2.md")
         self.assertIn("HISTORICAL / SUPERSEDED IMPLEMENTATION INSTRUCTION / NOT CURRENT BOOTSTRAP", text)
         self.assertIn("not a current implementation contract", text)
-        self.assertIn("External/Base Intelligence", text)
+        self.assertIn("EXTERNAL / BASE INTELLIGENCE", text)
         self.assertIn("authorized consequential effects", text)
         self.assertIn("historical_source_ref", text)
 
     def test_product_purpose_separates_durable_mission_from_current_role_placement(self):
         text = self.read("CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md")
         self.assertIn("AUTHORITATIVE DURABLE PRODUCT PURPOSE", text)
-        self.assertIn("CURRENT ROLE BOUNDARY RECONCILED", text)
-        self.assertIn("GINSENG\n→ decision-space understanding", text)
-        self.assertIn("EXTERNAL / BASE INTELLIGENCE\n→ operational framing + HOW + cognitive routing", text)
-        self.assertIn("EXECUTOR\n→ authorized consequential effects", text)
+        self.assertIn("ROLE PLACEMENT RECONCILED", text)
+        self.assertIn("GINSENG → decision-space understanding", text)
+        self.assertIn("EXTERNAL / BASE INTELLIGENCE → operational framing + HOW + cognitive routing", text)
+        self.assertIn("EXECUTOR → authorized consequential effects", text)
         self.assertIn("CURRENT RUN94 HUMAN-ACCEPTED IMPLEMENTATION: 3cd0c8d747fef06f82c01cdab8449c7c8a100038", text)
         self.assertNotIn("CURRENT HUMAN-SELECTED TARGET: P4 REPEATABLE EXECUTOR 1.0 / PHASE B CANDIDATE", text)
 
