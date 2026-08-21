@@ -45,11 +45,17 @@ class SemanticFreshnessSurfaceTests(unittest.TestCase):
         protocol = self.read("CREATIVE_OS_EXECUTOR_WORK_AND_AUDIT_PROTOCOL_v1.0.md")
         pointer = self.read("docs/governance/HUMAN_INTERACTION_CONTRACT_POINTER.md")
         current_bundle = self.read("project_contracts/executor-self.yaml")
+        marker = "# HISTORICAL BODY — EXACT 2026-08-02 CONTENT"
 
-        self.assertIn("HISTORICAL / SUPERSEDED HUMAN-INTERACTION CONTRACT / NOT CURRENT AUTHORITY", protocol)
-        self.assertIn("historical_source_ref", protocol)
-        self.assertIn("historical_blob_sha", protocol)
-        self.assertNotIn('status: "USER APPROVED / AUTHORITATIVE OPERATING CONTRACT"', protocol)
+        self.assertIn(marker, protocol)
+        current_prefix, historical_body = protocol.split(marker, 1)
+        self.assertIn("HISTORICAL / SUPERSEDED HUMAN-INTERACTION CONTRACT / NOT CURRENT AUTHORITY", current_prefix)
+        self.assertIn("historical_source_ref", current_prefix)
+        self.assertIn("historical_blob_sha", current_prefix)
+        self.assertNotIn('status: "USER APPROVED / AUTHORITATIVE OPERATING CONTRACT"', current_prefix)
+        self.assertIn('status: "USER APPROVED / AUTHORITATIVE OPERATING CONTRACT"', historical_body)
+        self.assertIn("REKOMENDOWANE DZIAŁANIE", historical_body)
+        self.assertIn("DOWÓD ZAKOŃCZENIA", historical_body)
 
         self.assertNotIn("CREATIVE_OS_EXECUTOR_WORK_AND_AUDIT_PROTOCOL_v1.0.md", current_bundle)
         self.assertIn("docs/governance/HUMAN_INTERACTION_CONTRACT_POINTER.md", current_bundle)
