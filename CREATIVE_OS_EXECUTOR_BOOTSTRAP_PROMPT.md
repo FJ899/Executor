@@ -16,7 +16,10 @@ For a zero-history current recovery, read instead:
 
 1. `README.md`;
 2. `docs/governance/DOCUMENT_AUTHORITY.md`;
-3. `docs/governance/EXECUTOR_1_0_FINAL_HUMAN_ACCEPTANCE_RECORD_2026-08-20.md`.
+3. `docs/governance/EXECUTOR_1_0_FINAL_HUMAN_ACCEPTANCE_RECORD_2026-08-20.md`;
+4. `docs/governance/HUMAN_INTERACTION_CONTRACT_POINTER.md`.
+
+This current recovery sequence is complete only after step 4. Do not stop after product-state recovery without loading the current Human interaction contract pointer.
 
 Current terminal facts are:
 
