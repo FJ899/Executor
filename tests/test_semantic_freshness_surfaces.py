@@ -16,6 +16,33 @@ class SemanticFreshnessSurfaceTests(unittest.TestCase):
         self.assertIn("ACTIVE PRODUCT COMPLETION GATE: NONE", text)
         self.assertIn("HISTORICAL BOOTSTRAP CONTENT — SUPERSEDED", text)
 
+    def test_zero_history_current_recovery_reaches_human_interaction_pointer(self):
+        pointer_path = "docs/governance/HUMAN_INTERACTION_CONTRACT_POINTER.md"
+        bootstrap = self.read("CREATIVE_OS_EXECUTOR_BOOTSTRAP_PROMPT.md")
+        historical_marker = "## HISTORICAL BOOTSTRAP CONTENT — SUPERSEDED"
+        recovery_marker = "For a zero-history current recovery, read instead:"
+
+        self.assertIn(historical_marker, bootstrap)
+        current_prefix = bootstrap.split(historical_marker, 1)[0]
+        self.assertIn('current_recovery_entry: "README.md"', current_prefix)
+        self.assertIn(recovery_marker, current_prefix)
+        recovery = current_prefix.split(recovery_marker, 1)[1]
+        self.assertIn(f"4. `{pointer_path}`.", recovery)
+        self.assertIn("current recovery sequence is complete only after step 4", recovery)
+        self.assertLess(recovery.index("`README.md`"), recovery.index(f"`{pointer_path}`"))
+        self.assertNotIn("CREATIVE_OS_EXECUTOR_WORK_AND_AUDIT_PROTOCOL_v1.0.md", recovery)
+
+        readme = self.read("README.md")
+        truth_marker = "## Jak czytać repo — źródła prawdy"
+        next_marker = "## Accepted authority model"
+        self.assertIn(truth_marker, readme)
+        self.assertIn(next_marker, readme)
+        truth_section = readme.split(truth_marker, 1)[1].split(next_marker, 1)[0]
+        self.assertIn("Minimalny current zero-history recovery", truth_section)
+        self.assertIn(pointer_path, truth_section)
+        self.assertIn("AKCJA / GDZIE / ODESŁAĆ", truth_section)
+        self.assertNotIn("CREATIVE_OS_EXECUTOR_WORK_AND_AUDIT_PROTOCOL_v1.0.md", truth_section)
+
     def test_charter_recovers_current_run94_and_ownership_boundary(self):
         text = self.read("EXECUTOR_CHARTER.md")
         self.assertIn("P4 REPEATABLE EXECUTOR 1.0", text)
