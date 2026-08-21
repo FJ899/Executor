@@ -36,6 +36,11 @@ class SemanticFreshnessSurfaceTests(unittest.TestCase):
         self.assertIn("authorized consequential effects", text)
         self.assertIn("historical_source_ref", text)
 
+        current_bundle = self.read("project_contracts/executor-self.yaml")
+        self.assertNotIn("CREATIVE_OS_EXECUTOR_BUILD_INSTRUCTION_v0.2.md", current_bundle)
+        self.assertIn("CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md", current_bundle)
+        self.assertIn("README.md", current_bundle)
+
     def test_product_purpose_separates_durable_mission_from_current_role_placement(self):
         text = self.read("CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md")
         self.assertIn("AUTHORITATIVE DURABLE PRODUCT PURPOSE", text)
