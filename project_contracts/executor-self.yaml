@@ -15,10 +15,6 @@
       "role": "authoritative_instruction"
     },
     {
-      "path": "CREATIVE_OS_EXECUTOR_BUILD_INSTRUCTION_v0.2.md",
-      "role": "authoritative_instruction"
-    },
-    {
       "path": "CREATIVE_OS_EXECUTOR_WORK_AND_AUDIT_PROTOCOL_v1.0.md",
       "role": "authoritative_instruction"
     },
