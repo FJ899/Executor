@@ -84,8 +84,11 @@ Pliki `.yaml` używają składni JSON, poprawnego podzbioru YAML 1.2.
 
 `README.md` jest indeksem i skrótem statusu. Nie nadpisuje dedykowanych kontraktów ani finalnych evidence records.
 
+Minimalny current zero-history recovery z tego entrypointu musi objąć: `README.md` → `docs/governance/DOCUMENT_AUTHORITY.md` → `docs/governance/EXECUTOR_1_0_FINAL_HUMAN_ACCEPTANCE_RECORD_2026-08-20.md` → `docs/governance/HUMAN_INTERACTION_CONTRACT_POINTER.md`. Nie kończ recovery przed odczytaniem pointera do Human-owned `AKCJA / GDZIE / ODESŁAĆ`.
+
 - `docs/governance/DOCUMENT_AUTHORITY.md` — ownership źródeł prawdy i precedence;
 - `docs/governance/EXECUTOR_1_0_FINAL_HUMAN_ACCEPTANCE_RECORD_2026-08-20.md` — current Run94 Human G-18 acceptance, exact accepted identity and current completion pointer;
+- `docs/governance/HUMAN_INTERACTION_CONTRACT_POINTER.md` — required current zero-history pointer to the Human-owned `AKCJA / GDZIE / ODESŁAĆ` interaction contract;
 - `docs/governance/EXECUTOR_1_0_FINAL_COMPLETION_RECORD_2026-08-18.md` — historical 2026-08-18 Human-accepted completion state and exact accepted identity;
 - `evidence/phase-c/EXECUTOR_1_0_POST_INTEGRATION_CLOSURE_2026-08-18.md` — historical verified integration and post-integration closure facts;
 - `evidence/phase-c/P4_RUN94_FINAL_CLOSURE_RECONCILIATION_2026-08-20.md` — pre-G-18 Run94 G-01–G-17/G-02/G-16 canonical closure state;
