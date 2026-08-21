@@ -1,11 +1,12 @@
 ---
 document: "Creative OS Executor — cel produktu i granice odpowiedzialności"
 version: "1.0"
-status: "USER APPROVED / AUTHORITATIVE PRODUCT PURPOSE"
+status: "USER APPROVED / AUTHORITATIVE DURABLE PRODUCT PURPOSE / ROLE PLACEMENT RECONCILED"
 date: "2026-08-02"
-status_reconciled: "2026-08-09"
-scope: "product purpose, component roles and user-facing responsibility boundaries"
-implementation_status: "DOCUMENTED / IMPLEMENTATION CLAIMS OWNED BY INVENTORY AND MAIN"
+status_reconciled: "2026-08-21"
+scope: "durable product purpose; historical component-role placement preserved below"
+implementation_status: "CURRENT IMPLEMENTATION/ACCEPTANCE OWNED BY RUN94 RECORDS AND MAIN"
+historical_source_ref: "JTJ07/Executor@d6a9df0567dd37b3b6f997ba49cd23b4585c3a5a:CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md"
 repository: "JTJ07/Executor"
 ---
 
@@ -13,12 +14,31 @@ repository: "JTJ07/Executor"
 
 ## 0. Aktualna granica autorytetu dokumentu
 
-Ten dokument pozostaje autorytatywny dla celu produktu i odpowiedzialności komponentów.
+Ten dokument pozostaje autorytatywny dla **trwałego PRODUCT MISSION** Executora.
+
+Historyczne component-role placement, Company Loop placement, implementation/build-order snapshots i maturity/status claims zachowane w dalszych sekcjach są provenance. Nie są current authority tam, gdzie konfliktują z późniejszym accepted ecosystem ownership lub Run94 state.
+
+Current accepted ownership:
+
+```text
+HUMAN → normative intent / goal / DONE / authority
+GINSENG → decision-space understanding
+EXTERNAL / BASE INTELLIGENCE → operational framing + HOW + cognitive routing
+SADDLE → validates HOW against intent / boundaries
+COS → high-level continuity / provenance
+CONTRACTS → bind accepted meaning / scope
+EXECUTOR → authorized consequential effects
+VERIFIER → independently establishes facts
+```
+
+To jest ownership network with handoffs, **not a master command-control pipeline**.
+
+W szczególności Executor nie jest current ownerem strategicznego wyboru wariantu, operational HOW ani cognitive routingu. Te późniejsze granice nie zmieniają trwałej misji produktu; korygują wyłącznie placement odpowiedzialności.
 
 Nie jest już źródłem prawdy dla:
 
-- bieżącej kolejności implementacji — tę określa `docs/EXECUTOR_BUILD_ORDER.md`;
-- aktualnego stanu implementacji — ten wynika z `main` i jest podsumowany w `docs/architecture/IMPLEMENTATION_INVENTORY.md`;
+- bieżącej kolejności implementacji — po Run94 nie ma aktywnej Executor product-development phase;
+- aktualnego stanu implementacji i Human acceptance — ten wynika z `main` i `docs/governance/EXECUTOR_1_0_FINAL_HUMAN_ACCEPTANCE_RECORD_2026-08-20.md`;
 - poziomów maturity/proof — te definiuje `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md`;
 - szczegółowej semantyki Action Authorization Packet — tę definiuje późniejszy dedykowany `ACTION_AUTHORIZATION_PACKET_v1.0.md`.
 
@@ -66,7 +86,7 @@ System ma temu przeciwdziałać przez:
 7. wykonanie wybranego kierunku dopiero po ustaleniu jego znaczenia;
 8. porównanie końcowego efektu z celem, a nie wyłącznie z listą wykonanych kroków.
 
-## 3. Role komponentów
+## 3. Role komponentów — HISTORICAL PLACEMENT WHERE SUPERSEDED
 
 ### Ginseng
 
@@ -192,12 +212,12 @@ MERGED
 MATURITY LEVEL ACHIEVED
 ```
 
-## 6. Miejsce Action Authorization Packet
+## 6. Miejsce Action Authorization Packet — HISTORICAL STATUS SNAPSHOT
 
 `ACTION_AUTHORIZATION_PACKET_v1.0.md` jest późniejszym, dedykowanym i zamrożonym
 kontraktem semantycznym terminalnej autoryzacji konkretnej consequential action.
 
-Aktualny stan `main`:
+Historyczny snapshot zapisany w tej wersji dokumentu:
 
 ```text
 INTERNAL SUPPORTING MECHANISM
@@ -218,7 +238,7 @@ POSSESSION OF CREDENTIAL != AUTHORITY
 CAPABILITY != AUTHORITY
 ```
 
-Dedykowany kontrakt AAP oraz stan kodu na `main` są źródłem prawdy dla jego szczegółowej semantyki i implementacji.
+Dedykowany kontrakt AAP oraz aktualny stan kodu na `main` są źródłem prawdy dla jego szczegółowej semantyki i implementacji.
 
 ## 7. Non-goals
 
@@ -252,13 +272,9 @@ wykonania. Pozostają jednak warstwą pomocniczą wobec rezultatu użytkowego.
 9. AI recommendation nie jest authorization.
 10. Executor nie może być autorytatywnym verifierem własnej narracji.
 
-## 9. Kolejność dalszej budowy
+## 9. Kolejność dalszej budowy — HISTORICAL SNAPSHOT
 
-Aktualna krytyczna kolejność implementacji jest własnością:
-
-- `docs/EXECUTOR_BUILD_ORDER.md`.
-
-Po zaakceptowaniu PR #42 baseline brzmi:
+Historyczny zapis wskazywał `docs/EXECUTOR_BUILD_ORDER.md` i baseline po PR #42:
 
 ```text
 PRODUCT / BUILD BASELINE
@@ -270,20 +286,11 @@ PRODUCT / BUILD BASELINE
 → MATURITY ASSESSMENT
 ```
 
+Po current Run94 / Executor 1.0 Human acceptance ten fragment **nie jest current task queue**. Nie ma aktywnej Executor product-development phase bez nowej Human authority.
+
 `EXECUTOR_PRODUCT_CAPABILITY_LADDER.md` pozostaje autorytatywny dla definicji i dowodów P0/P1/P2/P3+, ale nie jest kolejką bieżących prac implementacyjnych.
 
-Nie wracamy do rozwijania P1, M3 ani innych osi tylko dlatego, że istnieje otwarta historyczna praca. Taka praca wraca na critical path wyłącznie wtedy, gdy usuwa zmierzony blocker bieżącego product slice albo gdy po end-to-end run wymaga tego maturity assessment.
-
-Każdy nowy PR krytycznej ścieżki powinien wskazać:
-
-```text
-BUILD MAP TARGET:
-MATURITY TARGET:
-CURRENT GAP:
-CHANGE:
-PROOF:
-NON-GOALS:
-```
+Nie wracamy do rozwijania P1, M3 ani innych osi tylko dlatego, że istnieje otwarta historyczna praca. Taka praca wraca na critical path wyłącznie wtedy, gdy usuwa zmierzony blocker bieżącego product slice albo gdy nowa Human decision ją aktywuje.
 
 ## 10. Ochrona kierunku
 
@@ -300,21 +307,19 @@ Audyt kierunku jest wymagany, gdy:
 - capability zaczyna być mylone z authority;
 - pojawia się nowy kierunek o potencjale większym niż bieżąca roadmapa.
 
-## 11. Status
+## 11. Status — CURRENT INTERPRETATION
 
 ```text
-PRODUCT PURPOSE: USER APPROVED / AUTHORITATIVE FOR PURPOSE AND ROLE BOUNDARIES
-BUILD BASELINE: ACCEPTED THROUGH PR #42
-CURRENT HUMAN-SELECTED TARGET: P4 REPEATABLE EXECUTOR 1.0 / PHASE B CANDIDATE
-CURRENT PROVEN MATURITY: P0 IN DECLARED SCOPE
-ACTIVE MATURITY ADVANCEMENT CLAIM: NONE
-GINSENG ROLE: DEFINED / NOT IMPLEMENTED HERE
-DELIBERATION MODEL: DEFINED / RUNTIME NOT CLAIMED
-CREATIVE OS ROLE: DEFINED / EXTERNAL SYSTEM
-EXECUTOR ROLE: FOUNDATION IMPLEMENTATION EXISTS / GP001 END-TO-END NOT YET CLAIMED
-POTENTIAL_AND_DECISION_PACKET: LOGICAL CONTRACT / NOT IMPLEMENTED
-ACTION AUTHORIZATION PACKET: VALIDATOR + ATOMIC LEDGER + RESULT BINDING IMPLEMENTED CANDIDATE
-GENERIC EXTERNAL PROJECT EXECUTION: FORBIDDEN
-BOUNDED PILOTS: TWO NAMED REPOSITORIES / DRAFT PR ONLY / REAL EVENTS PENDING
-AUTO MERGE: DISABLED
+PRODUCT PURPOSE: USER APPROVED / AUTHORITATIVE DURABLE PRODUCT PURPOSE
+CURRENT OWNERSHIP: RECONCILED TO ACCEPTED ECOSYSTEM MAP IN SECTION 0
+EXECUTOR 1.0 PRODUCT: HUMAN ACCEPTED
+SELECTED ENDPOINT: P4 REPEATABLE EXECUTOR 1.0
+PROJECT COMPLETION: PASS
+G-01–G-18: PASS
+CURRENT RUN94 HUMAN-ACCEPTED IMPLEMENTATION: 3cd0c8d747fef06f82c01cdab8449c7c8a100038
+CURRENT RUN94 HUMAN-ACCEPTED TREE: c739aaa989a15eaed65996d7a0b5242a0ec26d7e
+ACTIVE PRODUCT COMPLETION GATE: NONE
+ACTIVE PRODUCT-DEVELOPMENT PHASE: NONE
+GENERIC EXTERNAL PROJECT EXECUTION: OUTSIDE ACCEPTED BOUNDED SCOPE
+AUTO MERGE: NOT AUTHORIZED
 ```

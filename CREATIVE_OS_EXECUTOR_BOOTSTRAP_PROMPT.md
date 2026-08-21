@@ -1,4 +1,39 @@
+---
+document: "Creative OS Executor historical bootstrap prompt"
+status: "HISTORICAL / SUPERSEDED / NOT CURRENT BOOTSTRAP"
+reconciled_at: "2026-08-21"
+historical_source_ref: "JTJ07/Executor@d6a9df0567dd37b3b6f997ba49cd23b4585c3a5a:CREATIVE_OS_EXECUTOR_BOOTSTRAP_PROMPT.md"
+current_recovery_entry: "README.md"
+---
+
 # Bootstrap prompt — Creative OS Executor
+
+## CURRENT RECOVERY NOTICE
+
+This file is retained as historical bootstrap provenance. It is **not** a current implementation route and must not be used to restart M0/M1 or select M2 as the next step.
+
+For a zero-history current recovery, read instead:
+
+1. `README.md`;
+2. `docs/governance/DOCUMENT_AUTHORITY.md`;
+3. `docs/governance/EXECUTOR_1_0_FINAL_HUMAN_ACCEPTANCE_RECORD_2026-08-20.md`.
+
+Current terminal facts are:
+
+```text
+REPOSITORY: JTJ07/Executor
+EXECUTOR 1.0: HUMAN ACCEPTED
+SELECTED ENDPOINT: P4 REPEATABLE EXECUTOR 1.0
+G-01–G-18: PASS
+ACTIVE PRODUCT COMPLETION GATE: NONE
+NEW PRODUCT-DEVELOPMENT PHASE: NOT AUTHORIZED BY THIS FILE
+```
+
+The exact historical text below is preserved for provenance only.
+
+---
+
+## HISTORICAL BOOTSTRAP CONTENT — SUPERSEDED
 
 Repozytorium zostało utworzone jako:
 
@@ -15,7 +50,7 @@ Przeczytaj w całości:
 
 Wersja v0.2 zastępuje v0.1 jako kontrakt implementacyjny.
 
-## Zlecenie
+## Zlecenie historyczne
 
 Wykonaj tylko:
 
@@ -24,7 +59,7 @@ M0 — Test Contract Validator
 M1 — Project Contract + Policy Engine
 ```
 
-## Twarde ograniczenia
+## Twarde ograniczenia historycznego bootstrapu
 
 - nie wykonuj kodu z innych repozytoriów;
 - nie modyfikuj repo `litrgratis-pixel/COS`;
@@ -38,7 +73,7 @@ M1 — Project Contract + Policy Engine
 - wszystkie zmiany wykonuj przez branch i PR;
 - nie osłabiaj testów w celu uzyskania PASS.
 
-## Wymagany wynik M0
+## Wymagany wynik M0 — historyczne
 
 - `test_contract.schema.json`;
 - walidacja pozytywnego control;
@@ -49,7 +84,7 @@ M1 — Project Contract + Policy Engine
 - wykrywanie sprzecznych kryteriów;
 - status `BLOCKED_BEFORE_MODEL` dla błędnego testu.
 
-## Wymagany wynik M1
+## Wymagany wynik M1 — historyczne
 
 - `executor_project.schema.json`;
 - przykładowy `EXECUTOR_PROJECT.yaml`;
@@ -68,7 +103,7 @@ M1 — Project Contract + Policy Engine
 - test modyfikacji forbidden path;
 - test żądania niedozwolonej sieci lub sekretu.
 
-## Raport końcowy
+## Raport końcowy — historyczne
 
 Przedstaw:
 

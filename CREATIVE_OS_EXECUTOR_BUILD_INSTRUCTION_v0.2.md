@@ -1,15 +1,40 @@
 ---
 document: "Creative OS Executor — instrukcja implementacyjna"
 version: "0.2"
-status: "READY FOR FOUNDATION IMPLEMENTATION"
-execution_lock: "EXTERNAL PROJECT EXECUTION FORBIDDEN UNTIL M0-M3 PASS"
-target_repository: "litrgratis-pixel/creative-os-executor"
-first_pilot: "GINSENG_TEST-003"
+status: "HISTORICAL / SUPERSEDED IMPLEMENTATION INSTRUCTION / NOT CURRENT BOOTSTRAP"
+execution_lock: "HISTORICAL — DOES NOT AUTHORIZE CURRENT WORK"
+target_repository: "HISTORICAL LOCATOR — SEE README.md FOR CURRENT REPOSITORY"
+first_pilot: "HISTORICAL — GINSENG_TEST-003"
 audit_source: "CREATIVE_OS_EXECUTOR_AUDIT_v0.2.md"
 product_source: "CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md"
+reconciled_at: "2026-08-21"
+historical_source_ref: "JTJ07/Executor@d6a9df0567dd37b3b6f997ba49cd23b4585c3a5a:CREATIVE_OS_EXECUTOR_BUILD_INSTRUCTION_v0.2.md"
 ---
 
 # Creative OS Executor — instrukcja implementacyjna v0.2
+
+## CURRENT AUTHORITY NOTICE
+
+This document is retained as historical implementation provenance. It is **not a current implementation contract**, bootstrap, task queue, or ownership map.
+
+Do not use its M0–M8 sequence, historical repository locators, Company Loop placement, Board selection algorithm, or statements about selecting/expanding solution variants as current Executor authority.
+
+Current accepted ownership is:
+
+```text
+HUMAN → normative intent / goal / DONE / authority
+GINSENG → decision-space understanding
+EXTERNAL / BASE INTELLIGENCE → operational framing + HOW + cognitive routing
+SADDLE → validates HOW against intent / boundaries
+COS → high-level continuity / provenance
+CONTRACTS → bind accepted meaning / scope
+EXECUTOR → authorized consequential effects
+VERIFIER → independently establishes facts
+```
+
+Executor 1.0 / P4 is Human accepted. `README.md` and `docs/governance/DOCUMENT_AUTHORITY.md` own current recovery/current-state interpretation. The historical body below is intentionally preserved; where it conflicts with the notice above, it is provenance, not current authority.
+
+---
 
 ## 0. Status dokumentu
 
