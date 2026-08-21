@@ -1,4 +1,35 @@
 ---
+document: "Creative OS Executor — historical work / conversation / audit protocol wrapper"
+version: "1.0"
+status: "HISTORICAL / SUPERSEDED HUMAN-INTERACTION CONTRACT / NOT CURRENT AUTHORITY"
+reconciled_at: "2026-08-21"
+semantic_owner_current_human_interaction: "HUMAN"
+historical_source_ref: "JTJ07/Executor@0b1dc9ea27fff05f4fc2d0fc9e9ae574b056ebf4:CREATIVE_OS_EXECUTOR_WORK_AND_AUDIT_PROTOCOL_v1.0.md"
+historical_blob_sha: "0b86a510d6d3f4559303feef811343abeb880e4b"
+current_pointer: "docs/governance/HUMAN_INTERACTION_CONTRACT_POINTER.md"
+---
+
+# CURRENT AUTHORITY NOTICE
+
+This path no longer defines the current Human-facing interaction contract for Executor.
+
+Current Human-facing interaction semantics are Human-owned. Executor stores only the minimal current pointer in `docs/governance/HUMAN_INTERACTION_CONTRACT_POINTER.md`; the durable canonical copy is maintained in `JTJ07/Saddle/docs/HUMAN_OPERATING_CONTRACT.md`.
+
+Current surface:
+
+```text
+AKCJA
+GDZIE
+ODESŁAĆ
+```
+
+The complete historical protocol below is preserved as provenance. Its historical status, required response format, implementation sequencing and component placement must not be recovered as current authority.
+
+---
+
+# HISTORICAL BODY — EXACT 2026-08-02 CONTENT
+
+---
 document: "Creative OS Executor — protokół pracy, rozmowy i audytu"
 version: "1.0"
 status: "USER APPROVED / AUTHORITATIVE OPERATING CONTRACT"

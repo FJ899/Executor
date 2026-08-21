@@ -41,6 +41,32 @@ class SemanticFreshnessSurfaceTests(unittest.TestCase):
         self.assertIn("CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md", current_bundle)
         self.assertIn("README.md", current_bundle)
 
+    def test_historical_work_protocol_cannot_be_current_human_interaction_authority(self):
+        protocol = self.read("CREATIVE_OS_EXECUTOR_WORK_AND_AUDIT_PROTOCOL_v1.0.md")
+        pointer = self.read("docs/governance/HUMAN_INTERACTION_CONTRACT_POINTER.md")
+        current_bundle = self.read("project_contracts/executor-self.yaml")
+        marker = "# HISTORICAL BODY — EXACT 2026-08-02 CONTENT"
+
+        self.assertIn(marker, protocol)
+        current_prefix, historical_body = protocol.split(marker, 1)
+        self.assertIn("HISTORICAL / SUPERSEDED HUMAN-INTERACTION CONTRACT / NOT CURRENT AUTHORITY", current_prefix)
+        self.assertIn("historical_source_ref", current_prefix)
+        self.assertIn("historical_blob_sha", current_prefix)
+        self.assertNotIn('status: "USER APPROVED / AUTHORITATIVE OPERATING CONTRACT"', current_prefix)
+        self.assertIn('status: "USER APPROVED / AUTHORITATIVE OPERATING CONTRACT"', historical_body)
+        self.assertIn("REKOMENDOWANE DZIAŁANIE", historical_body)
+        self.assertIn("DOWÓD ZAKOŃCZENIA", historical_body)
+
+        self.assertNotIn("CREATIVE_OS_EXECUTOR_WORK_AND_AUDIT_PROTOCOL_v1.0.md", current_bundle)
+        self.assertIn("docs/governance/HUMAN_INTERACTION_CONTRACT_POINTER.md", current_bundle)
+
+        self.assertIn('status: "ACTIVE POINTER / NOT SEMANTIC OWNER"', pointer)
+        self.assertIn('semantic_owner: "HUMAN"', pointer)
+        self.assertIn('canonical_repository: "JTJ07/Saddle"', pointer)
+        self.assertIn('canonical_path: "docs/HUMAN_OPERATING_CONTRACT.md"', pointer)
+        self.assertIn("AKCJA\nGDZIE\nODESŁAĆ", pointer)
+        self.assertIn("CAPABILITY != PERMISSION", pointer)
+
     def test_product_purpose_separates_durable_mission_from_current_role_placement(self):
         text = self.read("CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md")
         self.assertIn("AUTHORITATIVE DURABLE PRODUCT PURPOSE", text)
