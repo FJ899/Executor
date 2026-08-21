@@ -2,72 +2,59 @@
 document: "Creative OS Executor — instrukcja implementacyjna"
 version: "0.2"
 status: "HISTORICAL / SUPERSEDED IMPLEMENTATION INSTRUCTION / NOT CURRENT BOOTSTRAP"
+execution_lock: "HISTORICAL — DOES NOT AUTHORIZE CURRENT WORK"
+target_repository: "HISTORICAL LOCATOR — SEE README.md FOR CURRENT REPOSITORY"
+first_pilot: "HISTORICAL — GINSENG_TEST-003"
+audit_source: "CREATIVE_OS_EXECUTOR_AUDIT_v0.2.md"
+product_source: "CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md"
 reconciled_at: "2026-08-21"
 historical_source_ref: "JTJ07/Executor@d6a9df0567dd37b3b6f997ba49cd23b4585c3a5a:CREATIVE_OS_EXECUTOR_BUILD_INSTRUCTION_v0.2.md"
-current_authority: "README.md + docs/governance/DOCUMENT_AUTHORITY.md"
 ---
 
 # Creative OS Executor — instrukcja implementacyjna v0.2
 
 ## CURRENT AUTHORITY NOTICE
 
-This document is retained as historical implementation provenance. It is **not** a current implementation contract, bootstrap, task queue, or ownership map.
+This document is retained as historical implementation provenance. It is **not a current implementation contract**, bootstrap, task queue, or ownership map.
 
-Do not use its old M0–M8 sequencing, historical repository locators, Company Loop placement, Board selection algorithm, or statements about selecting/expanding solution variants as current Executor authority.
+Do not use its M0–M8 sequence, historical repository locators, Company Loop placement, Board selection algorithm, or statements about selecting/expanding solution variants as current Executor authority.
 
 Current accepted ownership is:
 
 ```text
-HUMAN
-→ normative intent / goal / DONE / authority
-
-GINSENG
-→ decision-space understanding
-
-EXTERNAL / BASE INTELLIGENCE
-→ operational framing + HOW + cognitive routing
-
-SADDLE
-→ validates HOW against intent / boundaries
-
-COS
-→ high-level continuity / provenance
-
-CONTRACTS
-→ bind accepted meaning / scope
-
-EXECUTOR
-→ authorized consequential effects
-
-VERIFIER
-→ independently establishes facts
+HUMAN → normative intent / goal / DONE / authority
+GINSENG → decision-space understanding
+EXTERNAL / BASE INTELLIGENCE → operational framing + HOW + cognitive routing
+SADDLE → validates HOW against intent / boundaries
+COS → high-level continuity / provenance
+CONTRACTS → bind accepted meaning / scope
+EXECUTOR → authorized consequential effects
+VERIFIER → independently establishes facts
 ```
 
-Executor 1.0 / P4 is Human accepted; there is no active completion gate and this historical document does not authorize a new product-development phase. Current state and precedence are owned by `README.md` and `docs/governance/DOCUMENT_AUTHORITY.md`.
-
-The historical body below is preserved for provenance only. Historical statements remain true only for the checkpoint at which they were written unless a current authority source explicitly preserves them.
+Executor 1.0 / P4 is Human accepted. `README.md` and `docs/governance/DOCUMENT_AUTHORITY.md` own current recovery/current-state interpretation. The historical body below is intentionally preserved; where it conflicts with the notice above, it is provenance, not current authority.
 
 ---
 
-## 0. Status dokumentu — HISTORICAL
+## 0. Status dokumentu
 
-Ta wersja zastępowała v0.1 jako kontrakt implementacyjny **w swoim historycznym checkpointcie**.
+Ta wersja zastępuje v0.1 jako kontrakt implementacyjny.
 
-Jest historycznym kontraktem runtime Executora, a nie pełną definicją produktu Creative OS.
+Jest kontraktem runtime Executora, a nie pełną definicją produktu Creative OS.
 Nadrzędny cel produktu, role Ginsenga, Company Loop, Creative OS i Executora oraz
-granice wyniku użytkowego były wówczas opisywane przez
+granice wyniku użytkowego określa
 `CREATIVE_OS_EXECUTOR_PRODUCT_PURPOSE_AND_BOUNDARIES_v1.0.md`.
 
 V0.1 pozostaje materiałem projektowym. Nie należy na jej podstawie rozpoczynać pełnego wykonania.
 
-Do czasu zaliczenia Milestone 0–3 Executor mógł w tym historycznym planie:
+Do czasu zaliczenia Milestone 0–3 Executor może:
 
 - walidować kontrakty;
 - planować;
 - generować syntetyczne testy własnych mechanizmów;
 - pracować na fixtures znajdujących się we własnym repo.
 
-Nie mógł jeszcze:
+Nie może jeszcze:
 
 - wykonywać kodu z zewnętrznych repozytoriów;
 - modyfikować COS, BPM:160, ScriptOps ani Reconstructora;
@@ -75,7 +62,7 @@ Nie mógł jeszcze:
 - mieć domyślnego dostępu do sieci;
 - tworzyć automatycznie scalanych PR.
 
-## 1. Cel — HISTORICAL DESIGN SNAPSHOT
+## 1. Cel
 
 Executor otrzymuje kierunek po rozpoznaniu rzeczywistego celu, poszerzeniu pola
 możliwości i rozstrzygnięciu zmian semantycznych przez użytkownika. Pierwsze
@@ -83,7 +70,7 @@ rozwiązanie podane w poleceniu jest kandydatem, a nie automatycznie wiążącą
 architekturą. Budowa fundamentów wykonawczych przed Company Loop i Ginsengiem jest
 kolejnością implementacji, nie zmianą głównego celu produktu na bezpieczeństwo.
 
-Historyczny plan zakładał zbudowanie ograniczonego systemu wykonawczego, który:
+Zbudować ograniczony system wykonawczy, który:
 
 1. przyjmuje cel użytkownika bez wymagania wiedzy technicznej;
 2. sprawdza, czy test i warunki sukcesu są wiarygodne;
@@ -100,9 +87,7 @@ Historyczny plan zakładał zbudowanie ograniczonego systemu wykonawczego, któr
    - `FAILED_AFTER_MAX_ITERATIONS`,
    - `STALE`.
 
-Punkty 4–6 powyżej są **historycznym component-role placement**, a nie current Executor ownership. W current accepted ecosystem operational framing, HOW i cognitive routing należą do External/Base Intelligence; Executor zarządza wyłącznie autoryzowanymi consequential effects.
-
-Powyższe statusy były wynikami technicznymi runtime. Nie zastępują użytkowego
+Powyższe statusy są wynikami technicznymi runtime. Nie zastępują użytkowego
 `POTENTIAL_AND_DECISION_PACKET`, rekomendacji, decyzji ani wskazania dalszego
 działania zdefiniowanych w nadrzędnym dokumencie produktu.
 
@@ -155,11 +140,11 @@ Każdy fragment przekazywany modelowi otrzymuje metadane:
 
 Tylko pliki oznaczone w `EXECUTOR_PROJECT.yaml` jako `authoritative_instruction` mogą dostarczać instrukcje projektowe. Nadal nie mogą nadpisać polityki Executora.
 
-## 4. Zakres v0.2 — HISTORICAL
+## 4. Zakres v0.2
 
-V0.2 obsługiwał jedno zadanie naraz.
+V0.2 obsługuje jedno zadanie naraz.
 
-Historyczny zakres zakładał:
+Musi umieć:
 
 - walidować kontrakt projektu;
 - walidować kontrakt testu;
@@ -175,7 +160,7 @@ Historyczny zakres zakładał:
 - odtwarzać run w czystym CI;
 - mierzyć czas człowieka.
 
-Nie obejmował:
+Nie obejmuje:
 
 - działania ciągłego;
 - wielu równoległych tasków;
@@ -188,21 +173,17 @@ Nie obejmował:
 - samodzielnej modyfikacji polityki;
 - pobierania dowolnych zależności z internetu.
 
-## 5. Repozytorium — HISTORICAL LOCATOR
+## 5. Repozytorium
 
-Historyczny locator:
+Repo:
 
 ```text
 litrgratis-pixel/creative-os-executor
 ```
 
-Current repository identity is `JTJ07/Executor` and must be resolved from current repository state, not from this historical section.
+COS pozostaje pamięcią i konstytucją. Executor jest runtime.
 
-COS pozostaje high-level continuity/provenance owner; Executor jest effect runtime.
-
-## 6. Struktura repo — HISTORICAL PLAN
-
-Poniższa struktura jest zachowanym historycznym planem, nie current required tree:
+## 6. Struktura repo
 
 ```text
 creative-os-executor/
@@ -342,11 +323,11 @@ creative-os-executor/
     └── execute-task.yml
 ```
 
-## 7. Kontrakt projektu — HISTORICAL EXAMPLE
+## 7. Kontrakt projektu
 
-Każdy projekt miał dostarczyć `EXECUTOR_PROJECT.yaml` w tym planie.
+Każdy projekt musi dostarczyć `EXECUTOR_PROJECT.yaml`.
 
-Przykład historyczny:
+Przykład:
 
 ```yaml
 schema_version: executor-project/1.0
@@ -424,11 +405,11 @@ owners:
   infrastructure_changes: USER
 ```
 
-Brak manifestu oznaczał w tym planie `PROJECT_NOT_ONBOARDED`.
+Brak manifestu oznacza `PROJECT_NOT_ONBOARDED`.
 
-## 8. Kontrakt zadania — HISTORICAL EXAMPLE
+## 8. Kontrakt zadania
 
-Task zawierał:
+Task zawiera:
 
 - cel;
 - zakres;
@@ -443,7 +424,7 @@ Task zawierał:
 - politykę decyzji;
 - politykę merge.
 
-Przykład historyczny:
+Przykład:
 
 ```yaml
 schema_version: executor-task/1.0
@@ -488,7 +469,7 @@ merge_policy:
 
 Test contract jest walidowany przed pierwszym wywołaniem modelu.
 
-Wymagane pola historycznego planu:
+Wymagane pola:
 
 ```yaml
 schema_version: executor-test/1.0
@@ -525,7 +506,7 @@ acceptance:
   - implementation_readiness_after == BLOCKED
 ```
 
-Walidator sprawdzał:
+Walidator sprawdza:
 
 - kompletność;
 - sprzeczności;
@@ -543,7 +524,7 @@ INVALID
 INSUFFICIENT_EVIDENCE
 ```
 
-`INVALID` i `INSUFFICIENT_EVIDENCE` zatrzymywały task przed modelem.
+`INVALID` i `INSUFFICIENT_EVIDENCE` zatrzymują task przed modelem.
 
 ## 10. Typy sprzeciwu
 
@@ -573,13 +554,18 @@ Ryzyko nieblokujące.
 
 Model może proponować klasyfikację, ale kod zatwierdza możliwość `HARD_VETO`.
 
-## 11. Adaptacyjny Company Loop — HISTORICAL / NOT CURRENT EXECUTOR OWNERSHIP
+## 11. Adaptacyjny Company Loop
 
-Historyczny Company Loop służył w tym dokumencie poszerzeniu przestrzeni rozwiązań, odkryciu niewidocznego potencjału oraz zakwestionowaniu wariantów z różnych perspektyw. Ten placement jest superseded jako current Executor ownership.
+Company Loop służy poszerzeniu przestrzeni rozwiązań, odkryciu niewidocznego
+potencjału oraz zakwestionowaniu wariantów z różnych perspektyw. Jego wartość jest
+mierzona jakością nowych możliwości, kontrargumentów, zależności i rozstrzygających
+mikroeksperymentów, a nie liczbą agentów lub zgodnością ich opinii.
 
-Current accepted ecosystem assigns operational framing, HOW and cognitive routing to External/Base Intelligence. Ginseng supplies decision-space understanding. Executor does not own Company Loop-style strategic selection.
+Company Loop przygotowuje rekomendację i alternatywy. Nie może sam nadać wynikowi
+statusu prawdy, zastąpić deterministycznego dowodu ani podjąć za użytkownika decyzji
+zmieniającej cel, kanon, koszt, zakres lub ryzyko.
 
-### 11.1. Klasa ryzyka — historical
+### 11.1. Klasa ryzyka
 
 ```text
 LOW_RISK
@@ -599,7 +585,7 @@ Przykładowe kryteria wysokiego ryzyka:
 - brak rollbacku;
 - test decydujący o kierunku produktu.
 
-### 11.2. Szerokość — historical
+### 11.2. Szerokość
 
 ```text
 LOW_RISK       2–3 kandydatów
@@ -607,7 +593,7 @@ MEDIUM_RISK    4–6 kandydatów
 HIGH_RISK      8–12 kandydatów
 ```
 
-### 11.3. Obieg — historical
+### 11.3. Obieg
 
 ```text
 NORMALIZE
@@ -622,9 +608,11 @@ NORMALIZE
 → BOARD
 ```
 
-Każdy dział oceniał wszystkie pozostałe warianty w jednym wywołaniu.
+Każdy dział ocenia wszystkie pozostałe warianty w jednym wywołaniu.
 
-## 12. Algorytm Board — HISTORICAL / SUPERSEDED ROLE PLACEMENT
+Działy nie widzą ocen innych działów przed Board.
+
+## 12. Algorytm Board
 
 1. usuń `HARD_VETO`;
 2. usuń warianty poniżej `minimum_proofability`;
@@ -636,9 +624,9 @@ Każdy dział oceniał wszystkie pozostałe warianty w jednym wywołaniu.
 8. utwórz Board Packet;
 9. utwórz maksymalnie jedną rundę decyzyjną.
 
-Board nie tworzył nowego wariantu.
+Board nie tworzy nowego wariantu.
 
-Override wymagał:
+Override wymaga:
 
 ```yaml
 override:
@@ -647,9 +635,9 @@ override:
   accepted_by:
 ```
 
-## 13. Jedna runda decyzyjna — HISTORICAL
+## 13. Jedna runda decyzyjna
 
-Board zwracał jeden pakiet:
+Board zwraca jeden pakiet:
 
 ```text
 DECISION ROUND
@@ -658,13 +646,13 @@ DECISION ROUND
 3. koszt — limit
 ```
 
-Pakiet zawierał tylko pytania konieczne do dalszego ruchu.
+Pakiet zawiera tylko pytania konieczne do dalszego ruchu.
 
-Brak odpowiedzi oznaczał `AWAITING_DECISION`, nie zgadywanie.
+Brak odpowiedzi oznacza `AWAITING_DECISION`, nie zgadywanie.
 
 ## 14. Sandbox
 
-Minimalne wymagania historycznego planu:
+Minimalne wymagania:
 
 - jednorazowe środowisko;
 - czysty checkout wskazanego SHA;
@@ -686,7 +674,7 @@ Zdolności są przyznawane per task.
 
 Próba użycia niedozwolonej zdolności tworzy `HARD_VETO`.
 
-## 15. Maszyna stanów — HISTORICAL PLAN
+## 15. Maszyna stanów
 
 ```text
 CREATED
@@ -704,7 +692,7 @@ FAILED
 STALE
 ```
 
-Każdy checkpoint zapisywał:
+Każdy checkpoint zapisuje:
 
 ```text
 executor_version
@@ -728,13 +716,15 @@ resume
 → changed: STALE
 ```
 
-Run `STALE` mógł zostać:
+Run `STALE` może zostać:
 
 - sklonowany do nowego runu;
 - ponownie zaplanowany;
 - zamknięty.
 
-## 16. Execution Loop — HISTORICAL PLAN
+Nie może być kontynuowany bezpośrednio.
+
+## 16. Execution Loop
 
 ### Preflight
 
@@ -783,7 +773,7 @@ Run `STALE` mógł zostać:
 - provenance;
 - tamper control.
 
-## 17. Retry z miernikiem postępu — HISTORICAL PLAN
+## 17. Retry z miernikiem postępu
 
 Każda iteracja:
 
@@ -810,9 +800,11 @@ Zatrzymanie przed limitem:
 - zmiana zakresu bez decyzji;
 - brak ścieżki przyczynowej.
 
-## 18. Replayable Evidence — HISTORICAL PLAN
+Każda iteracja startuje z ostatniego poprawnego checkpointu.
 
-Primary run generował:
+## 18. Replayable Evidence
+
+Primary run generuje:
 
 ```text
 input_manifest.json
@@ -830,17 +822,39 @@ execution_report.md
 replay_command.txt
 ```
 
-`PASS` był warunkowy do czasu replay.
+`PASS` jest warunkowy do czasu replay.
 
-Historyczna komenda:
+Komenda:
 
 ```bash
 creative-os-executor replay runs/<RUN_ID>
 ```
 
-## 19. Failure Memory — HISTORICAL PLAN
+Replay:
 
-Po każdym runie miał być zapisany:
+1. używa czystego środowiska;
+2. pobiera dokładne SHA;
+3. nie używa pamięci primary runu;
+4. uruchamia proces generowania;
+5. ponownie generuje artefakty;
+6. porównuje hashe;
+7. sprawdza baseline;
+8. sprawdza protected paths;
+9. publikuje osobny CI check.
+
+Statusy:
+
+```text
+PRIMARY_PASS / REPLAY_PENDING
+VERIFIED_PASS
+REPLAY_FAILED
+```
+
+Tylko `VERIFIED_PASS` może utworzyć PR oznaczony jako gotowy.
+
+## 19. Failure Memory
+
+Po każdym runie zapisz:
 
 ```yaml
 failure_class:
@@ -856,7 +870,7 @@ Pamięć należy do repozytorium i jest jawna.
 
 Nie jest automatycznie instrukcją. Stanowi dane wejściowe o klasie `historical_evidence`.
 
-## 20. Metryki — HISTORICAL PLAN
+## 20. Metryki
 
 ### Maszynowe
 
@@ -883,17 +897,25 @@ human_time_saved =
 manual_baseline_minutes - human_minutes_with_executor
 ```
 
-## 21. Pilotaż — HISTORICAL PLAN
+## 21. Pilotaż
 
 ### Pilot 1 — GINSENG_TEST-003
 
+Dowodzi jednego kontrolowanego przypadku.
+
 ### Pilot 2 — Ginseng holdout
+
+- niewidziana decyzja albo scenariusz;
+- brak zmian mechanizmu;
+- implementer nie widzi fixture.
 
 ### Pilot 3 — projekt innego typu
 
-Nie jest to current acceptance path ani active next work.
+Kod aplikacyjny, dokumentacyjny albo pipeline danych.
 
-## 22. Testy obowiązkowe — HISTORICAL PLAN
+Nie uznawaj Executora za ogólny przed trzema pilotami.
+
+## 22. Testy obowiązkowe
 
 ### Contract
 
@@ -945,7 +967,7 @@ Nie jest to current acceptance path ani active next work.
 - protected path change;
 - baseline mutation.
 
-### Company Loop — historical
+### Company Loop
 
 - adaptive width;
 - batch reviews;
@@ -954,19 +976,55 @@ Nie jest to current acceptance path ani active next work.
 - tie-break experiment;
 - one decision round.
 
-## 23. Milestones — HISTORICAL / CLOSED AS CURRENT QUEUE
+## 23. Milestones
 
 ### M0 — Test Contract Validator
 
+Dowód:
+
+```text
+błędny test zostaje zatrzymany przed pierwszym wywołaniem modelu
+```
+
 ### M1 — Project Contract + Policy Engine
+
+Dowód:
+
+```text
+twarde granice egzekwuje kod
+```
 
 ### M2 — Sandbox + State Machine
 
+Dowód:
+
+```text
+niezaufany kod i zmiana stanu nie omijają izolacji
+```
+
 ### M3 — Replayable Evidence
+
+Dowód:
+
+```text
+wynik można odtworzyć bez pamięci primary runu
+```
 
 ### M4 — Adaptive Company Loop
 
+Dowód:
+
+```text
+wariant jest wybierany jawnie i w budżecie
+```
+
 ### M5 — Execution + Retry
+
+Dowód:
+
+```text
+naprawy dają mierzalny postęp albo run zatrzymuje się wcześniej
+```
 
 ### M6 — Ginseng Test 003
 
@@ -974,13 +1032,26 @@ Nie jest to current acceptance path ani active next work.
 
 ### M8 — Cross-domain Pilot
 
-These labels are historical design/provenance. They do not form a current roadmap.
+## 24. Definition of Done v0.2
 
-## 24. Definition of Done v0.2 — HISTORICAL
+Executor jest ukończony, gdy:
 
-The historical v0.2 completion definition is retained in Git history at the exact source ref declared in frontmatter. It is superseded by the accepted P4 / Executor 1.0 completion contract and Run94 final Human acceptance records.
+- M0–M5 przechodzą pełne testy;
+- zewnętrzny projekt wymaga manifestu;
+- test jest walidowany przed modelem;
+- repo jest traktowane jako niezaufane dane;
+- sandbox działa bez sieci i sekretów domyślnie;
+- HARD_VETO jest deterministyczne;
+- Board ma jawny algorytm;
+- resume wykrywa stale state;
+- retry mierzy postęp;
+- dowód ma niezależny replay;
+- trzy piloty są zakończone;
+- mierzone są minuty człowieka;
+- żaden run nie zapisuje bezpośrednio do main;
+- automatyczny merge pozostaje wyłączony.
 
-## 25. Czego nie budować przed M6 — HISTORICAL
+## 25. Czego nie budować przed M6
 
 - dashboard;
 - kolejka;
@@ -993,10 +1064,38 @@ The historical v0.2 completion definition is retained in Git history at the exac
 - monitoring rozmów;
 - wieloużytkownikowość.
 
-## 26. Pierwsze polecenie implementacyjne — HISTORICAL / DO NOT EXECUTE
+## 26. Pierwsze polecenie implementacyjne
 
-The historical instruction was to implement only M0/M1 and then prepare M2. That instruction is superseded and must not be executed as current work.
+```text
+Utwórz szkielet repozytorium creative-os-executor zgodnie z
+CREATIVE_OS_EXECUTOR_BUILD_INSTRUCTION_v0.2.md.
 
-Current state has no active Executor product-development phase. Any new work requires a new bounded Human authorization.
+Wykonaj wyłącznie:
 
-# Koniec instrukcji historycznej
+M0 — Test Contract Validator
+M1 — Project Contract + Policy Engine
+
+Nie wykonuj kodu z innych repozytoriów.
+Nie podłączaj GitHub App.
+Nie używaj sekretów.
+Nie włączaj sieci w runtime testów.
+Nie implementuj jeszcze Company Loop ani Execution Loop.
+
+Po wykonaniu przedstaw:
+
+1. drzewo repo;
+2. schemat EXECUTOR_PROJECT.yaml;
+3. schemat task contract;
+4. schemat test contract;
+5. policy engine;
+6. klasy HARD_VETO / POLICY_VETO / EVIDENCE_GAP / CONCERN;
+7. przykłady pozytywnej i negatywnej walidacji;
+8. test prompt injection z pliku repo;
+9. test zmiany forbidden path;
+10. wyniki CI.
+
+Każde twierdzenie o PASS musi wskazywać test i log.
+Zatrzymaj się po M1.
+```
+
+# Koniec instrukcji
