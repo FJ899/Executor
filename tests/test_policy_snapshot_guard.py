@@ -11,8 +11,9 @@ from executor.sandbox.policy_snapshot import (
 )
 
 
-CURRENT_EXECUTOR_REPOSITORY = "JTJ07/Executor"
-PREVIOUS_EXECUTOR_REPOSITORY = "litrgratis-pixel/Executor"
+CURRENT_EXECUTOR_REPOSITORY = "FJ899/Executor"
+PREVIOUS_EXECUTOR_REPOSITORY = "JTJ07/Executor"
+LEGACY_EXECUTOR_REPOSITORY = "litrgratis-pixel/Executor"
 
 
 class PolicySnapshotGuardTest(unittest.TestCase):
@@ -98,7 +99,7 @@ class PolicySnapshotGuardTest(unittest.TestCase):
 
         self.assertEqual(snapshot.repository, CURRENT_EXECUTOR_REPOSITORY)
 
-    def test_previous_owner_is_rejected_by_current_self_identity(self):
+    def test_previous_owners_are_rejected_by_current_self_identity(self):
         execution = {
             "external_projects": False,
             "controlled_external_fixtures": [],
@@ -106,17 +107,19 @@ class PolicySnapshotGuardTest(unittest.TestCase):
             "default_network": False,
             "default_secrets": [],
         }
-        temp, root, commit = self.make_policy_repo(
-            execution,
-            repository=PREVIOUS_EXECUTOR_REPOSITORY,
-        )
-        self.addCleanup(temp.cleanup)
+        for previous in (PREVIOUS_EXECUTOR_REPOSITORY, LEGACY_EXECUTOR_REPOSITORY):
+            with self.subTest(previous=previous):
+                temp, root, commit = self.make_policy_repo(
+                    execution,
+                    repository=previous,
+                )
+                self.addCleanup(temp.cleanup)
 
-        with self.assertRaisesRegex(
-            ExecutionPolicyError,
-            "expected JTJ07/Executor",
-        ):
-            load_execution_policy_snapshot(root, commit=commit)
+                with self.assertRaisesRegex(
+                    ExecutionPolicyError,
+                    "expected FJ899/Executor",
+                ):
+                    load_execution_policy_snapshot(root, commit=commit)
 
     def test_controlled_external_fixture_is_exact_policy_authority(self):
         execution = {
