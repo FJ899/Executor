@@ -9,7 +9,7 @@ from executor.sandbox.policy_snapshot import load_execution_policy_snapshot
 from executor.sandbox.spec import CommandRule, SandboxExecutionContext, SandboxSpec
 
 ROOT = Path(__file__).resolve().parents[1]
-CURRENT_EXECUTOR_REPOSITORY = "JTJ07/Executor"
+CURRENT_EXECUTOR_REPOSITORY = "FJ899/Executor"
 
 
 @unittest.skipUnless(os.environ.get("RUN_DOCKER_TESTS") == "1", "Docker integration tests are opt-in")
