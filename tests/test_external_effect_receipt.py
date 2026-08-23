@@ -1,84 +1,137 @@
 from __future__ import annotations
 
+import json
 import unittest
+from pathlib import Path
 
-from executor.external_effect_receipt import assess_external_completion_claim
+from executor.external_effect_receipt import (
+    assess_actor_receipt_provenance,
+    assess_system_write,
+)
 
 
-class ExternalEffectReceiptTests(unittest.TestCase):
+FIXTURE = (
+    Path(__file__).parent
+    / "fixtures"
+    / "actor_receipt_provenance"
+    / "ARP_001_SYSTEM_403_HUMAN_CLAIM_UNOBSERVED.json"
+)
+
+
+class ActorReceiptProvenanceTests(unittest.TestCase):
     def setUp(self):
+        self.fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
+        target = self.fixture["target"]
         self.expected = {
-            "expected_provider": "GITHUB",
-            "expected_action_kind": "CREATE_ISSUE_COMMENT",
-            "expected_target": "eclipse-jdtls/eclipse.jdt.ls#3866",
+            "expected_provider": target["provider"],
+            "expected_action_kind": target["action_kind"],
+            "expected_target": target["resource"],
         }
-        self.receipt = {
-            "schema_version": "executor-external-effect-receipt/1.0",
-            "provider": "GITHUB",
-            "action_kind": "CREATE_ISSUE_COMMENT",
-            "target": "eclipse-jdtls/eclipse.jdt.ls#3866",
+        self.failure_receipt = self.fixture["events"][1]["receipt"]
+
+    def test_403_is_an_authoritative_failure_receipt(self):
+        result = assess_system_write(
+            receipt=self.failure_receipt,
+            **self.expected,
+        )
+        self.assertEqual(result["system_write"], "FAILED")
+        self.assertEqual(
+            result["system_receipt"], "AUTHORITATIVE_FAILURE_RECEIPT"
+        )
+        self.assertEqual(result["receipt"]["provider_status"], 403)
+        self.assertEqual(
+            result["receipt"]["provider_message"],
+            "Resource not accessible by integration",
+        )
+        self.assertIsNone(result["receipt"]["object_id"])
+        self.assertIsNone(result["receipt"]["object_url"])
+        self.assertFalse(result["system_completion"])
+        self.assertFalse(result["terminal_success"])
+
+    def test_fixture_flow_stays_human_reported_unverified(self):
+        result = assess_actor_receipt_provenance(
+            system_receipt=self.failure_receipt,
+            human_write_claim=True,
+            independent_read_observed=False,
+            **self.expected,
+        )
+        expected = self.fixture["expected"]
+        self.assertEqual(result["system"]["system_write"], expected["system_write"])
+        self.assertEqual(
+            result["system"]["system_receipt"], expected["system_receipt"]
+        )
+        self.assertEqual(result["human_write"], expected["human_write"])
+        self.assertEqual(
+            result["human_verification"], expected["human_verification"]
+        )
+        self.assertEqual(result["current_result"], expected["current_result"])
+        self.assertEqual(result["terminal_pass"], expected["terminal_pass"])
+
+    def test_human_claim_never_inherits_system_completed(self):
+        result = assess_actor_receipt_provenance(
+            system_receipt=self.failure_receipt,
+            human_write_claim=True,
+            independent_read_observed=False,
+            **self.expected,
+        )
+        self.assertEqual(result["system"]["system_write"], "FAILED")
+        self.assertEqual(result["current_result"], "HUMAN_REPORTED / UNVERIFIED")
+        self.assertNotEqual(result["current_result"], "SYSTEM_COMPLETED")
+        self.assertEqual(
+            result["provenance_rule"],
+            "HUMAN_CLAIM_MUST_NOT_INHERIT_SYSTEM_COMPLETION",
+        )
+
+    def test_missing_system_receipt_cannot_support_system_completion(self):
+        result = assess_system_write(receipt=None, **self.expected)
+        self.assertEqual(result["system_write"], "UNVERIFIED")
+        self.assertEqual(result["system_receipt"], "MISSING")
+        self.assertFalse(result["system_completion"])
+        self.assertEqual(
+            result["reason"], "NO_RECEIPT_NO_SYSTEM_COMPLETION_CLAIM"
+        )
+
+    def test_success_receipt_requires_durable_object_identity(self):
+        invalid_success = {
+            **self.failure_receipt,
             "provider_status": 201,
-            "object_id": "987654321",
-            "object_url": "https://github.com/eclipse-jdtls/eclipse.jdt.ls/issues/3866#issuecomment-987654321",
-            "response_sha256": "a" * 64,
+            "provider_message": "Created",
         }
-
-    def test_completion_claim_without_receipt_is_unverified(self):
-        result = assess_external_completion_claim(
-            claimed_status="ACTION_COMPLETED",
-            receipt=None,
-            **self.expected,
-        )
-        self.assertEqual(result["status"], "UNVERIFIED_EXTERNAL_EFFECT")
-        self.assertEqual(result["reason"], "MISSING_AUTHORITATIVE_PROVIDER_RECEIPT")
+        result = assess_system_write(receipt=invalid_success, **self.expected)
+        self.assertEqual(result["system_write"], "UNVERIFIED")
+        self.assertEqual(result["system_receipt"], "INVALID")
+        self.assertIn("durable provider object identity", result["detail"])
         self.assertFalse(result["terminal_success"])
 
-    def test_pass_claim_without_receipt_cannot_be_terminal_success(self):
-        result = assess_external_completion_claim(
-            claimed_status="PASS",
-            receipt=None,
-            **self.expected,
+    def test_valid_success_receipt_completes_system_write_but_not_terminal_pass(self):
+        valid_success = {
+            **self.failure_receipt,
+            "provider_status": 201,
+            "provider_message": "Created",
+            "object_id": "987654321",
+            "object_url": "https://github.com/fixture-owner/fixture-repo/issues/123#issuecomment-987654321",
+        }
+        result = assess_system_write(receipt=valid_success, **self.expected)
+        self.assertEqual(result["system_write"], "COMPLETED")
+        self.assertEqual(
+            result["system_receipt"], "AUTHORITATIVE_SUCCESS_RECEIPT"
         )
-        self.assertEqual(result["status"], "UNVERIFIED_EXTERNAL_EFFECT")
+        self.assertTrue(result["system_completion"])
+        self.assertEqual(result["verification"], "INDEPENDENT_READ_REQUIRED")
         self.assertFalse(result["terminal_success"])
 
-    def test_human_supplied_permalink_is_not_a_provider_receipt(self):
-        result = assess_external_completion_claim(
-            claimed_status="ACTION_COMPLETED",
-            receipt={
-                "schema_version": "executor-external-effect-receipt/1.0",
-                "provider": "GITHUB",
-                "action_kind": "CREATE_ISSUE_COMMENT",
-                "target": "eclipse-jdtls/eclipse.jdt.ls#3866",
-                "object_id": "987654321",
-                "object_url": self.receipt["object_url"],
-            },
+    def test_independent_observation_of_human_claim_does_not_rewrite_system_history(self):
+        result = assess_actor_receipt_provenance(
+            system_receipt=self.failure_receipt,
+            human_write_claim=True,
+            independent_read_observed=True,
             **self.expected,
         )
-        self.assertEqual(result["status"], "UNVERIFIED_EXTERNAL_EFFECT")
-        self.assertEqual(result["reason"], "INVALID_AUTHORITATIVE_PROVIDER_RECEIPT")
-        self.assertFalse(result["terminal_success"])
-
-    def test_receipt_for_wrong_target_is_rejected(self):
-        receipt = {**self.receipt, "target": "somewhere/else#1"}
-        result = assess_external_completion_claim(
-            claimed_status="ACTION_COMPLETED",
-            receipt=receipt,
-            **self.expected,
-        )
-        self.assertEqual(result["status"], "UNVERIFIED_EXTERNAL_EFFECT")
-        self.assertIn("target mismatch", result["detail"])
-        self.assertFalse(result["terminal_success"])
-
-    def test_valid_provider_receipt_still_requires_independent_readback(self):
-        result = assess_external_completion_claim(
-            claimed_status="ACTION_COMPLETED",
-            receipt=self.receipt,
-            **self.expected,
-        )
-        self.assertEqual(result["status"], "RECEIPT_BOUND_VERIFICATION_REQUIRED")
-        self.assertFalse(result["terminal_success"])
-        self.assertEqual(result["receipt"]["object_id"], "987654321")
+        self.assertEqual(result["system"]["system_write"], "FAILED")
+        self.assertEqual(result["human_write"], "HUMAN_REPORTED")
+        self.assertEqual(result["human_verification"], "OBSERVED")
+        self.assertTrue(result["evidence_non_substitution"])
+        self.assertFalse(result["terminal_pass"])
 
 
 if __name__ == "__main__":
