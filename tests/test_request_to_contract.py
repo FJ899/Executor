@@ -57,7 +57,7 @@ def propose_canonical(
         understood_objective="Naprawić regresję atomowości ProjectRegistry.add_many.",
         proposed_task_contract=canonical_task(),
         model_inferences=[
-            ("$.target.repository", "litrgratis-pixel/executor-pilot-target", 0.99),
+            ("$.target.repository", "FJ899/executor-pilot-target", 0.99),
             (
                 "$.target.test",
                 "tests.test_registry.ProjectRegistryTests.test_duplicate_batch_does_not_partially_mutate_registry",
@@ -226,7 +226,7 @@ class RequestToContract001Tests(unittest.TestCase):
         first["provenance"][0]["value"] = "forged request"
 
         second = current.decision_surface()
-        self.assertEqual(second["target"]["name"], "litrgratis-pixel/executor-pilot-target")
+        self.assertEqual(second["target"]["name"], "FJ899/executor-pilot-target")
         self.assertEqual(second["proposed_write_scope"], ["project_registry/registry.py"])
         self.assertEqual(second["provenance"][0]["value"], USER_REQUEST)
 
