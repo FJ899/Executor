@@ -1,13 +1,13 @@
 ---
 document: "AI Failure Atlas"
-version: "0.1"
-status: "INITIAL FAILURE-DRIVEN ENGINEERING BASELINE / PENDING REVIEW"
-date: "2026-08-08"
-scope: "failure classes used to attack Executor architecture before implementation"
+version: "0.2"
+status: "FAILURE-DRIVEN ENGINEERING BASELINE / RECEIPT-LOSS CANDIDATE"
+date: "2026-08-23"
+scope: "failure classes used to attack Executor architecture before and during implementation"
 repository: "JTJ07/Executor"
 ---
 
-# AI Failure Atlas v0.1
+# AI Failure Atlas v0.2
 
 ## 1. Purpose
 
@@ -223,6 +223,64 @@ Required test pattern for GP001:
 - modify protected acceptance material.
 
 All must fail closed unless explicitly authorized by the task contract.
+
+### FAI-008 — Orphaned External Effect / Receipt Loss
+
+Observed incident:
+
+`INC-001 — evidence/INC_001_ORPHANED_EXTERNAL_EFFECT_2026-08-23.md`
+
+Failure mechanism:
+
+```text
+EXTERNAL MUTATION ATTEMPT
+  -> SYSTEM CLAIMS COMPLETION
+  -> PROVIDER OBJECT IDENTITY / WRITE RECEIPT IS NOT RETAINED
+  -> LATER READBACK CANNOT BIND TO THE EFFECT
+  -> HUMAN IS ASKED TO RECONSTRUCT THE MISSING IDENTITY
+```
+
+Architecture questions:
+
+> Can an externally mutating action reach a completion state without the authoritative provider response that identifies its created/changed object?
+
+> Can later human repair silently substitute for the receipt the execution path should have persisted itself?
+
+Invariant:
+
+`EXTERNAL MUTATION COMPLETION REQUIRES AN AUTHORITATIVE PROVIDER RECEIPT.`
+
+Required execution order:
+
+```text
+WRITE
+  -> CAPTURE PROVIDER RESPONSE
+  -> PERSIST OBJECT IDENTITY + RESPONSE HASH
+  -> COMPLETION CLAIM
+  -> INDEPENDENT READBACK
+  -> VERIFICATION
+```
+
+Fail-closed rule:
+
+```text
+NO RECEIPT
+  -> UNVERIFIED_EXTERNAL_EFFECT
+  -> NO TERMINAL SUCCESS
+  -> NO AUTOMATIC RETRY WHILE EFFECT IS UNCERTAIN
+```
+
+Required test pattern:
+
+- claim completion after a simulated external mutation but provide no receipt: must become `UNVERIFIED_EXTERNAL_EFFECT`;
+- provide only a later human-supplied permalink: must not count as the original provider receipt;
+- provide a receipt bound to another target: must reject;
+- provide a valid provider receipt: may advance only to `RECEIPT_BOUND_VERIFICATION_REQUIRED`, never directly to PASS;
+- independent readback remains separately required.
+
+Implementation note:
+
+The receipt gate is not authority and does not create new external capabilities. It is a post-write truth boundary for actions already authorized elsewhere. Adapter/runtime integration must be claimed only for mutation paths that actually invoke the gate.
 
 ## 4. Failure-driven development rule
 
