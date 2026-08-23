@@ -14,7 +14,7 @@ POLICY = ROOT / "EXECUTOR_POLICY.yaml"
 PROJECT = ROOT / "project_contracts/executor-self.yaml"
 TASK_FIXTURE = ROOT / "tasks/examples/EXECUTOR_TASK_FIXTURE-001.yaml"
 GINSENG_TASK = ROOT / "tasks/examples/GINSENG_TEST-003.yaml"
-CURRENT_EXECUTOR_REPOSITORY = "JTJ07/Executor"
+CURRENT_EXECUTOR_REPOSITORY = "FJ899/Executor"
 
 
 class ValidationTruthTest(unittest.TestCase):
