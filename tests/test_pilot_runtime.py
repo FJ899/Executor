@@ -81,7 +81,7 @@ class PilotFixture:
         self.git("init", "-q")
         self.git("config", "user.name", "Pilot Test")
         self.git("config", "user.email", "pilot@example.invalid")
-        self.git("remote", "add", "origin", "https://github.com/JTJ07/scriptops.git")
+        self.git("remote", "add", "origin", "https://github.com/FJ899/scriptops.git")
         (root / "phase6").mkdir()
         (root / "phase6/scriptops-v2-hardening.py").write_text(
             "VALUE = 1\n",
@@ -152,7 +152,7 @@ class PilotRuntimeTests(unittest.TestCase):
             "schema_version": "executor-solution-proposal/1.0",
             "proposal_id": "proposal-runtime-001",
             "contract_sha256": self.frozen["contract_sha256"],
-            "repository": "JTJ07/scriptops",
+            "repository": "FJ899/scriptops",
             "source_commit": self.fixture.commit,
             "source_tree": self.fixture.tree,
             "mutations": [
@@ -187,8 +187,8 @@ class PilotRuntimeTests(unittest.TestCase):
         runtime.policy_snapshot = SimpleNamespace(
             source_sha256="b" * 64,
             bounded_pilot_repositories=(
-                SimpleNamespace(repository="JTJ07/scriptops"),
-                SimpleNamespace(repository="JTJ07/creative-os-project-reconstructor"),
+                SimpleNamespace(repository="FJ899/scriptops"),
+                SimpleNamespace(repository="FJ899/creative-os-project-reconstructor"),
             ),
         )
         runtime.contract = self.frozen["contract"]
@@ -323,7 +323,7 @@ class PilotRuntimeTests(unittest.TestCase):
         backend.bind_proposal(self.validated)
         authorized = backend.authorize(
             SandboxExecutionContext(
-                repository="JTJ07/scriptops",
+                repository="FJ899/scriptops",
                 commit=self.fixture.commit,
                 repository_root=self.fixture.root,
                 source_dir=self.fixture.root,
