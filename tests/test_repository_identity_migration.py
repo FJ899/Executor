@@ -13,6 +13,10 @@ PRE_TRANSFER = "JTJ07/Executor"
 HISTORICAL_ACCEPTANCE = (
     ROOT / "docs/governance/EXECUTOR_1_0_FINAL_HUMAN_ACCEPTANCE_RECORD_2026-08-20.md"
 )
+CURRENT_TRUST_PROFILE = ROOT / "trust_profiles/github-p4-pilots.json"
+HISTORICAL_TRUST_PROFILE = (
+    ROOT / "trust_profiles/github-p4-pilots-pre-transfer-2026-08-16.json"
+)
 
 
 class RepositoryIdentityMigrationTest(unittest.TestCase):
@@ -47,6 +51,38 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
             CURRENT,
         )
 
+    def test_current_cross_repository_bindings_use_fj899(self):
+        policy = json.loads((ROOT / "EXECUTOR_POLICY.yaml").read_text(encoding="utf-8"))
+        fixture = json.loads(
+            (ROOT / "tasks/GP001_FIX_FAILING_TEST_CASE_001.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+        pointer = (ROOT / "docs/governance/HUMAN_INTERACTION_CONTRACT_POINTER.md").read_text(
+            encoding="utf-8"
+        )
+        profile = json.loads(CURRENT_TRUST_PROFILE.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            policy["execution"]["controlled_external_fixtures"][0]["repository"],
+            "FJ899/executor-pilot-target",
+        )
+        self.assertEqual(
+            [entry["repository"] for entry in policy["execution"]["bounded_pilot_repositories"]],
+            ["FJ899/scriptops", "FJ899/creative-os-project-reconstructor"],
+        )
+        self.assertEqual(
+            fixture["repositories"]["target"]["name"],
+            "FJ899/executor-pilot-target",
+        )
+        self.assertIn('canonical_repository: "FJ899/Saddle"', pointer)
+        self.assertEqual(profile["intake_repository"], "FJ899/Executor")
+        self.assertEqual(profile["allowed_actor"], {"login": "FJ899", "id": 275481581})
+        self.assertEqual(
+            profile["allowed_target_repositories"],
+            ["FJ899/scriptops", "FJ899/creative-os-project-reconstructor"],
+        )
+
     def test_policy_snapshot_default_is_current_repository(self):
         defaults = load_execution_policy_snapshot.__kwdefaults__
         self.assertIsNotNone(defaults)
@@ -57,6 +93,18 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
         self.assertIn('repository: "JTJ07/Executor"', historical)
         self.assertIn("REPOSITORY: JTJ07/Executor", historical)
         self.assertNotIn('repository: "FJ899/Executor"', historical)
+
+    def test_pre_transfer_p4_profile_is_preserved_for_frozen_evidence(self):
+        historical = json.loads(HISTORICAL_TRUST_PROFILE.read_text(encoding="utf-8"))
+        self.assertEqual(historical["intake_repository"], "JTJ07/Executor")
+        self.assertEqual(
+            historical["allowed_target_repositories"],
+            ["JTJ07/scriptops", "JTJ07/creative-os-project-reconstructor"],
+        )
+        self.assertEqual(
+            historical["allowed_actor"],
+            {"login": "JTJ07", "id": 219382941},
+        )
 
     def test_pre_transfer_identity_is_not_the_current_project_binding(self):
         project = json.loads(
