@@ -1,0 +1,14 @@
+{
+  "schema_version": "executor-github-trust-profile/1.0",
+  "profile_id": "GITHUB-P4-PILOTS-001",
+  "intake_repository": "JTJ07/Executor",
+  "allowed_actor": {
+    "login": "JTJ07",
+    "id": 219382941
+  },
+  "allowed_target_repositories": [
+    "JTJ07/scriptops",
+    "JTJ07/creative-os-project-reconstructor"
+  ],
+  "max_decision_lifetime_seconds": 3600
+}
