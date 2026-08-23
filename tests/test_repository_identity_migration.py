@@ -62,6 +62,10 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
             encoding="utf-8"
         )
         profile = json.loads(CURRENT_TRUST_PROFILE.read_text(encoding="utf-8"))
+        replay_workflow = (ROOT / ".github/workflows/gp001-replay.yml").read_text(
+            encoding="utf-8"
+        )
+        replay_tool = (ROOT / "tools/run_gp001_real_e2e.py").read_text(encoding="utf-8")
 
         self.assertEqual(
             policy["execution"]["controlled_external_fixtures"][0]["repository"],
@@ -82,6 +86,9 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
             profile["allowed_target_repositories"],
             ["FJ899/scriptops", "FJ899/creative-os-project-reconstructor"],
         )
+        self.assertIn("https://github.com/FJ899/executor-pilot-target.git", replay_workflow)
+        self.assertNotIn("https://github.com/litrgratis-pixel/executor-pilot-target.git", replay_workflow)
+        self.assertIn('FIXTURE_REPOSITORY = "FJ899/executor-pilot-target"', replay_tool)
 
     def test_policy_snapshot_default_is_current_repository(self):
         defaults = load_execution_policy_snapshot.__kwdefaults__
