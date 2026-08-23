@@ -311,12 +311,12 @@ A16 string/truthy boolean shortcuts are rejected
 A17 direct VerifiedExternalObservation construction is rejected
 ```
 
-## 10. Forbidden outcomes
+## 10. Forbidden outcomes for the ARP-001 403 flow
 
-Any of these is a regression failure:
+Any of these outcomes in the historical/synthetic ARP-001 403 flow is a regression failure. A separately verified successful SYSTEM write may legitimately reach `SYSTEM_COMPLETED` as specified by A12, but still cannot reach terminal PASS without independent verification.
 
 ```text
-SYSTEM_COMPLETED
+SYSTEM_COMPLETED_FOR_ARP001_403_FLOW
 SYSTEM_PASS
 ACTION_COMPLETED            # if it collapses actor provenance
 RAW_DICT_BECOMES_AUTHORITATIVE
