@@ -5,7 +5,7 @@
   "mode": "BUILD_AND_TEST",
   "repositories": {
     "target": {
-      "name": "litrgratis-pixel/executor-pilot-target",
+      "name": "FJ899/executor-pilot-target",
       "commit": "3934a94a5eebf750079200589d6dc40e024d44a0"
     }
   },
