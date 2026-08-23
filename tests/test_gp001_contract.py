@@ -28,7 +28,7 @@ class GP001ContractTest(unittest.TestCase):
         task = self.task()
         self.assertEqual(
             task["repositories"]["target"]["name"],
-            "litrgratis-pixel/executor-pilot-target",
+            "FJ899/executor-pilot-target",
         )
         self.assertEqual(
             task["repositories"]["target"]["commit"],
