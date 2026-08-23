@@ -3,7 +3,7 @@ document: "Executor Human interaction contract pointer"
 status: "ACTIVE POINTER / NOT SEMANTIC OWNER"
 date: "2026-08-21"
 semantic_owner: "HUMAN"
-canonical_repository: "JTJ07/Saddle"
+canonical_repository: "FJ899/Saddle"
 canonical_path: "docs/HUMAN_OPERATING_CONTRACT.md"
 live_resolution: "RESOLVE CURRENT SADDLE MAIN AT READ TIME"
 ---
@@ -23,7 +23,7 @@ ODESŁAĆ
 Canonical durable source:
 
 ```text
-JTJ07/Saddle
+FJ899/Saddle
 docs/HUMAN_OPERATING_CONTRACT.md
 ```
 
