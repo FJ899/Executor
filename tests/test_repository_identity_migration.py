@@ -65,6 +65,9 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
         replay_workflow = (ROOT / ".github/workflows/gp001-replay.yml").read_text(
             encoding="utf-8"
         )
+        real_e2e_workflow = (ROOT / ".github/workflows/gp001-real-e2e.yml").read_text(
+            encoding="utf-8"
+        )
         replay_tool = (ROOT / "tools/run_gp001_real_e2e.py").read_text(encoding="utf-8")
 
         self.assertEqual(
@@ -86,8 +89,9 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
             profile["allowed_target_repositories"],
             ["FJ899/scriptops", "FJ899/creative-os-project-reconstructor"],
         )
-        self.assertIn("https://github.com/FJ899/executor-pilot-target.git", replay_workflow)
-        self.assertNotIn("https://github.com/litrgratis-pixel/executor-pilot-target.git", replay_workflow)
+        for workflow in (replay_workflow, real_e2e_workflow):
+            self.assertIn("https://github.com/FJ899/executor-pilot-target.git", workflow)
+            self.assertNotIn("https://github.com/litrgratis-pixel/executor-pilot-target.git", workflow)
         self.assertIn('FIXTURE_REPOSITORY = "FJ899/executor-pilot-target"', replay_tool)
 
     def test_policy_snapshot_default_is_current_repository(self):
