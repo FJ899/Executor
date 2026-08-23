@@ -17,7 +17,7 @@ from executor.repository_reader import read_wrapped_repository_file
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_PATH = ROOT / "project_contracts/executor-self.yaml"
 POLICY_PATH = ROOT / "EXECUTOR_POLICY.yaml"
-CURRENT_EXECUTOR_REPOSITORY = "JTJ07/Executor"
+CURRENT_EXECUTOR_REPOSITORY = "FJ899/Executor"
 
 
 def git_head() -> str:
