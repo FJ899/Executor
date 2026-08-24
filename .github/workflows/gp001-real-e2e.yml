@@ -34,7 +34,7 @@ jobs:
           target="$RUNNER_TEMP/gp001-target"
           rm -rf "$target"
           git init -q "$target"
-          git -C "$target" remote add origin https://github.com/litrgratis-pixel/executor-pilot-target.git
+          git -C "$target" remote add origin https://github.com/FJ899/executor-pilot-target.git
           git -C "$target" \
             -c protocol.version=2 \
             -c core.hooksPath=/dev/null \

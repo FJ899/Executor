@@ -12,7 +12,9 @@ from executor.pilot_contract import build_pilot_draft, pilot_draft_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
 PROFILE = GitHubTrustProfile.from_dict(
-    json.loads((ROOT / "trust_profiles/github-p4-pilots.json").read_text())
+    json.loads(
+        (ROOT / "trust_profiles/github-p4-pilots-pre-transfer-2026-08-16.json").read_text()
+    )
 )
 NOW = datetime(2026, 8, 16, 18, 22, tzinfo=timezone.utc)
 

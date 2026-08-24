@@ -11,7 +11,7 @@ from executor.sandbox.policy_snapshot import load_execution_policy_snapshot
 
 ROOT = Path(__file__).resolve().parents[1]
 TASK_ID = "GP001-FIX-FAILING-TEST-CASE-001"
-FIXTURE_REPOSITORY = "litrgratis-pixel/executor-pilot-target"
+FIXTURE_REPOSITORY = "FJ899/executor-pilot-target"
 FIXTURE_COMMIT = "3934a94a5eebf750079200589d6dc40e024d44a0"
 IMAGE = "sha256:" + "1" * 64
 

@@ -4,7 +4,7 @@ version: "1.3"
 status: "ACTIVE / RUN94 FINAL HUMAN ACCEPTANCE RECONCILED"
 date: "2026-08-20"
 scope: "source-of-truth ownership, precedence and status semantics"
-repository: "JTJ07/Executor"
+repository: "FJ899/Executor"
 ---
 
 # Executor Document Authority v1.3

@@ -108,7 +108,7 @@ class SolutionProposalTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         validated = validate_solution_proposal(proposal(frozen), frozen_result=frozen)
         self.assertEqual(len(validated.mutations), 1)
-        self.assertEqual(validated.repository, "JTJ07/scriptops")
+        self.assertEqual(validated.repository, "FJ899/scriptops")
         self.assertEqual(validated.provenance["producer_role"], "EXTERNAL_INTELLIGENCE")
         self.assertEqual(validated.provenance["human_solution_edits"], 0)
         self.assertEqual(validated.provenance["effect_capability"], "NONE")

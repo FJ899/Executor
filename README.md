@@ -1,6 +1,6 @@
 # Creative OS Executor
 
-Repozytorium: `JTJ07/Executor`.
+Repozytorium: `FJ899/Executor`.
 
 Robocza nazwa systemu i pakietu Python: `creative-os-executor`. Nie oznacza ona osobnego repozytorium.
 

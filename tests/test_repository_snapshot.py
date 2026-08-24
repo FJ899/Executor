@@ -13,7 +13,7 @@ from executor.sandbox.policy_snapshot import ExecutionPolicyError, load_executio
 from executor.sandbox.spec import SandboxExecutionContext
 
 
-CURRENT_EXECUTOR_REPOSITORY = "JTJ07/Executor"
+CURRENT_EXECUTOR_REPOSITORY = "FJ899/Executor"
 
 
 def run_git(root: Path, *args: str) -> str:

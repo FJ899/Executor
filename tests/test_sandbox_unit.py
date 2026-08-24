@@ -13,7 +13,7 @@ from executor.sandbox.spec import CommandRule, SandboxExecutionContext, SandboxS
 ROOT = Path(__file__).resolve().parents[1]
 IMAGE_ID = "sha256:" + "1" * 64
 EXECUTION_ID = "a" * 32
-CURRENT_EXECUTOR_REPOSITORY = "JTJ07/Executor"
+CURRENT_EXECUTOR_REPOSITORY = "FJ899/Executor"
 
 
 def run_git(root: Path, *args: str) -> str:

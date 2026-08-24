@@ -89,7 +89,7 @@ class SemanticFreshnessSurfaceTests(unittest.TestCase):
 
         self.assertIn('status: "ACTIVE POINTER / NOT SEMANTIC OWNER"', pointer)
         self.assertIn('semantic_owner: "HUMAN"', pointer)
-        self.assertIn('canonical_repository: "JTJ07/Saddle"', pointer)
+        self.assertIn('canonical_repository: "FJ899/Saddle"', pointer)
         self.assertIn('canonical_path: "docs/HUMAN_OPERATING_CONTRACT.md"', pointer)
         self.assertIn("AKCJA\nGDZIE\nODESŁAĆ", pointer)
         self.assertIn("CAPABILITY != PERMISSION", pointer)

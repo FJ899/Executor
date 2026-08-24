@@ -25,7 +25,7 @@ from tests.p4_test_support import governed_ledger
 
 
 NOW = datetime(2026, 8, 16, 0, 2, tzinfo=timezone.utc)
-REPOSITORY = "JTJ07/Executor"
+REPOSITORY = "FJ899/Executor"
 ISSUE_URL = f"https://api.github.com/repos/{REPOSITORY}/issues/61"
 COMMENT_URL = f"https://api.github.com/repos/{REPOSITORY}/issues/comments/9001"
 
@@ -59,8 +59,8 @@ def profile() -> GitHubTrustProfile:
             "schema_version": "executor-github-trust-profile/1.0",
             "profile_id": "test-profile",
             "intake_repository": REPOSITORY,
-            "allowed_actor": {"login": "JTJ07", "id": 219382941},
-            "allowed_target_repositories": ["JTJ07/scriptops"],
+            "allowed_actor": {"login": "FJ899", "id": 275481581},
+            "allowed_target_repositories": ["FJ899/scriptops"],
             "max_decision_lifetime_seconds": 3600,
         }
     )
@@ -71,7 +71,7 @@ def request_payload():
         "schema_version": "executor-github-request/1.0",
         "request_id": "pilot-scriptops-001",
         "target": {
-            "repository": "JTJ07/scriptops",
+            "repository": "FJ899/scriptops",
             "commit": "a" * 40,
             "tree": "b" * 40,
         },
@@ -98,14 +98,14 @@ def issue(body=None):
         "number": 61,
         "id": 7001,
         "node_id": "I_kwDO-request",
-        "html_url": "https://github.com/JTJ07/Executor/issues/61",
+        "html_url": "https://github.com/FJ899/Executor/issues/61",
         "state": "open",
         "body": body or json.dumps(request_payload(), sort_keys=True),
         "created_at": "2026-08-16T00:00:00Z",
         "updated_at": "2026-08-16T00:00:00Z",
         "author_association": "OWNER",
         "performed_via_github_app": None,
-        "user": {"login": "JTJ07", "id": 219382941, "type": "User"},
+        "user": {"login": "FJ899", "id": 275481581, "type": "User"},
     }
 
 
@@ -136,7 +136,7 @@ def comment(payload):
         "updated_at": "2026-08-16T00:01:00Z",
         "author_association": "OWNER",
         "performed_via_github_app": None,
-        "user": {"login": "JTJ07", "id": 219382941, "type": "User"},
+        "user": {"login": "FJ899", "id": 275481581, "type": "User"},
     }
 
 
@@ -451,8 +451,8 @@ class GitHubTrustTests(unittest.TestCase):
                 issue_number=1,
                 issue_id=1,
                 issue_node_id="x",
-                actor_login="JTJ07",
-                actor_id=219382941,
+                actor_login="FJ899",
+                actor_id=275481581,
                 body_sha256="a" * 64,
                 created_at="2026-08-16T00:00:00Z",
                 observed_at="2026-08-16T00:00:00Z",

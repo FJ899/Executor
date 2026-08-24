@@ -89,7 +89,7 @@ class FixtureRepository:
             "remote",
             "add",
             "origin",
-            "https://github.com/litrgratis-pixel/executor-pilot-target.git",
+            "https://github.com/FJ899/executor-pilot-target.git",
         )
         (root / "project_registry").mkdir()
         (root / "tests").mkdir()
@@ -408,7 +408,7 @@ class GP001SandboxBoundaryTest(unittest.TestCase):
 
     def context(self, purpose):
         return SandboxExecutionContext(
-            repository="litrgratis-pixel/executor-pilot-target",
+            repository="FJ899/executor-pilot-target",
             commit=self.fixture.commit,
             repository_root=self.fixture.root,
             source_dir=self.fixture.root,
@@ -427,7 +427,7 @@ class GP001SandboxBoundaryTest(unittest.TestCase):
                 task=self.task,
             )
         self.assertEqual(backend.task_id, self.task["id"])
-        self.assertEqual(backend.repository, "litrgratis-pixel/executor-pilot-target")
+        self.assertEqual(backend.repository, "FJ899/executor-pilot-target")
         self.assertEqual(backend.input_commit, self.fixture.commit)
 
     def test_backend_constructor_rejects_repo_sha_or_task_not_bound_by_policy(self):
