@@ -1,0 +1,124 @@
+{
+  "schema_version": "executor-orphaned-side-effect-fixture/1.1",
+  "fixture_id": "OSE-001",
+  "failure_class": "FAI-009",
+  "title": "Provider success followed by crash before durable receipt binding",
+  "target": {
+    "provider": "GITHUB",
+    "action_kind": "CREATE_ISSUE_COMMENT",
+    "resource": "fixture-owner/fixture-repo#123",
+    "effect_body": "OSE-001 synthetic external comment effect",
+    "expected_minted_attempt_id": "ose-0123456789abcdef0123456789abcdef",
+    "started_at": "2026-08-23T18:10:00Z"
+  },
+  "events": [
+    {
+      "actor": "SYSTEM",
+      "event": "PRE_WRITE_ATTEMPT_PERSISTED",
+      "state": "WRITE_IN_FLIGHT",
+      "automatic_retry_allowed": false
+    },
+    {
+      "actor": "PROVIDER",
+      "event": "WRITE_SUCCESS",
+      "provider_status": 201,
+      "provider_message": "Created",
+      "object_id": "987654321",
+      "object_url": "https://github.com/fixture-owner/fixture-repo/issues/123#issuecomment-987654321",
+      "created_at": "2026-08-23T18:10:30Z"
+    },
+    {
+      "actor": "SYSTEM",
+      "event": "CRASH_BEFORE_RECEIPT_PERSISTENCE"
+    },
+    {
+      "actor": "SYSTEM",
+      "event": "RESTART",
+      "durable_success_receipt": null
+    }
+  ],
+  "recovery_scans": {
+    "exact": {
+      "complete": true,
+      "objects": [
+        {
+          "id": 987654321,
+          "html_url": "https://github.com/fixture-owner/fixture-repo/issues/123#issuecomment-987654321",
+          "body": "OSE-001 synthetic external comment effect",
+          "correlation_id": "ose-0123456789abcdef0123456789abcdef",
+          "created_at": "2026-08-23T18:10:30Z"
+        }
+      ]
+    },
+    "same_effect_without_correlation": {
+      "complete": true,
+      "objects": [
+        {
+          "id": 987654321,
+          "html_url": "https://github.com/fixture-owner/fixture-repo/issues/123#issuecomment-987654321",
+          "body": "OSE-001 synthetic external comment effect",
+          "correlation_id": null,
+          "created_at": "2026-08-23T18:10:30Z"
+        }
+      ]
+    },
+    "incomplete_exact": {
+      "complete": false,
+      "objects": [
+        {
+          "id": 987654321,
+          "html_url": "https://github.com/fixture-owner/fixture-repo/issues/123#issuecomment-987654321",
+          "body": "OSE-001 synthetic external comment effect",
+          "correlation_id": "ose-0123456789abcdef0123456789abcdef",
+          "created_at": "2026-08-23T18:10:30Z"
+        }
+      ]
+    },
+    "ambiguous": {
+      "complete": true,
+      "objects": [
+        {
+          "id": 987654321,
+          "html_url": "https://github.com/fixture-owner/fixture-repo/issues/123#issuecomment-987654321",
+          "body": "OSE-001 synthetic external comment effect",
+          "correlation_id": "ose-0123456789abcdef0123456789abcdef",
+          "created_at": "2026-08-23T18:10:30Z"
+        },
+        {
+          "id": 987654322,
+          "html_url": "https://github.com/fixture-owner/fixture-repo/issues/123#issuecomment-987654322",
+          "body": "OSE-001 synthetic external comment effect",
+          "correlation_id": "ose-0123456789abcdef0123456789abcdef",
+          "created_at": "2026-08-23T18:10:31Z"
+        }
+      ]
+    },
+    "none": {
+      "complete": true,
+      "objects": []
+    }
+  },
+  "expected_before_recovery": {
+    "system_write": "RECOVERY_REQUIRED",
+    "external_effect_state": "POSSIBLY_CREATED",
+    "system_completion": false,
+    "automatic_retry_allowed": false,
+    "terminal_pass": false
+  },
+  "expected_after_exact_recovery": {
+    "system_write": "RECOVERED_EXTERNAL_EFFECT",
+    "external_effect_state": "CREATED_OBJECT_IDENTITY_RECOVERED",
+    "original_success_receipt": "MISSING_OR_INVALID",
+    "system_completion": false,
+    "automatic_retry_allowed": false,
+    "terminal_pass": false,
+    "recovery_status": "EXACT_PROVIDER_OBJECT_RECOVERED",
+    "next_gate": "SEPARATE_INDEPENDENT_EFFECT_VERIFICATION_REQUIRED"
+  },
+  "scope": {
+    "synthetic_only": true,
+    "live_provider_write": false,
+    "new_provider_capability": false,
+    "merge_authorized": false
+  }
+}

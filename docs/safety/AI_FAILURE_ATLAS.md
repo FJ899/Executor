@@ -1,7 +1,7 @@
 ---
 document: "AI Failure Atlas"
 version: "0.3"
-status: "FAILURE-DRIVEN ENGINEERING BASELINE / ACTOR-RECEIPT PROVENANCE CANDIDATE"
+status: "FAILURE-DRIVEN ENGINEERING BASELINE / ARP-001 + OSE-001 CANDIDATES"
 date: "2026-08-23"
 scope: "failure classes used to attack Executor architecture before and during implementation"
 repository: "JTJ07/Executor"
@@ -309,29 +309,46 @@ The second form preserves provenance; the first silently upgrades a claim to an 
 
 No real incident is assigned to this class by INC-001.
 
-Reserve this failure class for the stricter mechanism:
+Synthetic regression candidate:
+
+`OSE-001 — docs/safety/REGRESSION_OSE_001_ORPHANED_SIDE_EFFECT.md`
+
+Status:
+
+`SYNTHETIC CANDIDATE / NOT PROVIDER-WIDE CLOSED`
+
+Failure mechanism:
 
 ```text
-SYSTEM WRITE
-  -> PROVIDER RETURNS AUTHORITATIVE SUCCESS RECEIPT
-  -> DURABLE OBJECT IDENTITY EXISTS
-  -> EFFECT IS CREATED
-  -> EXECUTOR FAILS TO PERSIST OR RETAIN id/url BEFORE EVIDENCE BINDING
+SYSTEM PERSISTS PRE-WRITE ATTEMPT
+  -> PROVIDER MAY CREATE THE EFFECT
+  -> PROVIDER SUCCESS / DURABLE OBJECT IDENTITY EXISTS
+  -> PROCESS CRASHES OR RECEIPT PERSISTENCE FAILS
+  -> ORIGINAL SUCCESS RECEIPT IS NOT DURABLE
 ```
 
 Architecture question:
 
 > Can a successful external mutation become unprovable because Executor loses the provider identity after success but before durable evidence binding?
 
-Invariant candidate:
+Candidate invariants:
 
-`A SUCCESSFUL EXTERNAL EFFECT MUST NOT OUTLIVE ITS DURABLY PERSISTED PROVIDER IDENTITY.`
+- `INV-OSE1 — PRE-WRITE AMBIGUITY JOURNAL`
+- `INV-OSE2 — UNKNOWN POST-WRITE STATE IS NOT SAFE TO RETRY`
+- `INV-OSE3 — RECOVERY DOES NOT FABRICATE THE ORIGINAL RECEIPT`
+- `INV-OSE4 — EFFECT MATCH IS NOT ATTEMPT BINDING`
 
-Required future/adversarial test pattern:
+Required regression pattern:
 
+- persist the exact non-idempotent write attempt before the provider boundary;
 - simulate provider success with durable object identity;
-- interrupt/crash the execution path after provider success but before normal result persistence;
-- prove that recovery cannot falsely report a clean failure, automatically duplicate the mutation, or reach PASS without recovering the exact provider object identity.
+- interrupt/crash the execution path after provider success but before normal receipt persistence;
+- require `RECOVERY_REQUIRED / EFFECT_POSSIBLY_CREATED`, never clean failure or automatic retry;
+- recover object identity only from a complete trusted scan with an exact effect fingerprint and unambiguous durable attempt correlation;
+- keep zero-match, incomplete, uncorrelated and ambiguous scans fail-closed;
+- prove recovered identity does not fabricate the missing original receipt, `SYSTEM_COMPLETED`, or terminal PASS.
+
+The synthetic candidate deliberately does not claim that live GitHub issue comments already provide a provider-verifiable recovery correlation mechanism. Production integration must separately establish an accepted provider-native or application-level correlation/idempotency binding. Without that proof, crash-window recovery remains `RECOVERY_REQUIRED` and automatic retry remains forbidden.
 
 This class must not be inferred from a provider failure receipt such as HTTP 403.
 
