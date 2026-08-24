@@ -1,13 +1,13 @@
 ---
 document: "AI Failure Atlas"
-version: "0.1"
-status: "INITIAL FAILURE-DRIVEN ENGINEERING BASELINE / PENDING REVIEW"
-date: "2026-08-08"
-scope: "failure classes used to attack Executor architecture before implementation"
+version: "0.3"
+status: "FAILURE-DRIVEN ENGINEERING BASELINE / ACTOR-RECEIPT PROVENANCE CANDIDATE"
+date: "2026-08-23"
+scope: "failure classes used to attack Executor architecture before and during implementation"
 repository: "JTJ07/Executor"
 ---
 
-# AI Failure Atlas v0.1
+# AI Failure Atlas v0.3
 
 ## 1. Purpose
 
@@ -223,6 +223,117 @@ Required test pattern for GP001:
 - modify protected acceptance material.
 
 All must fail closed unless explicitly authorized by the task contract.
+
+### FAI-008 — Actor–Receipt Provenance Failure
+
+Observed incident:
+
+`INC-001 — evidence/INC_001_ACTOR_RECEIPT_PROVENANCE_FAILURE_2026-08-23.md`
+
+Regression:
+
+`ARP-001 — docs/safety/REGRESSION_ARP_001_ACTOR_RECEIPT_PROVENANCE.md`
+
+Failure mechanism:
+
+```text
+SYSTEM MUTATION ATTEMPT
+  -> PROVIDER RETURNS AUTHORITATIVE FAILURE RECEIPT
+  -> SYSTEM ACTION IS FAILED
+  -> HUMAN REPORTS A SEPARATE MANUAL ACTION
+  -> LANGUAGE OR STATE COLLAPSES ACTOR PROVENANCE
+  -> HUMAN CLAIM RISKS INHERITING SYSTEM COMPLETION
+```
+
+Architecture questions:
+
+> Can a human-reported external action be mistaken for completion of the earlier SYSTEM action?
+
+> Can evidence from one actor retroactively repair, replace or overwrite the receipt/status belonging to another actor?
+
+Invariants:
+
+#### INV-AR1 — SYSTEM WRITE COMPLETION
+
+A system-performed mutating action may reach `COMPLETED` only if an authoritative success receipt containing durable object identity has been persisted.
+
+```text
+NO RECEIPT = NO SYSTEM COMPLETION CLAIM
+FAILURE RECEIPT = SYSTEM FAILED
+SUCCESS RECEIPT WITHOUT DURABLE OBJECT IDENTITY = INVALID RECEIPT
+```
+
+A success receipt establishes SYSTEM write completion only. Independent verification remains separate from terminal PASS.
+
+#### INV-AR2 — ACTOR BINDING
+
+A human-reported external action must remain:
+
+`HUMAN_REPORTED / UNVERIFIED`
+
+until independently observed.
+
+A HUMAN claim must never inherit `SYSTEM_COMPLETED`, `SYSTEM_SUCCESS`, or a SYSTEM receipt.
+
+#### INV-AR3 — EVIDENCE NON-SUBSTITUTION
+
+Human-supplied recovery evidence may support a separate forensic or verification path, but must not retroactively:
+
+- repair a missing SYSTEM receipt;
+- replace an authoritative SYSTEM failure receipt;
+- convert a failed/unverified SYSTEM execution into PASS;
+- rewrite the actor that performed the action.
+
+Required regression pattern:
+
+```text
+SYSTEM ATTEMPT
+  -> HTTP 403 authoritative failure receipt
+  -> HUMAN manual-action claim
+  -> independent read does not observe claimed object
+  -> SYSTEM remains FAILED
+  -> HUMAN remains HUMAN_REPORTED / UNVERIFIED
+  -> TERMINAL PASS forbidden
+```
+
+Language regression:
+
+```text
+BAD:  "verified live after publication"
+GOOD: "verified live after the human-reported manual publication"
+```
+
+The second form preserves provenance; the first silently upgrades a claim to an established fact.
+
+### FAI-009 — Orphaned Side Effect / Success Receipt Loss
+
+No real incident is assigned to this class by INC-001.
+
+Reserve this failure class for the stricter mechanism:
+
+```text
+SYSTEM WRITE
+  -> PROVIDER RETURNS AUTHORITATIVE SUCCESS RECEIPT
+  -> DURABLE OBJECT IDENTITY EXISTS
+  -> EFFECT IS CREATED
+  -> EXECUTOR FAILS TO PERSIST OR RETAIN id/url BEFORE EVIDENCE BINDING
+```
+
+Architecture question:
+
+> Can a successful external mutation become unprovable because Executor loses the provider identity after success but before durable evidence binding?
+
+Invariant candidate:
+
+`A SUCCESSFUL EXTERNAL EFFECT MUST NOT OUTLIVE ITS DURABLY PERSISTED PROVIDER IDENTITY.`
+
+Required future/adversarial test pattern:
+
+- simulate provider success with durable object identity;
+- interrupt/crash the execution path after provider success but before normal result persistence;
+- prove that recovery cannot falsely report a clean failure, automatically duplicate the mutation, or reach PASS without recovering the exact provider object identity.
+
+This class must not be inferred from a provider failure receipt such as HTTP 403.
 
 ## 4. Failure-driven development rule
 

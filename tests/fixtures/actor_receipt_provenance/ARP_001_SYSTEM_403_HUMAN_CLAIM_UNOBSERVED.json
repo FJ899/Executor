@@ -1,0 +1,62 @@
+{
+  "schema_version": "executor-actor-receipt-provenance-fixture/2.0",
+  "case_id": "ARP-001",
+  "description": "System write fails with authoritative 403; later human claim is not independently observed.",
+  "target": {
+    "provider": "GITHUB",
+    "action_kind": "CREATE_ISSUE_COMMENT",
+    "resource": "fixture-owner/fixture-repo#123",
+    "effect_body": "Evidence update: synthetic comment"
+  },
+  "events": [
+    {
+      "sequence": 1,
+      "actor": "SYSTEM",
+      "event": "WRITE_ATTEMPT"
+    },
+    {
+      "sequence": 2,
+      "actor": "PROVIDER",
+      "event": "WRITE_RECEIPT",
+      "provider_status": 403,
+      "provider_message": "Resource not accessible by integration",
+      "raw_response": "{\"message\":\"Resource not accessible by integration\"}"
+    },
+    {
+      "sequence": 3,
+      "actor": "HUMAN",
+      "event": "MANUAL_WRITE_CLAIM",
+      "claim": "published"
+    },
+    {
+      "sequence": 4,
+      "actor": "VERIFIER",
+      "event": "INDEPENDENT_READ",
+      "observed": false
+    }
+  ],
+  "expected": {
+    "system_write": "FAILED",
+    "system_receipt": "AUTHORITATIVE_FAILURE_RECEIPT",
+    "system_provider_status": 403,
+    "system_object_id": null,
+    "effect_sha256": "24131398b1f23455c002436c50eb683ae3243528813d633da0c6f12429878b8a",
+    "system_response_sha256": "dbd2648a8b38caac0472f43bcced1701e42f7203978df2b4d17740e551ca3f4a",
+    "human_write": "HUMAN_REPORTED",
+    "human_verification": "UNVERIFIED",
+    "current_result": "HUMAN_REPORTED / UNVERIFIED",
+    "terminal_pass": false
+  },
+  "forbidden_outcomes": [
+    "SYSTEM_COMPLETED",
+    "SYSTEM_PASS",
+    "RAW_DICT_BECOMES_AUTHORITATIVE",
+    "SUCCESS_WITHOUT_DURABLE_PERSISTENCE",
+    "WRONG_TARGET_OBJECT_IDENTITY_ACCEPTED",
+    "BOOLEAN_OBSERVATION_SHORTCUT",
+    "HUMAN_CLAIM_INHERITS_SYSTEM_STATUS",
+    "HUMAN_CLAIM_REPLACES_SYSTEM_RECEIPT",
+    "FAILED_SYSTEM_WRITE_RETROACTIVELY_REPAIRED",
+    "TERMINAL_PASS_WITHOUT_BOUND_INDEPENDENT_OBSERVATION"
+  ]
+}
