@@ -8,6 +8,7 @@ from pathlib import Path
 
 from executor.authority_ledger import AtomicAuthorityLedger, AuthorityLedgerError
 from executor.draft_pr_effect import DraftPrEffectError, DraftPrEffectExecutor, GitHubDraftPrGateway
+from executor.execution_environment import ExecutionEnvironmentError, build_github_actions_environment
 from executor.formation_issue_effect import (
     FormationIssueEffectError,
     FormationIssueGateway,
@@ -28,6 +29,8 @@ from executor.pilot_contract import (
     build_pilot_draft_from_formation,
     pilot_draft_sha256,
 )
+from executor.pilot_runtime import PilotBlocked, PilotRuntime
+from executor.product_state import state_from_pilot_status
 from executor.request_to_contract import FormationError, RequestToContract001
 from executor.strict_json import load_json_object
 
@@ -117,6 +120,19 @@ def main(argv: list[str] | None = None) -> int:
     decide.add_argument("--comment", required=True, type=int)
     decide.add_argument("--ledger", required=True)
 
+    execute = sub.add_parser("execute", help="exact frozen contract + validated proposal -> bounded pilot execution")
+    execute.add_argument("--frozen", required=True)
+    execute.add_argument("--proposal", required=True)
+    execute.add_argument("--profile", default=DEFAULT_PROFILE)
+    execute.add_argument("--ledger", required=True)
+    execute.add_argument("--workspace", required=True)
+    execute.add_argument("--runs-root", required=True)
+    execute.add_argument("--run-id", required=True)
+    execute.add_argument("--image", required=True)
+    execute.add_argument("--executor-root", default=".")
+    execute.add_argument("--executor-commit", default=None)
+    execute.add_argument("--docker-binary", default="docker")
+
     publish_pr = sub.add_parser("publish-draft-pr", help="successful pilot -> commit -> branch -> push -> observed draft PR")
     publish_pr.add_argument("--frozen", required=True)
     publish_pr.add_argument("--pilot-report", required=True)
@@ -196,6 +212,33 @@ def main(argv: list[str] | None = None) -> int:
             _print(result)
             return 0 if result["status"] in {"AUTHORIZED_AND_FROZEN", "MODIFICATION_REQUIRED", "REJECTED"} else 2
 
+        if args.command == "execute":
+            frozen = load_json_object(args.frozen)
+            request, decision = validate_frozen_pilot_authority(frozen)
+            commit = args.executor_commit or _git_head(args.executor_root)
+            environment = build_github_actions_environment(
+                image_id=args.image,
+                executor_root=args.executor_root,
+                executor_commit=commit,
+            )
+            runtime = PilotRuntime(
+                executor_root=args.executor_root,
+                executor_commit=commit,
+                frozen_result=frozen,
+                proposal=load_json_object(args.proposal),
+                verified_request=request,
+                verified_decision=decision,
+                ledger=governed,
+                runs_root=args.runs_root,
+                image=args.image,
+                execution_environment=environment,
+                docker_binary=args.docker_binary,
+            )
+            result = runtime.execute(workspace=args.workspace, run_id=args.run_id)
+            result["product_state"] = state_from_pilot_status(result["status"]).to_dict()
+            _print(result)
+            return 0 if result["status"] == "ACTION_COMPLETED_REVIEW_REQUIRED" else 2
+
         if args.command == "publish-draft-pr":
             frozen = load_json_object(args.frozen)
             report = load_json_object(args.pilot_report)
@@ -222,11 +265,13 @@ def main(argv: list[str] | None = None) -> int:
     except (
         AuthorityLedgerError,
         DraftPrEffectError,
+        ExecutionEnvironmentError,
         FormationError,
         FormationIssueEffectError,
         FrozenPilotAuthorityError,
         GitHubTrustError,
         GlobalAuthorityError,
+        PilotBlocked,
         PilotContractError,
         OSError,
         RuntimeError,
