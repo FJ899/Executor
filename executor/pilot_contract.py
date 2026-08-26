@@ -62,8 +62,6 @@ def build_pilot_draft(request: VerifiedGitHubRequest) -> dict[str, Any]:
         "authority_boundary": {
             "provider": "GITHUB",
             "required_decisions": ["ACCEPT", "MODIFY", "REJECT"],
-            "request_transport_is_authority": False,
-            "human_decision_is_authority": True,
             "effect": "BOUNDED_DRAFT_PR_ONLY",
             "merge": False,
             "deploy": False,
@@ -182,6 +180,11 @@ def build_pilot_draft_from_formation(
         request=request,
     )
     if formation_publication is not None:
+        draft["authority_boundary"] = {
+            **draft["authority_boundary"],
+            "request_transport_is_authority": False,
+            "human_decision_is_authority": True,
+        }
         draft["request_transport_provenance"] = _validated_formation_publication(
             formation_publication,
             formation_request=formation_request,
