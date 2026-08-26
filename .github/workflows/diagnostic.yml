@@ -1,4 +1,4 @@
-name: Chat GP001 request 004 read-only reconciliation
+name: Chat GP001 request 004 incomplete publication diagnostic
 
 on:
   push:
@@ -11,28 +11,10 @@ permissions:
   actions: read
 
 jobs:
-  reconcile:
+  diagnose:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    env:
-      GITHUB_TOKEN: ${{ github.token }}
+    timeout-minutes: 8
     steps:
-      - name: Checkout exact verified product runtime
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          repository: FJ899/Executor
-          ref: fda645f0b8a294297f0a32782c596a29e5db0a53
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: '3.11'
-
-      - name: Install exact runtime
-        run: python -m pip install --no-deps .
-
       - name: Download exact publisher artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
@@ -42,43 +24,36 @@ jobs:
           repository: FJ899/Executor
           run-id: 33024628387
 
-      - name: Recover exact Issue 95 publication without write and derive Human binding
+      - name: Print bounded publication state only
         shell: bash
         run: |
           set -euo pipefail
-          root="$(find evidence -type f -name formation.json -printf '%h\n' -quit)"
+          root="$(find evidence -type f -name publication.json -printf '%h\n' -quit)"
           test -n "$root"
           python - "$root" <<'PY'
-          import json, sys
-          from pathlib import Path
-          from executor.formation_publication_recovery import recover_formation_publication
-          from executor.github_trust import GitHubRestClient, GitHubTrustProfile
-          from executor.pilot_contract import build_pilot_draft_from_formation, pilot_draft_sha256
-          from executor.product_github_authority import verify_formation_published_request
-          root=Path(sys.argv[1])
-          formation=json.load(open(root/'formation.json',encoding='utf-8'))
-          incomplete=json.load(open(root/'publication.json',encoding='utf-8'))
-          recovered=recover_formation_publication(
-              incomplete_publication=incomplete,
-              evidence_directory=root/'effect-evidence',
-              source=GitHubRestClient(),
-          )
-          if recovered.get('status')!='AWAITING_VERIFIED_HUMAN_DECISION': raise SystemExit('recovery did not reach Human boundary')
-          t=recovered.get('request_transport_provenance') or {}
-          if t.get('object_id')!='95' or t.get('authority') is not False or t.get('external_write_repeated') is not False: raise SystemExit('recovered transport identity mismatch')
-          canonical=recovered['canonical_contract_request']; payload=recovered['github_request_payload']
-          profile=GitHubTrustProfile.from_dict(json.load(open('trust_profiles/github-product-gp001.json',encoding='utf-8')))
-          request=verify_formation_published_request(GitHubRestClient(),profile=profile,issue_number=95,expected_payload=payload)
-          draft=build_pilot_draft_from_formation(canonical,request,formation_publication=recovered)
-          summary={
-            'issue_number':95,
-            'issue_url':'https://github.com/FJ899/Executor/issues/95',
-            'issue_node_id':request.issue_node_id,
-            'request_body_sha256':request.body_sha256,
-            'pilot_draft_sha256':pilot_draft_sha256(draft),
-            'request_expires_at':payload['expires_at'],
-            'transport_authority':False,
-            'external_write_repeated':False,
-          }
-          print('HUMAN_BINDING='+json.dumps(summary,sort_keys=True))
+          import json, pathlib, sys
+          root=pathlib.Path(sys.argv[1])
+          p=json.load(open(root/'publication.json',encoding='utf-8'))
+          e=p.get('publication_effect') or {}
+          print('PUBLICATION_STATUS='+str(p.get('status')))
+          print('EFFECT_STATUS='+str(e.get('status')))
+          print('EFFECT_ACTION='+str(e.get('action_kind')))
+          print('EFFECT_TARGET='+str(e.get('target')))
+          print('AUTOMATIC_RETRY_ALLOWED='+str(e.get('automatic_retry_allowed')))
+          print('EFFECT_OBJECT_ID='+str(e.get('object_id')))
+          print('EFFECT_OBJECT_URL='+str(e.get('object_url')))
+          print('OBSERVATION_REF='+str(e.get('observation_ref')))
+          print('AUTHORITY_RESULT_BINDING='+json.dumps(e.get('authority_result_binding'),sort_keys=True))
+          for path in sorted((root/'effect-evidence').glob('*.json')):
+              v=json.load(open(path,encoding='utf-8'))
+              payload=v.get('payload') if isinstance(v,dict) else None
+              out={'file':path.name,'kind':v.get('kind') if isinstance(v,dict) else None}
+              if isinstance(payload,dict):
+                  for key in ('provider','action_kind','target','provider_outcome','provider_status','receipt_provider_status','object_id','object_url','effect_sha256','receipt_evidence_sha256'):
+                      if key in payload: out[key]=payload[key]
+              print('EVIDENCE='+json.dumps(out,sort_keys=True))
+          stderr=root/'publication.stderr'
+          if stderr.exists():
+              text=stderr.read_text(encoding='utf-8',errors='replace').strip()
+              print('STDERR='+text[:2000])
           PY
