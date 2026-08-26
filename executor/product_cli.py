@@ -13,6 +13,7 @@ from executor.formation_issue_effect import (
     FormationIssueGateway,
     FormationRequestPublisher,
 )
+from executor.frozen_pilot_authority import FrozenPilotAuthorityError, validate_frozen_pilot_authority
 from executor.github_authority import GlobalAuthorityError, GitHubGlobalAuthority, GovernedAuthorityLedger
 from executor.github_trust import (
     GitHubRestClient,
@@ -32,6 +33,7 @@ from executor.strict_json import load_json_object
 
 
 DEFAULT_PROFILE = "trust_profiles/github-product-gp001.json"
+PRODUCT_BASE_BRANCH = "main"
 
 
 def _print(value: object) -> None:
@@ -110,7 +112,6 @@ def main(argv: list[str] | None = None) -> int:
     publish_pr.add_argument("--ledger", required=True)
     publish_pr.add_argument("--evidence-dir", required=True)
     publish_pr.add_argument("--workspace", required=True)
-    publish_pr.add_argument("--base-branch", default="main")
 
     args = parser.parse_args(argv)
     try:
@@ -180,12 +181,17 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "publish-draft-pr":
             frozen = load_json_object(args.frozen)
             report = load_json_object(args.pilot_report)
+            validate_frozen_pilot_authority(frozen)
+            contract = frozen.get("contract")
+            target = contract.get("target") if isinstance(contract, dict) else None
+            if not isinstance(target, dict) or report.get("repository") != target.get("repository"):
+                raise DraftPrEffectError("pilot report repository differs from frozen target repository")
             publisher = DraftPrEffectExecutor(
                 frozen_result=frozen,
                 pilot_report=report,
                 ledger=governed,
                 evidence_directory=args.evidence_dir,
-                base_branch=args.base_branch,
+                base_branch=PRODUCT_BASE_BRANCH,
             )
             gateway = GitHubDraftPrGateway(
                 repository=report["repository"],
@@ -200,6 +206,7 @@ def main(argv: list[str] | None = None) -> int:
         DraftPrEffectError,
         FormationError,
         FormationIssueEffectError,
+        FrozenPilotAuthorityError,
         GitHubTrustError,
         GlobalAuthorityError,
         PilotContractError,
