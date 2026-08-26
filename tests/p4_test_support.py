@@ -79,7 +79,7 @@ def provenance_for(frozen: dict[str, Any]) -> dict[str, Any]:
     request = contract["request_evidence"]
     target = contract["target"]
     return {
-        "schema_version": "executor-solution-provenance/1.1",
+        "schema_version": "executor-solution-provenance/1.2",
         "producer_role": "EXTERNAL_INTELLIGENCE",
         "provider": "OpenAI",
         "model": "GPT-5.6 Sol",
@@ -98,6 +98,9 @@ def provenance_for(frozen: dict[str, Any]) -> dict[str, Any]:
         },
         "context_sha256": "b" * 64,
         "prompt_sha256": "a" * 64,
+        "generation_evidence_ref": "provider-generation:test-fixture",
+        "generation_response_sha256": "f" * 64,
+        "generation_verification_method": "TEST_FIXTURE_INDEPENDENT_LOOKUP",
         "human_solution_edits": 0,
         "effect_capability": "NONE",
         "derivation": "GENERATED_AFTER_FROZEN_CONTRACT",
