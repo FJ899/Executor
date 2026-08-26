@@ -5,130 +5,42 @@ on:
     branches: [main]
     paths:
       - .github/workflows/gp001-product-authority-recovery-diagnostic.yml
-      - executor/formation_issue_effect.py
-      - executor/formation_publication_recovery.py
-      - tests/test_formation_publication_recovery.py
-      - governance/WORKFLOW_CLASSIFICATION.json
 
 permissions:
   contents: read
   actions: read
-  issues: read
 
 jobs:
-  recover-failed-publication:
+  inspect-post-human-pilot-failure:
     if: github.repository == 'FJ899/Executor' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 5
     steps:
-      - name: Checkout exact candidate
-        uses: actions/checkout@v4
+      - name: Download failed post-human artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install exact product runtime
-        run: python -m pip install --no-deps .
-
-      - name: Download original authority-publication artifact
-        uses: actions/download-artifact@v4
-        with:
-          artifact-ids: 9619660600
-          path: recovered
+          artifact-ids: 9620546156
+          path: diagnostic
           github-token: ${{ github.token }}
           repository: FJ899/Executor
-          run-id: 33003779887
+          run-id: 33005980771
 
-      - name: Reconcile confirmed Issue without external write
+      - name: Print bounded pilot failure artifacts
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          root='recovered/gp001-product-authority-request-33003779887-1'
-          mkdir -p recovered-output
-          python - <<'PY'
-          import json, os
-          from pathlib import Path
-          from executor.formation_publication_recovery import recover_formation_publication
-          from executor.github_trust import GitHubRestClient
-
-          root = Path('recovered/gp001-product-authority-request-33003779887-1')
-          publication = json.loads((root / 'publication.json').read_text(encoding='utf-8'))
-          recovered = recover_formation_publication(
-              incomplete_publication=publication,
-              evidence_directory=root / 'effect-evidence',
-              source=GitHubRestClient(token=os.environ['GITHUB_TOKEN']),
-          )
-          Path('recovered-output/publication.json').write_text(
-              json.dumps(recovered, ensure_ascii=False, indent=2) + '\n', encoding='utf-8'
-          )
-          print('RECOVERY_STATUS=' + recovered['status'])
-          print('ISSUE_URL=' + recovered['request_transport_provenance']['object_url'])
-          print('EXTERNAL_WRITE_REPEATED=' + str(recovered['publication_effect']['external_write_repeated']).lower())
+          find diagnostic -type f -maxdepth 8 -print | sort
+          echo '--- pilot-report.json ---'
+          report="$(find diagnostic -type f -name pilot-report.json -print -quit)"
+          test -n "$report"
+          cat "$report"
+          echo
+          echo '--- frozen status ---'
+          frozen="$(find diagnostic -type f -name frozen.json -print -quit)"
+          test -n "$frozen"
+          python - "$frozen" <<'PY'
+          import json,sys
+          value=json.load(open(sys.argv[1]))
+          print(value.get('status'))
+          print(value.get('contract_sha256'))
           PY
-
-      - name: Produce exact direct-human decision template
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json, os
-          from pathlib import Path
-          from executor.github_trust import GitHubRestClient, GitHubTrustProfile
-          from executor.pilot_contract import build_pilot_draft_from_formation, pilot_draft_sha256
-          from executor.product_github_authority import verify_formation_published_request
-
-          publication = json.loads(Path('recovered-output/publication.json').read_text(encoding='utf-8'))
-          profile = GitHubTrustProfile.from_dict(
-              json.loads(Path('trust_profiles/github-product-gp001.json').read_text(encoding='utf-8'))
-          )
-          formation = publication['canonical_contract_request']
-          issue_number = int(publication['publication_effect']['object_id'])
-          request = verify_formation_published_request(
-              GitHubRestClient(token=os.environ['GITHUB_TOKEN']),
-              profile=profile,
-              issue_number=issue_number,
-              expected_payload=formation['github_request_payload'],
-          )
-          draft = build_pilot_draft_from_formation(
-              formation,
-              request,
-              formation_publication=publication,
-          )
-          draft_sha = pilot_draft_sha256(draft)
-          decision = {
-              'schema_version': 'executor-github-decision/1.0',
-              'request': {
-                  'repository': request.repository,
-                  'issue_number': request.issue_number,
-                  'issue_node_id': request.issue_node_id,
-                  'body_sha256': request.body_sha256,
-              },
-              'draft_sha256': draft_sha,
-              'decision': 'ACCEPT',
-              'valid_for_seconds': 3600,
-              'nonce': 'human-gp001-product-accept-001',
-          }
-          Path('recovered-output/decision-template.json').write_text(
-              json.dumps(decision, ensure_ascii=False, separators=(',', ':')) + '\n', encoding='utf-8'
-          )
-          print('DRAFT_SHA256=' + draft_sha)
-          print('DECISION_JSON=' + json.dumps(decision, ensure_ascii=False, separators=(',', ':')))
-          PY
-
-      - name: Preserve recovered publication and decision template
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gp001-product-authority-recovered-${{ github.run_id }}-${{ github.run_attempt }}
-          path: recovered-output
-          if-no-files-found: warn
-          retention-days: 30
