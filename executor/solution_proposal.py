@@ -8,6 +8,10 @@ from datetime import datetime, timezone
 from fnmatch import fnmatch
 from typing import Any
 
+from executor.frozen_pilot_authority import (
+    FrozenPilotAuthorityError,
+    validate_frozen_pilot_authority,
+)
 from executor.github_trust import canonical_json
 from executor.repository_access import RepositoryPathError, canonical_repository_path
 
@@ -144,6 +148,7 @@ def _validate_provenance(
     value: Any,
     *,
     contract: dict[str, Any],
+    contract_sha256: str,
 ) -> tuple[dict[str, Any], str]:
     expected = {
         "schema_version",
@@ -152,7 +157,9 @@ def _validate_provenance(
         "model",
         "generated_at",
         "request",
+        "frozen_contract_sha256",
         "source",
+        "context_sha256",
         "prompt_sha256",
         "human_solution_edits",
         "effect_capability",
@@ -161,7 +168,7 @@ def _validate_provenance(
     }
     if not isinstance(value, dict) or set(value) != expected:
         raise SolutionProposalError("solution provenance has invalid fields")
-    if value.get("schema_version") != "executor-solution-provenance/1.0":
+    if value.get("schema_version") != "executor-solution-provenance/1.1":
         raise SolutionProposalError("solution provenance schema is invalid")
     if value.get("producer_role") != "EXTERNAL_INTELLIGENCE":
         raise SolutionProposalError("solution must be produced by external intelligence")
@@ -173,14 +180,21 @@ def _validate_provenance(
         raise SolutionProposalError("human solution edits must be zero")
     if value.get("effect_capability") != "NONE":
         raise SolutionProposalError("solution producer must have no effect capability")
-    if value.get("derivation") != "REGENERATED_AFTER_HUMAN_REQUEST":
-        raise SolutionProposalError("solution provenance must be post-request regeneration")
+    if value.get("derivation") != "GENERATED_AFTER_FROZEN_CONTRACT":
+        raise SolutionProposalError("solution provenance must be generated after freeze")
     if value.get("historical_candidate_relation") not in {
         "SAME_FIX_REDERIVED",
         "NEW_FIX",
     }:
         raise SolutionProposalError("historical candidate relation is invalid")
+
+    frozen_sha = value.get("frozen_contract_sha256")
+    if frozen_sha != contract_sha256:
+        raise SolutionProposalError("solution provenance frozen contract binding mismatch")
+    context_sha = value.get("context_sha256")
     prompt_sha = value.get("prompt_sha256")
+    if not isinstance(context_sha, str) or _SHA256.fullmatch(context_sha) is None:
+        raise SolutionProposalError("solution provenance context hash is invalid")
     if not isinstance(prompt_sha, str) or _SHA256.fullmatch(prompt_sha) is None:
         raise SolutionProposalError("solution provenance prompt hash is invalid")
 
@@ -210,6 +224,15 @@ def _validate_provenance(
     )
     if generated <= request_created:
         raise SolutionProposalError("solution provenance predates the human request")
+    snapshot = contract.get("authority_snapshot")
+    if not isinstance(snapshot, dict):
+        raise SolutionProposalError("frozen authority snapshot is missing from solution input")
+    frozen_at = _parse_utc(
+        snapshot.get("verified_at"), label="authority_snapshot.verified_at"
+    )
+    if generated <= frozen_at:
+        raise SolutionProposalError("solution provenance does not postdate the frozen contract")
+
     normalized = copy.deepcopy(value)
     sha = hashlib.sha256(canonical_json(normalized).encode("utf-8")).hexdigest()
     return normalized, sha
@@ -243,14 +266,25 @@ def validate_solution_proposal(
         )
     if proposal.get("schema_version") != "executor-solution-proposal/1.0":
         raise SolutionProposalError("unsupported solution proposal schema")
-    if frozen_result.get("status") != "AUTHORIZED_AND_FROZEN":
-        raise SolutionProposalError("no authorized frozen contract is available")
+
+    try:
+        validate_frozen_pilot_authority(frozen_result)
+    except FrozenPilotAuthorityError as exc:
+        raise SolutionProposalError(f"invalid frozen authority: {exc}") from exc
     contract = frozen_result.get("contract")
     if not isinstance(contract, dict):
         raise SolutionProposalError("frozen contract is missing")
     contract_sha = frozen_result.get("contract_sha256")
+    if not isinstance(contract_sha, str) or _SHA256.fullmatch(contract_sha) is None:
+        raise SolutionProposalError("frozen contract hash is invalid")
+    actual_contract_sha = hashlib.sha256(
+        canonical_json(contract).encode("utf-8")
+    ).hexdigest()
+    if actual_contract_sha != contract_sha:
+        raise SolutionProposalError("frozen contract content hash mismatch")
     if proposal.get("contract_sha256") != contract_sha:
         raise SolutionProposalError("solution proposal is bound to a different contract")
+
     proposal_id = proposal.get("proposal_id")
     if not isinstance(proposal_id, str) or _SAFE_ID.fullmatch(proposal_id) is None:
         raise SolutionProposalError("proposal_id is invalid")
@@ -270,6 +304,7 @@ def validate_solution_proposal(
     provenance, provenance_sha = _validate_provenance(
         proposal.get("provenance"),
         contract=contract,
+        contract_sha256=contract_sha,
     )
 
     mutations = proposal.get("mutations")
