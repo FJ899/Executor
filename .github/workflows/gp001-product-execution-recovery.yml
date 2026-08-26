@@ -1,20 +1,257 @@
-name: GP001 product execution recovery
+name: GP001 ACCEPT-005 execution continuation
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - ops/accept005-execution-continuation
+    paths:
+      - .github/workflows/gp001-product-execution-recovery.yml
 
 permissions:
-  contents: read
+  contents: write
+  issues: read
+  actions: read
 
 jobs:
-  historical-boundary:
-    if: ${{ false }}
-    runs-on: ubuntu-latest
+  continue-after-pre-aap-block:
+    if: github.repository == 'FJ899/Executor'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: FJ899/Executor
+      EXECUTOR_GLOBAL_AUTHORITY_TOKEN: ${{ github.token }}
+      EXECUTOR_GITHUB_EFFECT_TOKEN: ${{ secrets.EXECUTOR_GITHUB_EFFECT_TOKEN }}
+      EXECUTOR_WORKFLOW_PATH: .github/workflows/gp001-product-execution-recovery.yml
+      GITHUB_TOKEN: ${{ github.token }}
+      TARGET_REPOSITORY: FJ899/executor-pilot-target
+      TARGET_COMMIT: 3934a94a5eebf750079200589d6dc40e024d44a0
+      TARGET_TREE: 26d307afcbb3ce72b2911ca44936712c11558c4c
+      ACCEPT_COMMENT_ID: '5431977112'
+      UNUSED_DUPLICATE_COMMENT_ID: '5432012877'
+      FROZEN_CONTRACT_SHA256: e35d5cb5cdbd7c21a876e1036cbeeb7e214a2bc9856bcb882db95ccafca5af68
+      PRIOR_RUN_ID: '33021461283'
+      PRIOR_ARTIFACT_ID: '9626679416'
+
     steps:
-      - run: |
-          echo 'Automatic execution recovery replay disabled.'
-          echo 'Successful bounded execution run: 33007806386.'
-          echo 'Result: ACTION_COMPLETED_REVIEW_REQUIRED.'
-          echo 'Authority result SHA-256: 14248d0fbfed336ac48a445ffb1e2ee7ffab11821bc1d0127ee987031a8d36ca.'
-          echo 'Evidence artifact: 9621264039.'
-          echo 'Target provider publication write was not attempted.'
+      - name: Checkout exact continuation runtime
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/Executor
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Arm only this exact continuation commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = 'c2bee54d776dba3a75ca6eacbc55680c2faaa7e4'
+          test "$(git log -1 --format=%s)" = 'Continue ACCEPT-005 from pre-AAP failure'
+          echo 'REPEAT_DECIDE=false'
+          echo 'REPEAT_PROVIDER_GENERATION=false'
+          echo 'ACCEPT005_CANONICAL_COMMENT=5431977112'
+          echo 'DUPLICATE_COMMENT_5432012877_CONSUMED=false'
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Install exact continuation runtime
+        run: python -m pip install --no-deps .
+
+      - name: Test persistence bridge before any AAP consumption
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_solution_artifact_bridge tests.test_product_cli_serialization -v
+
+      - name: Require dedicated cross-repository effect credential before AAP
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$EXECUTOR_GITHUB_EFFECT_TOKEN"
+          echo 'TARGET_EFFECT_CREDENTIAL=PRESENT'
+
+      - name: Download exact pre-AAP failure artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: 9626679416
+          path: prior
+          github-token: ${{ github.token }}
+          repository: FJ899/Executor
+          run-id: 33021461283
+
+      - name: Prove continuation starts from the exact pre-AAP block
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p run-output runs effect-evidence
+          frozen="$(find prior -type f -name frozen.json -print -quit)"
+          proposal="$(find prior -type f -name proposal.json -print -quit)"
+          report="$(find prior -type f -name pilot-report.json -print -quit)"
+          test -n "$frozen" && test -n "$proposal" && test -n "$report"
+          test -z "$(find prior -type f -name draft-pr-publication.json -print -quit)"
+          cp "$frozen" run-output/frozen.json
+          cp "$proposal" run-output/proposal.json
+          python - "$report" <<'PY'
+          import json, sys
+          value=json.load(open(sys.argv[1],encoding='utf-8'))
+          expected={'status':'BLOCKED','error':'solution proposal has missing or additional fields'}
+          if value != expected:
+              raise SystemExit(f'prior result is not the exact pre-AAP proposal-shape block: {value!r}')
+          print('PRIOR_FAILURE_CLASS=PRE_AAP_PROPOSAL_VALIDATION')
+          PY
+
+      - name: Validate frozen ACCEPT-005 and persisted provider artifact read only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from executor.product_frozen_authority import validate_product_frozen_pilot_authority
+          from executor.solution_artifact import runtime_solution_proposal
+
+          frozen=json.loads(Path('run-output/frozen.json').read_text(encoding='utf-8'))
+          proposal=json.loads(Path('run-output/proposal.json').read_text(encoding='utf-8'))
+          request, decision=validate_product_frozen_pilot_authority(frozen)
+          if frozen.get('contract_sha256')!='e35d5cb5cdbd7c21a876e1036cbeeb7e214a2bc9856bcb882db95ccafca5af68':
+              raise SystemExit('frozen contract hash mismatch')
+          evidence=frozen['contract']['decision_evidence']
+          if evidence.get('comment_id')!=5431977112 or evidence.get('decision')!='ACCEPT':
+              raise SystemExit('frozen ACCEPT-005 identity mismatch')
+          expiry=datetime.fromisoformat(decision.expires_at[:-1]+'+00:00')
+          remaining=(expiry-datetime.now(timezone.utc)).total_seconds()
+          if remaining <= 300:
+              raise SystemExit(f'ACCEPT-005 has insufficient remaining lifetime: {remaining:.0f}s')
+          raw=runtime_solution_proposal(proposal,frozen_result=frozen)
+          if raw.get('repository')!='FJ899/executor-pilot-target':
+              raise SystemExit('provider artifact repository mismatch')
+          if raw.get('contract_sha256')!=frozen['contract_sha256']:
+              raise SystemExit('provider artifact contract mismatch')
+          if [m.get('path') for m in raw.get('mutations',[])] != ['project_registry/registry.py']:
+              raise SystemExit('provider artifact scope mismatch')
+          if (raw.get('provenance') or {}).get('effect_capability')!='NONE':
+              raise SystemExit('provider artifact gained effect capability')
+          print('FROZEN_ACCEPT005=VALID')
+          print('DECISION_SECONDS_REMAINING='+str(int(remaining)))
+          print('VALIDATED_PROVIDER_ARTIFACT=RUNTIME_READY')
+          print('REPEAT_DECIDE=false')
+          print('REPEAT_PROVIDER_GENERATION=false')
+          PY
+
+      - name: Checkout exact frozen target source read only
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/executor-pilot-target
+          ref: 3934a94a5eebf750079200589d6dc40e024d44a0
+          path: target
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify target identity and clean source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C target rev-parse HEAD)" = "$TARGET_COMMIT"
+          test "$(git -C target rev-parse 'HEAD^{tree}')" = "$TARGET_TREE"
+          test -z "$(git -C target status --porcelain)"
+          echo 'TARGET_SOURCE=EXACT_AND_CLEAN'
+
+      - name: Resolve immutable sandbox image before AAP
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull python:3.11-slim
+          image="$(docker image inspect --format='{{.Id}}' python:3.11-slim)"
+          case "$image" in
+            sha256:????????????????????????????????????????????????????????????????) ;;
+            *) echo "unexpected image identity: $image" >&2; exit 1 ;;
+          esac
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "SANDBOX_IMAGE_ID=$image"
+
+      - name: Execute first and only ACCEPT-005 AAP
+        shell: bash
+        run: |
+          set -euo pipefail
+          creative-os-product execute \
+            --frozen run-output/frozen.json \
+            --proposal run-output/proposal.json \
+            --profile trust_profiles/github-product-gp001.json \
+            --ledger "${RUNNER_TEMP}/accept005-continuation.sqlite3" \
+            --workspace target \
+            --runs-root runs \
+            --run-id "gp001-accept005-continuation-${GITHUB_RUN_ID}" \
+            --image "${{ steps.image.outputs.image }}" \
+            --executor-root . \
+            --executor-commit "$(git rev-parse HEAD)" \
+            > run-output/pilot-report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          value=json.loads(Path('run-output/pilot-report.json').read_text(encoding='utf-8'))
+          if value.get('status')!='ACTION_COMPLETED_REVIEW_REQUIRED':
+              raise SystemExit(f'pilot did not complete: {value}')
+          if value.get('repository')!='FJ899/executor-pilot-target':
+              raise SystemExit('pilot repository mismatch')
+          if value.get('changed_paths')!=['project_registry/registry.py']:
+              raise SystemExit('pilot changed-path mismatch')
+          if value.get('human_review_required') is not True or value.get('merge_allowed') is not False:
+              raise SystemExit('pilot review boundary mismatch')
+          evidence=value.get('evidence') or {}
+          if evidence.get('precondition')!='OBSERVED_FAILURE' or evidence.get('postcondition')!='PASS' or evidence.get('regressions')!='PASS' or evidence.get('scope')!='ALLOWED':
+              raise SystemExit(f'pilot evidence incomplete: {evidence}')
+          request=value.get('draft_pr_request') or {}
+          if request.get('draft') is not True or request.get('merge_allowed') is not False:
+              raise SystemExit('pilot did not emit bounded draft PR request')
+          print('PILOT_STATUS=ACTION_COMPLETED_REVIEW_REQUIRED')
+          print('PATCH_SHA256='+value['patch']['sha256'])
+          print('DRAFT_HEAD_BRANCH='+request['head_branch'])
+          PY
+
+      - name: Publish exactly one bounded target draft PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          creative-os-product publish-draft-pr \
+            --frozen run-output/frozen.json \
+            --pilot-report run-output/pilot-report.json \
+            --profile trust_profiles/github-product-gp001.json \
+            --ledger "${RUNNER_TEMP}/accept005-continuation.sqlite3" \
+            --evidence-dir effect-evidence \
+            --workspace target \
+            > run-output/draft-pr-publication.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          value=json.loads(Path('run-output/draft-pr-publication.json').read_text(encoding='utf-8'))
+          if value.get('status')!='DRAFT_PR_CREATED_REVIEW_REQUIRED':
+              raise SystemExit(f'draft PR publication incomplete: {value}')
+          if value.get('human_review_required') is not True or value.get('human_acceptance')!='PENDING':
+              raise SystemExit('human review state mismatch')
+          for key in ('merge_allowed','deploy_allowed','release_allowed','tag_allowed'):
+              if value.get(key) is not False:
+                  raise SystemExit(f'{key} unexpectedly authorized')
+          pr=value.get('pull_request') or {}
+          print('TARGET_DRAFT_PR_URL='+str(pr.get('object_url')))
+          print('TARGET_DRAFT_PR_ID='+str(pr.get('object_id')))
+          print('FINAL_STATUS=DRAFT_PR_CREATED_REVIEW_REQUIRED')
+          print('MERGE_DEPLOY_RELEASE_TAG_AUTHORIZED=false')
+          PY
+
+      - name: Preserve continuation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gp001-accept005-continuation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            run-output
+            runs
+            effect-evidence
+          if-no-files-found: warn
+          retention-days: 30
