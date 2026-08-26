@@ -9,6 +9,7 @@
   "workflows": {
     ".github/workflows/verify.yml": {"classification": "ACTIVE_PRODUCTION_FOUNDATION", "reason": "current repository foundation verification on pull requests and main"},
     ".github/workflows/executor-product-draft-pr-publication.yml": {"classification": "ACTIVE_PRODUCTION_FOUNDATION", "reason": "current FJ899-bound reusable post-pilot draft PR publication workflow with receipt/recovery runtime"},
+    ".github/workflows/gp001-product-authority-request.yml": {"classification": "ACTIVE_TEST", "reason": "bounded one-shot product-runtime proof for Formation request publication; creates zero-authority transport only and stops before Human decision"},
     ".github/workflows/gp001-real-e2e.yml": {"classification": "ACTIVE_TEST", "reason": "bounded GP001 end-to-end proof path; not a product authority source"},
     ".github/workflows/gp001-replay.yml": {"classification": "ACTIVE_TEST", "reason": "GP001 replay/test harness; not an active product front door"},
     ".github/workflows/diagnostic.yml": {"classification": "ACTIVE_TEST", "reason": "diagnostic-only workflow"},
