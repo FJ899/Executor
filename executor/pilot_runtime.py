@@ -31,6 +31,11 @@ from executor.github_authority import (
     GovernedAuthorityLedger,
 )
 from executor.github_trust import VerifiedGitHubDecision, VerifiedGitHubRequest, canonical_json
+from executor.pilot_policy_authority import (
+    EffectivePilotPolicyAuthority,
+    revalidate_pilot_policy_authority,
+    resolve_pilot_policy_authority,
+)
 from executor.repository_access import canonical_repository_path, validate_scope_pattern
 from executor.repository_identity import RepositoryIdentityError, repository_identity_from_remote
 from executor.repository_snapshot import RepositorySnapshotError, verify_source_tree
@@ -223,12 +228,14 @@ class PilotDockerSandboxBackend(DockerSandboxBackend):
         *,
         policy_snapshot: ExecutionPolicySnapshot,
         contract: dict[str, Any],
+        policy_authority: EffectivePilotPolicyAuthority,
         docker_binary: str = "docker",
     ) -> None:
         super().__init__(policy_snapshot=policy_snapshot, docker_binary=docker_binary)
         self.repository = contract["target"]["repository"]
         self.commit = contract["target"]["commit"]
         self.source_tree = contract["target"]["tree"]
+        self.policy_authority = policy_authority
         self.allowed = tuple(
             canonical_repository_path(path)
             for path in contract["task"]["allowed_paths"]
@@ -237,23 +244,25 @@ class PilotDockerSandboxBackend(DockerSandboxBackend):
             validate_scope_pattern(path)
             for path in contract["task"]["protected_paths"]
         )
-        profile = policy_snapshot.bounded_pilot_profile(repository=self.repository)
-        if profile is None:
-            raise SandboxExecutionError("repository is outside the bounded pilot policy")
-        if len(self.allowed) > profile.max_production_files:
+        if len(self.allowed) > policy_authority.max_production_files:
             raise SandboxExecutionError("pilot contract exceeds policy file limit")
-        if not profile.draft_pr_only or policy_snapshot.auto_merge:
+        if policy_snapshot.auto_merge:
             raise SandboxExecutionError("pilot policy must remain draft-PR only")
+        if not revalidate_pilot_policy_authority(
+            policy_snapshot,
+            authority=policy_authority,
+            repository=self.repository,
+            commit=self.commit,
+        ):
+            raise SandboxExecutionError("pilot policy authority is absent or mismatched")
 
     def authorize(self, context: SandboxExecutionContext) -> Path:
         policy = self._authoritative_policy()
-        profile = policy.bounded_pilot_profile(repository=self.repository)
-        if (
-            profile is None
-            or policy.external_projects
-            or policy.auto_merge
-            or policy.default_network
-            or policy.default_secrets
+        if not revalidate_pilot_policy_authority(
+            policy,
+            authority=self.policy_authority,
+            repository=self.repository,
+            commit=self.commit,
         ):
             raise SandboxExecutionError("bounded pilot authority is absent or widened")
         if context.purpose not in {"PILOT_PRECHANGE", "PILOT_POSTCHANGE"}:
@@ -339,18 +348,14 @@ class PilotRuntime:
             policy = load_execution_policy_snapshot(executor_root, commit=executor_commit)
         except ExecutionPolicyError as exc:
             raise PilotBlocked(f"cannot load authoritative pilot policy: {exc}") from exc
-        profile = policy.bounded_pilot_profile(
-            repository=contract["target"]["repository"]
+        policy_authority = resolve_pilot_policy_authority(
+            policy,
+            contract=contract,
+            executor_commit=executor_commit,
         )
-        if (
-            profile is None
-            or policy.external_projects
-            or policy.auto_merge
-            or policy.default_network
-            or policy.default_secrets
-        ):
+        if policy_authority is None:
             raise PilotBlocked("Executor policy does not authorize this bounded pilot")
-        if len(validated.mutations) > profile.max_production_files:
+        if len(validated.mutations) > policy_authority.max_production_files:
             raise PilotBlocked("proposal exceeds the policy production-file limit")
         try:
             environment = validate_execution_environment(
@@ -363,11 +368,13 @@ class PilotRuntime:
         backend = PilotDockerSandboxBackend(
             policy_snapshot=policy,
             contract=contract,
+            policy_authority=policy_authority,
             docker_binary=docker_binary,
         )
         backend.bind_proposal(validated)
         self.executor_commit = executor_commit
         self.policy_snapshot = policy
+        self.policy_authority = policy_authority
         self.contract = contract
         self.contract_sha256 = frozen_result["contract_sha256"]
         self.proposal = validated
@@ -445,10 +452,7 @@ class PilotRuntime:
                     self.verified_decision.actor_login,
                 )
             },
-            bounded_external_repositories=tuple(
-                item.repository
-                for item in self.policy_snapshot.bounded_pilot_repositories
-            ),
+            bounded_external_repositories=self.policy_authority.bounded_external_repositories,
         )
         decision_expiry = datetime.fromisoformat(
             self.verified_decision.expires_at[:-1] + "+00:00"
@@ -508,7 +512,7 @@ class PilotRuntime:
                 "status": "AUTHORIZED",
                 "reasons": [
                     "exact fresh GitHub ACCEPT binds the current frozen contract",
-                    "repository and write scope match the bounded P4 pilot policy",
+                    f"repository and write scope match {self.policy_authority.authority_class} authority",
                     "global GitHub authority receipt enforces one effect per human decision",
                     "exact workflow, image and proposal provenance are integrity-bound",
                     "merge, deploy and release remain forbidden",
