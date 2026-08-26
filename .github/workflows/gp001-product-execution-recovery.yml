@@ -1,4 +1,4 @@
-name: GP001 ACCEPT-005 post-effect read-only inspection
+name: GP001 ACCEPT-005 publication evidence inspection
 
 on:
   push:
@@ -21,3 +21,27 @@ jobs:
           echo 'EXECUTION_RETRY_ALLOWED=false'
           echo 'PUBLICATION_RETRY_ALLOWED=false'
           echo 'SOURCE_RUN=33021870013'
+
+      - name: Download exact continuation evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: 9626842914
+          path: evidence
+          github-token: ${{ github.token }}
+          repository: FJ899/Executor
+          run-id: 33021870013
+
+      - name: Print publication and receipt inventory read only
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '--- INVENTORY ---'
+          find evidence -type f -print | sort
+          echo '--- DRAFT PR PUBLICATION ---'
+          publication="$(find evidence -type f -name draft-pr-publication.json -print -quit)"
+          if test -n "$publication"; then cat "$publication"; else echo 'draft-pr-publication.json=MISSING'; fi
+          echo '--- EFFECT EVIDENCE ---'
+          while IFS= read -r file; do
+            echo "### $file"
+            cat "$file"
+          done < <(find evidence -type f \( -name 'external_effect_attempt-*.json' -o -name 'external_effect_attempt_result-*.json' -o -name 'system_write_receipt-*.json' -o -name 'orphaned_side_effect-*.json' \) -print | sort)
