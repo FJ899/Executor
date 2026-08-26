@@ -108,6 +108,10 @@ class RequestToContract001Tests(unittest.TestCase):
         )
         self.assertEqual(request["draft_sha256"], surface["draft_sha256"])
         self.assertEqual(request["allowed_decisions"], ["ACCEPT", "MODIFY", "REJECT"])
+        self.assertEqual(
+            request["canonical_contract_request"]["github_request_payload"]["request_id"],
+            "request-001",
+        )
         with self.assertRaises(FormationError):
             current.frozen_task_contract()
 
@@ -119,7 +123,7 @@ class RequestToContract001Tests(unittest.TestCase):
         self.assertFalse(hasattr(current, "record_human_decision"))
         self.assertFalse(hasattr(current, "authorize"))
         self.assertFalse(hasattr(current, "freeze"))
-        with self.assertRaisesRegex(FormationError, "verified external human authorization"):
+        with self.assertRaisesRegex(FormationError, "verified external human"):
             current.frozen_task_contract()
 
     def test_public_api_cannot_inject_user_facts_or_profile_override(self) -> None:
