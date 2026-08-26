@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import os
 import subprocess
@@ -39,8 +40,17 @@ DEFAULT_PROFILE = "trust_profiles/github-product-gp001.json"
 PRODUCT_BASE_BRANCH = "main"
 
 
+def _json_default(value: object) -> object:
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        return to_dict()
+    if dataclasses.is_dataclass(value):
+        return dataclasses.asdict(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 def _print(value: object) -> None:
-    print(json.dumps(value, ensure_ascii=False, indent=2))
+    print(json.dumps(value, ensure_ascii=False, indent=2, default=_json_default))
 
 
 def _git_head(root: str) -> str:
@@ -279,7 +289,6 @@ def main(argv: list[str] | None = None) -> int:
     ) as exc:
         _print({"status": "BLOCKED", "error": str(exc)})
         return 2
-    return 2
 
 
 if __name__ == "__main__":
