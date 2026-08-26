@@ -1,0 +1,131 @@
+name: Executor product draft PR publication
+
+on:
+  workflow_call:
+    inputs:
+      executor_ref:
+        description: Exact Executor commit containing the product runtime
+        required: true
+        type: string
+      target_source_commit:
+        description: Exact frozen source commit in FJ899/executor-pilot-target
+        required: true
+        type: string
+      frozen_json:
+        description: Exact AUTHORIZED_AND_FROZEN result JSON
+        required: true
+        type: string
+      pilot_report_json:
+        description: Exact ACTION_COMPLETED_REVIEW_REQUIRED report JSON
+        required: true
+        type: string
+      patch_base64:
+        description: Base64 of the exact verified pilot patch
+        required: true
+        type: string
+      authority_ledger_name:
+        description: Local SQLite ledger filename
+        required: false
+        default: publication-authority.sqlite3
+        type: string
+    secrets:
+      EXECUTOR_GITHUB_EFFECT_TOKEN:
+        required: true
+      EXECUTOR_GLOBAL_AUTHORITY_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish-draft-pr:
+    runs-on: ubuntu-latest
+    env:
+      EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: FJ899/Executor
+      EXECUTOR_GLOBAL_AUTHORITY_TOKEN: ${{ secrets.EXECUTOR_GLOBAL_AUTHORITY_TOKEN }}
+      EXECUTOR_GITHUB_EFFECT_TOKEN: ${{ secrets.EXECUTOR_GITHUB_EFFECT_TOKEN }}
+    steps:
+      - name: Checkout exact Executor runtime
+        uses: actions/checkout@v4
+        with:
+          repository: FJ899/Executor
+          ref: ${{ inputs.executor_ref }}
+          path: executor-src
+          fetch-depth: 0
+
+      - name: Verify Executor identity
+        run: |
+          test "$(git -C executor-src rev-parse HEAD)" = "${{ inputs.executor_ref }}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install exact Executor runtime
+        run: python -m pip install --no-deps ./executor-src
+
+      - name: Checkout exact bounded target source
+        uses: actions/checkout@v4
+        with:
+          repository: FJ899/executor-pilot-target
+          ref: ${{ inputs.target_source_commit }}
+          path: target
+          fetch-depth: 0
+
+      - name: Verify target identity
+        run: |
+          test "$(git -C target rev-parse HEAD)" = "${{ inputs.target_source_commit }}"
+
+      - name: Materialize frozen result, pilot report and exact patch
+        shell: bash
+        env:
+          FROZEN_JSON: ${{ inputs.frozen_json }}
+          PILOT_REPORT_JSON: ${{ inputs.pilot_report_json }}
+          PATCH_BASE64: ${{ inputs.patch_base64 }}
+        run: |
+          mkdir -p publication-input effect-evidence
+          printf '%s' "$FROZEN_JSON" > publication-input/frozen.json
+          printf '%s' "$PILOT_REPORT_JSON" > publication-input/pilot-report.json
+          printf '%s' "$PATCH_BASE64" | base64 --decode > publication-input/pilot.patch
+          python -m json.tool publication-input/frozen.json >/dev/null
+          python -m json.tool publication-input/pilot-report.json >/dev/null
+
+      - name: Bind patch to report before mutation
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          report = json.loads(Path('publication-input/pilot-report.json').read_text())
+          patch = Path('publication-input/pilot.patch').read_bytes()
+          expected = report.get('patch', {}).get('sha256')
+          actual = hashlib.sha256(patch).hexdigest()
+          if expected != actual:
+              raise SystemExit(f'patch SHA mismatch: expected={expected} actual={actual}')
+          if report.get('status') != 'ACTION_COMPLETED_REVIEW_REQUIRED':
+              raise SystemExit('pilot report is not review-required success')
+          PY
+
+      - name: Apply exact verified patch to source checkout
+        run: |
+          git -C target apply --check ../publication-input/pilot.patch
+          git -C target apply ../publication-input/pilot.patch
+
+      - name: Publish bounded draft PR through Executor effect lifecycle
+        run: |
+          creative-os-product publish-draft-pr \
+            --frozen publication-input/frozen.json \
+            --pilot-report publication-input/pilot-report.json \
+            --profile executor-src/trust_profiles/github-product-gp001.json \
+            --ledger "${{ runner.temp }}/${{ inputs.authority_ledger_name }}" \
+            --evidence-dir effect-evidence \
+            --workspace target
+
+      - name: Preserve effect evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: executor-product-effect-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: effect-evidence
+          if-no-files-found: warn
+          retention-days: 30
