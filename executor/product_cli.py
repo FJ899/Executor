@@ -45,7 +45,15 @@ def _json_default(value: object) -> object:
     if callable(to_dict):
         return to_dict()
     if dataclasses.is_dataclass(value):
-        return dataclasses.asdict(value)
+        # Verified evidence dataclasses intentionally carry private in-memory
+        # proof sentinels such as ``_proof = object()``. Those sentinels prove
+        # construction provenance inside the trusted runtime; they are not part
+        # of the public artifact schema and must never leak into CLI JSON.
+        return {
+            field.name: getattr(value, field.name)
+            for field in dataclasses.fields(value)
+            if not field.name.startswith("_")
+        }
     raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
