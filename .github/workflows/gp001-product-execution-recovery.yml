@@ -48,14 +48,21 @@ jobs:
           proposal="$(find evidence -type f -name proposal.json -print -quit)"
           test -n "$frozen" && test -n "$proposal"
           python - "$frozen" "$proposal" <<'PY'
-          import hashlib,json,sys
+          import copy,hashlib,json,sys
           from executor.github_trust import canonical_json
           from executor.frozen_pilot_authority import validate_frozen_pilot_authority
           from executor.solution_proposal import validate_solution_proposal
           frozen=json.load(open(sys.argv[1],encoding='utf-8'))
           saved=json.load(open(sys.argv[2],encoding='utf-8'))
-          result_sha=hashlib.sha256(canonical_json(frozen).encode('utf-8')).hexdigest()
-          if result_sha!='9072f0f295a6dbaaa8ac3c8799ee0eea82426cc617ae0508aa939b615931ed92': raise SystemExit('globally bound frozen result SHA mismatch')
+          binding=frozen.get('decision_consumption') or {}
+          if binding.get('result_sha256')!='9072f0f295a6dbaaa8ac3c8799ee0eea82426cc617ae0508aa939b615931ed92': raise SystemExit('artifact local binding result hash mismatch')
+          global_binding=binding.get('global') or {}
+          if global_binding.get('result_sha256')!='9072f0f295a6dbaaa8ac3c8799ee0eea82426cc617ae0508aa939b615931ed92': raise SystemExit('artifact global binding result hash mismatch')
+          if global_binding.get('provider_state')!='GLOBAL_RESULT_BOUND' or global_binding.get('state')!='FINAL': raise SystemExit('artifact global binding is not finalized')
+          prebind=copy.deepcopy(frozen)
+          prebind.pop('decision_consumption',None)
+          result_sha=hashlib.sha256(canonical_json(prebind).encode('utf-8')).hexdigest()
+          if result_sha!='9072f0f295a6dbaaa8ac3c8799ee0eea82426cc617ae0508aa939b615931ed92': raise SystemExit('globally bound pre-consumption frozen result SHA mismatch')
           if frozen.get('status')!='AUTHORIZED_AND_FROZEN' or frozen.get('contract_sha256')!='e35d5cb5cdbd7c21a876e1036cbeeb7e214a2bc9856bcb882db95ccafca5af68': raise SystemExit('frozen identity mismatch')
           req,dec=validate_frozen_pilot_authority(frozen)
           if dec.decision!='ACCEPT': raise SystemExit('frozen authority is not ACCEPT')
