@@ -71,6 +71,30 @@ Edited, expired, stale, mismatched, app-mediated, wrong-actor or otherwise unver
 - delegates final-live verification, immutable authority snapshot construction and authority consumption to the existing P4 freeze boundary;
 - stores formation provenance and the generated authority-request payload in the frozen contract as `formation_binding`.
 
+The shared P4 freeze independently validates formation-mode before authority consumption. Mutual consistency between caller-supplied hashes and objects is not enough. It validates the full formation-draft schema, USER/MODEL provenance, absence of unresolved questions and structural GP001 validity, then derives the expected GitHub request projection from the hashed `proposed_task_contract`.
+
+That independent projection must match the provider-verified request for:
+
+```text
+request_id
+target repository
+target commit
+task class
+problem statement
+allowed paths
+protected paths
+precondition command
+postcondition command
+regression commands
+max production files
+max patch lines
+deterministic formation nonce
+```
+
+Target tree identity is still verified independently from provider commit evidence, while request/decision freshness remains enforced by the existing GitHub trust boundary.
+
+Therefore a self-consistent forged formation draft/hash/binding with a request payload that was not derived from that draft is blocked before authority consumption.
+
 ## ACCEPT
 
 A verified `ACCEPT` may produce:
@@ -192,6 +216,9 @@ edited decision -> BLOCK
 expired decision -> BLOCK
 mismatched decision/request -> BLOCK
 no verified authority -> no freeze
+custom formation authority hash without complete binding -> BLOCK
+tampered formation draft content after hashing -> BLOCK
+self-consistent binding with request payload not derived from governed draft -> BLOCK
 ```
 
 The intended terminal product transition for this stage is:
@@ -199,6 +226,7 @@ The intended terminal product transition for this stage is:
 ```text
 normal user request
     -> governed draft
+    -> generated bounded authority request
     -> verified human decision
     -> AUTHORIZED_AND_FROZEN
 ```
