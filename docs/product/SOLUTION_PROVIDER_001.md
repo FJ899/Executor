@@ -107,7 +107,7 @@ The generator may return only:
 
 ```text
 schema_version
- evidence_ref
+evidence_ref
 mutations:
   - path
     replacement_text
