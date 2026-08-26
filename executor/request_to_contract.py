@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable
@@ -16,6 +17,8 @@ from executor.repository_snapshot import RepositorySnapshotError, verify_worktre
 _PROFILE_SCHEMA = "executor-contract-formation-profile/1.0"
 _PROFILE_PATH = "formation_profiles/REQUEST_TO_CONTRACT_001.json"
 _EXECUTOR_REPOSITORY = "FJ899/Executor"
+_CANONICAL_REQUEST_SCHEMA = "executor-canonical-contract-request/1.0"
+_GITHUB_REQUEST_SCHEMA = "executor-github-request/1.0"
 
 
 class FormationError(RuntimeError):
@@ -29,6 +32,9 @@ class FormationStatus(str, Enum):
     DRAFT_CRITIQUED = "DRAFT_CRITIQUED"
     NEEDS_CLARIFICATION = "NEEDS_CLARIFICATION"
     AWAITING_VERIFIED_HUMAN_AUTHORIZATION = "AWAITING_VERIFIED_HUMAN_AUTHORIZATION"
+    MODIFICATION_REQUIRED = "MODIFICATION_REQUIRED"
+    REJECTED = "REJECTED"
+    AUTHORIZED_AND_FROZEN = "AUTHORIZED_AND_FROZEN"
 
 
 @dataclass(frozen=True)
@@ -96,14 +102,20 @@ def _decode_object(raw: bytes, *, label: str) -> dict[str, Any]:
     return payload
 
 
-class RequestToContract001:
-    """Govern one known GP001 request up to a verified human authority boundary.
+def _utc_after(seconds: int) -> str:
+    value = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(seconds=seconds)
+    return value.isoformat().replace("+00:00", "Z")
 
-    Phase 1 deliberately stops before authorization/freeze. Canonical formation
-    inputs are read from a verified exact Executor checkout. The only direct USER
-    provenance is the verbatim request; structured extraction remains MODEL
-    provenance. A later superior boundary must provide verified external human
-    evidence bound to this exact draft before executable authority can exist.
+
+class RequestToContract001:
+    """Govern one known GP001 request from natural language through a frozen contract.
+
+    Formation remains non-authoritative: only the verbatim request has direct USER
+    provenance and no model output can authorize execution. The clean formation
+    draft now emits the exact GitHub request payload consumed by the existing
+    provider authority flow. A verified external ACCEPT may then be bound back to
+    this same draft and produce AUTHORIZED_AND_FROZEN without a second semantic
+    request object.
     """
 
     def __init__(
@@ -144,6 +156,14 @@ class RequestToContract001:
             raise FormationError("invalid request-to-contract formation profile schema")
         if self._profile.get("id") != "REQUEST_TO_CONTRACT_001":
             raise FormationError("unexpected formation profile id")
+        target_tree = self._profile.get("target_tree")
+        if (
+            not isinstance(target_tree, str)
+            or len(target_tree) != 40
+            or any(ch not in "0123456789abcdef" for ch in target_tree)
+        ):
+            raise FormationError("formation profile target_tree must be an exact lowercase Git SHA")
+        self._target_tree = target_tree
 
         target_path = str(self._profile.get("target_task_path", "")).strip()
         if not target_path:
@@ -168,7 +188,18 @@ class RequestToContract001:
         self.status = FormationStatus.REQUEST_RECEIVED
         self._understood_objective: str | None = None
         self._proposed_task: dict[str, Any] | None = None
-        self._provenance: list[ProvenanceRecord] = [
+        self._provenance: list[ProvenanceRecord] = []
+        self._reset_request_provenance()
+        self._out_of_scope_discoveries: list[str] = []
+        self._open_questions: list[str] = []
+        self._draft_sha256: str | None = None
+        self._critique: list[CritiqueFinding] = []
+        self._github_request_payload: dict[str, Any] | None = None
+        self._frozen_result: dict[str, Any] | None = None
+        self._revision = 1
+
+    def _reset_request_provenance(self) -> None:
+        self._provenance = [
             ProvenanceRecord(
                 path="$.user_request",
                 source="USER",
@@ -176,14 +207,14 @@ class RequestToContract001:
                 note="verbatim request supplied by the user",
             )
         ]
-        self._out_of_scope_discoveries: list[str] = []
-        self._open_questions: list[str] = []
-        self._draft_sha256: str | None = None
-        self._critique: list[CritiqueFinding] = []
 
     @property
     def draft_sha256(self) -> str | None:
         return self._draft_sha256
+
+    @property
+    def revision(self) -> int:
+        return self._revision
 
     def propose_interpretation(
         self,
@@ -263,6 +294,7 @@ class RequestToContract001:
             "profile_sha256": self._profile_sha256,
             "canonical_task_sha256": self._canonical_task_sha256,
             "request_id": self.request_id,
+            "revision": self._revision,
             "user_request": self.user_request,
             "understood_objective": self._understood_objective,
             "provenance": [record.to_dict() for record in self._provenance],
@@ -272,6 +304,8 @@ class RequestToContract001:
         }
         self._draft_sha256 = _sha256_text(_canonical_json(payload))
         self._critique = []
+        self._github_request_payload = None
+        self._frozen_result = None
         self.status = FormationStatus.DRAFT_CONTRACT_CREATED
         return self.decision_surface()
 
@@ -330,9 +364,11 @@ class RequestToContract001:
         repositories = task.get("repositories", {}) if isinstance(task, dict) else {}
         return {
             "request_id": self.request_id,
+            "revision": self._revision,
             "request": self.user_request,
             "understood_objective": self._understood_objective,
             "target": copy.deepcopy(repositories.get("target")),
+            "target_tree": self._target_tree,
             "target_test": problem.get("target_test") if isinstance(problem, dict) else None,
             "proposed_write_scope": copy.deepcopy(scope.get("allowed_paths", []))
             if isinstance(scope, dict)
@@ -347,6 +383,58 @@ class RequestToContract001:
             "critique": [finding.to_dict() for finding in self._critique],
             "draft_sha256": self._draft_sha256,
             "status": self.status.value,
+            "executable": self.status is FormationStatus.AUTHORIZED_AND_FROZEN,
+        }
+
+    def _build_github_request_payload(self) -> dict[str, Any]:
+        if self._draft_sha256 is None or self._proposed_task is None:
+            raise FormationError("clean draft is required before canonical pilot request")
+        golden = self._proposed_task["golden_path"]
+        target = self._proposed_task["repositories"]["target"]
+        allowed_paths = copy.deepcopy(golden["scope"]["allowed_paths"])
+        payload = {
+            "schema_version": _GITHUB_REQUEST_SCHEMA,
+            "request_id": self.request_id,
+            "target": {
+                "repository": target["name"],
+                "commit": target["commit"],
+                "tree": self._target_tree,
+            },
+            "task": {
+                "class": "BOUNDED_CORRECTNESS_OR_QUALITY_FIX",
+                "problem_statement": golden["problem"]["statement"],
+                "allowed_paths": allowed_paths,
+                "protected_paths": copy.deepcopy(golden["scope"]["protected_paths"]),
+                "precondition_argv": [copy.deepcopy(golden["commands"]["target_test_argv"])],
+                "postcondition_argv": [copy.deepcopy(golden["commands"]["target_test_argv"])],
+                "regression_argv": copy.deepcopy(golden["commands"]["regression_argv"]),
+                "max_production_files": len(allowed_paths),
+                "max_patch_lines": int(self._proposed_task["budgets"]["max_patch_lines"]),
+            },
+            "expires_at": _utc_after(3600),
+            "nonce": f"formation-{self._draft_sha256[:24]}",
+        }
+        return payload
+
+    def canonical_pilot_request(self) -> dict[str, Any]:
+        if self.status is not FormationStatus.AWAITING_VERIFIED_HUMAN_AUTHORIZATION:
+            raise FormationError("canonical pilot request requires a clean critiqued draft")
+        if self._github_request_payload is None:
+            self._github_request_payload = self._build_github_request_payload()
+        return {
+            "schema_version": _CANONICAL_REQUEST_SCHEMA,
+            "request_id": self.request_id,
+            "revision": self._revision,
+            "formation_binding": {
+                "executor_repository": _EXECUTOR_REPOSITORY,
+                "executor_commit": self.executor_commit,
+                "formation_profile": self._profile["id"],
+                "formation_profile_sha256": self._profile_sha256,
+                "canonical_task_sha256": self._canonical_task_sha256,
+                "draft_sha256": self._draft_sha256,
+            },
+            "github_request_payload": copy.deepcopy(self._github_request_payload),
+            "status": "AWAITING_VERIFIED_HUMAN_AUTHORIZATION",
             "executable": False,
         }
 
@@ -357,9 +445,11 @@ class RequestToContract001:
             )
         if self._draft_sha256 is None:
             raise FormationError("draft hash missing")
+        canonical = self.canonical_pilot_request()
         return {
-            "schema_version": "executor-human-formation-authorization-request/1.0",
+            "schema_version": "executor-human-formation-authorization-request/1.1",
             "request_id": self.request_id,
+            "revision": self._revision,
             "executor_repository": _EXECUTOR_REPOSITORY,
             "executor_commit": self.executor_commit,
             "formation_profile": self._profile["id"],
@@ -368,12 +458,65 @@ class RequestToContract001:
             "draft_sha256": self._draft_sha256,
             "allowed_decisions": ["ACCEPT", "MODIFY", "REJECT"],
             "decision_surface": self.decision_surface(),
+            "canonical_contract_request": canonical,
             "required_authority": "VERIFIED_EXTERNAL_HUMAN_AUTHORITY",
             "status": "AWAITING_VERIFIED_HUMAN_AUTHORIZATION",
         }
 
+    def apply_authority_result(self, result: dict[str, Any]) -> dict[str, Any]:
+        if self.status is not FormationStatus.AWAITING_VERIFIED_HUMAN_AUTHORIZATION:
+            raise FormationError("authority result requires an awaiting formation draft")
+        if not isinstance(result, dict):
+            raise FormationError("authority result must be an object")
+        status = result.get("status")
+        if status == "MODIFICATION_REQUIRED":
+            if result.get("draft_sha256") != self._draft_sha256:
+                raise FormationError("MODIFY result is bound to a different formation draft")
+            self.status = FormationStatus.MODIFICATION_REQUIRED
+        elif status == "REJECTED":
+            if result.get("draft_sha256") != self._draft_sha256:
+                raise FormationError("REJECT result is bound to a different formation draft")
+            self.status = FormationStatus.REJECTED
+        elif status == "AUTHORIZED_AND_FROZEN":
+            contract = result.get("contract")
+            binding = contract.get("formation_binding") if isinstance(contract, dict) else None
+            if (
+                not isinstance(binding, dict)
+                or binding.get("draft_sha256") != self._draft_sha256
+                or binding.get("executor_commit") != self.executor_commit
+                or binding.get("formation_profile_sha256") != self._profile_sha256
+                or binding.get("canonical_task_sha256") != self._canonical_task_sha256
+            ):
+                raise FormationError("frozen result is not bound to this exact formation draft")
+            self._frozen_result = copy.deepcopy(result)
+            self.status = FormationStatus.AUTHORIZED_AND_FROZEN
+        else:
+            raise FormationError(f"unsupported authority result status: {status!r}")
+        return self.decision_surface()
+
+    def begin_revision(self, *, user_request: str | None = None) -> None:
+        if self.status is not FormationStatus.MODIFICATION_REQUIRED:
+            raise FormationError("revision may only begin after a verified MODIFY")
+        if user_request is not None:
+            revised = user_request.strip()
+            if not revised:
+                raise FormationError("revised user_request must be non-empty")
+            self.user_request = revised
+        self._revision += 1
+        self._understood_objective = None
+        self._proposed_task = None
+        self._reset_request_provenance()
+        self._out_of_scope_discoveries = []
+        self._open_questions = []
+        self._draft_sha256 = None
+        self._critique = []
+        self._github_request_payload = None
+        self._frozen_result = None
+        self.status = FormationStatus.REQUEST_RECEIVED
+
     def frozen_task_contract(self) -> dict[str, Any]:
-        raise FormationError(
-            "no executable contract exists: verified external human authorization "
-            "and freeze are not implemented in REQUEST_TO_CONTRACT_001 phase 1"
-        )
+        if self.status is not FormationStatus.AUTHORIZED_AND_FROZEN or self._frozen_result is None:
+            raise FormationError(
+                "no executable contract exists: verified external human ACCEPT and freeze are required"
+            )
+        return copy.deepcopy(self._frozen_result)
