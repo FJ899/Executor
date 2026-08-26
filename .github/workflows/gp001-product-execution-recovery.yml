@@ -1,17 +1,186 @@
 name: GP001 product execution recovery
 
 on:
-  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/gp001-product-execution-recovery.yml
+      - executor/execution_environment.py
+      - executor/pilot_policy_authority.py
+      - executor/pilot_runtime.py
+      - tests/test_repository_identity_migration.py
+      - tests/test_pilot_controlled_fixture_authority.py
+      - governance/WORKFLOW_CLASSIFICATION.json
 
 permissions:
-  contents: read
+  contents: write
+  actions: read
 
 jobs:
-  historical-boundary:
-    if: ${{ false }}
-    runs-on: ubuntu-latest
+  product-execution-recovery:
+    if: github.repository == 'FJ899/Executor' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: FJ899/Executor
+      EXECUTOR_GLOBAL_AUTHORITY_TOKEN: ${{ github.token }}
+      EXECUTOR_WORKFLOW_PATH: .github/workflows/gp001-product-execution-recovery.yml
+      GITHUB_TOKEN: ${{ github.token }}
+      TARGET_COMMIT: 3934a94a5eebf750079200589d6dc40e024d44a0
+      TARGET_TREE: 26d307afcbb3ce72b2911ca44936712c11558c4c
+      FROZEN_CONTRACT_SHA256: 74bd926bb2a105d5ac5efc71d56edd7889e86a7ecf29a9b54fb3ba4700d17bf4
+
     steps:
-      - run: |
-          echo 'Automatic execution recovery replay disabled.'
-          echo 'Attempted run: 33006665936.'
-          echo 'Inspect exact preserved artifacts and authority state before any further execution.'
+      - name: Checkout exact corrected Executor candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Arm exactly one intended recovery commit
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          subject="$(git log -1 --format=%s)"
+          if [ "$subject" = 'Execute first frozen product recovery once' ]; then
+            echo 'armed=true' >> "$GITHUB_OUTPUT"
+            echo 'RECOVERY_ARMED=true'
+          else
+            echo 'armed=false' >> "$GITHUB_OUTPUT"
+            echo 'RECOVERY_ARMED=false'
+          fi
+
+      - name: Set up Python
+        if: steps.guard.outputs.armed == 'true'
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Install exact product runtime
+        if: steps.guard.outputs.armed == 'true'
+        run: python -m pip install --no-deps .
+
+      - name: Download frozen pre-execution artifact
+        if: steps.guard.outputs.armed == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: 9620546156
+          path: prior
+          github-token: ${{ github.token }}
+          repository: FJ899/Executor
+          run-id: 33005980771
+
+      - name: Materialize exact frozen contract and validated proposal
+        if: steps.guard.outputs.armed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p run-output runs
+          frozen="$(find prior -type f -name frozen.json -print -quit)"
+          proposal="$(find prior -type f -name proposal.json -print -quit)"
+          test -n "$frozen"
+          test -n "$proposal"
+          cp "$frozen" run-output/frozen.json
+          cp "$proposal" run-output/proposal.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          frozen=json.loads(Path('run-output/frozen.json').read_text(encoding='utf-8'))
+          proposal=json.loads(Path('run-output/proposal.json').read_text(encoding='utf-8'))
+          if frozen.get('status') != 'AUTHORIZED_AND_FROZEN':
+              raise SystemExit('frozen authority is not AUTHORIZED_AND_FROZEN')
+          if frozen.get('contract_sha256') != '74bd926bb2a105d5ac5efc71d56edd7889e86a7ecf29a9b54fb3ba4700d17bf4':
+              raise SystemExit('frozen contract identity mismatch')
+          if proposal.get('contract_sha256') != frozen.get('contract_sha256'):
+              raise SystemExit('proposal is not bound to frozen contract')
+          print('FROZEN_CONTRACT_SHA256=' + frozen['contract_sha256'])
+          PY
+
+      - name: Checkout exact frozen target source
+        if: steps.guard.outputs.armed == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/executor-pilot-target
+          ref: ${{ env.TARGET_COMMIT }}
+          path: target
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify target commit tree and clean state
+        if: steps.guard.outputs.armed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C target rev-parse HEAD)" = "$TARGET_COMMIT"
+          test "$(git -C target rev-parse 'HEAD^{tree}')" = "$TARGET_TREE"
+          test -z "$(git -C target status --porcelain)"
+
+      - name: Resolve immutable sandbox image
+        if: steps.guard.outputs.armed == 'true'
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull python:3.11-slim
+          image="$(docker image inspect --format='{{.Id}}' python:3.11-slim)"
+          case "$image" in
+            sha256:????????????????????????????????????????????????????????????????) ;;
+            *) echo "unexpected image identity: $image" >&2; exit 1 ;;
+          esac
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Execute exact bounded pilot once under existing frozen Human authority
+        if: steps.guard.outputs.armed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          creative-os-product execute \
+            --frozen run-output/frozen.json \
+            --proposal run-output/proposal.json \
+            --profile trust_profiles/github-product-gp001.json \
+            --ledger "${RUNNER_TEMP}/product-execution-authority.sqlite3" \
+            --workspace target \
+            --runs-root runs \
+            --run-id "gp001-product-recovery-${GITHUB_RUN_ID}" \
+            --image "${{ steps.image.outputs.image }}" \
+            --executor-root . \
+            --executor-commit "$(git rev-parse HEAD)" \
+            > run-output/pilot-report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          value=json.loads(Path('run-output/pilot-report.json').read_text(encoding='utf-8'))
+          if value.get('status') != 'ACTION_COMPLETED_REVIEW_REQUIRED':
+              raise SystemExit(f"execution did not reach review-required success: {value}")
+          if value.get('repository') != 'FJ899/executor-pilot-target':
+              raise SystemExit('pilot report repository mismatch')
+          if value.get('human_review_required') is not True or value.get('merge_allowed') is not False:
+              raise SystemExit('review/merge boundary mismatch')
+          print('PILOT_STATUS=' + value['status'])
+          print('PILOT_REPORT=' + str(value.get('report_path','')))
+          print('AUTHORITY_RESULT_SHA256=' + value['authority_consumption']['result_sha256'])
+          PY
+          git -C target diff --binary > run-output/pilot.patch
+          test -s run-output/pilot.patch
+
+      - name: Verify no target publication was attempted
+        if: steps.guard.outputs.armed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e run-output/draft-pr-publication.json
+          echo 'TARGET_PROVIDER_WRITE_ATTEMPTED=false'
+
+      - name: Preserve exact execution recovery evidence
+        if: ${{ always() && steps.guard.outputs.armed == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gp001-product-execution-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            run-output
+            runs
+          if-no-files-found: warn
+          retention-days: 30
