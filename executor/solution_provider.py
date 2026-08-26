@@ -41,6 +41,30 @@ class SolutionGenerator(Protocol):
 
 
 @dataclass(frozen=True)
+class VerifiedGenerationEvidence:
+    """Independent provider evidence for one exact generation response."""
+
+    evidence_ref: str
+    provider: str
+    model: str
+    generated_at: str
+    frozen_contract_sha256: str
+    repository: str
+    commit: str
+    tree: str
+    context_sha256: str
+    prompt_sha256: str
+    response_sha256: str
+    verification_method: str
+
+
+class SolutionGenerationVerifier(Protocol):
+    """Resolve immutable generation evidence independently of generator output."""
+
+    def verify(self, evidence_ref: str) -> VerifiedGenerationEvidence: ...
+
+
+@dataclass(frozen=True)
 class SolutionSourceFile:
     path: str
     sha256: str
@@ -85,23 +109,23 @@ class SolutionProviderResult:
     model: str
     context_sha256: str
     prompt_sha256: str
+    generation_evidence_ref: str
+    generation_response_sha256: str
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "schema_version": "executor-solution-provider-result/1.0",
+            "schema_version": "executor-solution-provider-result/1.1",
             "status": "VALIDATED_SOLUTION_PROPOSAL",
             "provider": self.provider,
             "model": self.model,
             "context_sha256": self.context_sha256,
             "prompt_sha256": self.prompt_sha256,
+            "generation_evidence_ref": self.generation_evidence_ref,
+            "generation_response_sha256": self.generation_response_sha256,
             "proposal_sha256": self.validated.payload_sha256,
             "effect_capability": "NONE",
             "proposal": copy.deepcopy(self.proposal),
         }
-
-
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _sha256_json(value: Any) -> str:
@@ -127,9 +151,26 @@ def _git(root: Path, *args: str) -> str:
     return completed.stdout.strip()
 
 
-def _timestamp(value: datetime) -> str:
-    normalized = value.astimezone(timezone.utc)
-    return normalized.isoformat(timespec="microseconds").replace("+00:00", "Z")
+def _parse_utc(value: Any, *, label: str) -> datetime:
+    if not isinstance(value, str) or not value.endswith("Z"):
+        raise SolutionProviderError(f"{label} must be RFC3339 UTC")
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError as exc:
+        raise SolutionProviderError(f"{label} is invalid") from exc
+    if parsed.utcoffset() is None or parsed.utcoffset().total_seconds() != 0:
+        raise SolutionProviderError(f"{label} must be UTC")
+    return parsed.astimezone(timezone.utc)
+
+
+def _require_sha256(value: Any, *, label: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise SolutionProviderError(f"{label} must be lowercase SHA-256")
+    return value
 
 
 def _validated_contract(frozen_result: dict[str, Any]) -> tuple[dict[str, Any], str]:
@@ -241,18 +282,20 @@ def _build_prompt(
     context: SolutionSourceContext,
 ) -> dict[str, Any]:
     return {
-        "schema_version": "executor-solution-provider-prompt/1.0",
+        "schema_version": "executor-solution-provider-prompt/1.1",
         "instruction": (
             "Propose the smallest code replacement that satisfies the frozen task. "
-            "Do not expand scope, weaken protected material, or claim effect authority."
+            "Do not expand scope, weaken protected material, or claim effect authority. "
+            "The adapter must return an immutable provider generation evidence_ref for "
+            "this exact response; stale or cross-invocation evidence is invalid."
         ),
         "frozen_contract_sha256": context.frozen_contract_sha256,
         "target": copy.deepcopy(contract["target"]),
         "task": copy.deepcopy(contract["task"]),
         "source_context": context.to_dict(),
         "output_contract": {
-            "schema_version": "executor-solution-generation/1.0",
-            "fields": ["mutations", "rationale"],
+            "schema_version": "executor-solution-generation/1.1",
+            "fields": ["evidence_ref", "mutations", "rationale"],
             "mutation_fields": ["path", "replacement_text"],
             "effect_capability": "NONE",
         },
@@ -264,12 +307,15 @@ def _normalize_generation(
     *,
     context: SolutionSourceContext,
     contract: dict[str, Any],
-) -> tuple[list[dict[str, str]], str]:
-    expected = {"schema_version", "mutations", "rationale"}
+) -> tuple[list[dict[str, str]], str, str, str]:
+    expected = {"schema_version", "evidence_ref", "mutations", "rationale"}
     if not isinstance(generation, dict) or set(generation) != expected:
         raise SolutionProviderError("solution generator returned invalid fields")
-    if generation.get("schema_version") != "executor-solution-generation/1.0":
+    if generation.get("schema_version") != "executor-solution-generation/1.1":
         raise SolutionProviderError("solution generator schema is invalid")
+    evidence_ref = generation.get("evidence_ref")
+    if not isinstance(evidence_ref, str) or not evidence_ref.strip():
+        raise SolutionProviderError("solution generator evidence_ref is required")
     rationale = generation.get("rationale")
     if not isinstance(rationale, str) or not rationale.strip():
         raise SolutionProviderError("solution generator rationale is required")
@@ -280,6 +326,13 @@ def _normalize_generation(
         raise SolutionProviderError("frozen production-file bound is invalid")
     if not isinstance(raw_mutations, list) or not 1 <= len(raw_mutations) <= maximum:
         raise SolutionProviderError("solution generator exceeds the frozen file bound")
+
+    response_payload = {
+        "schema_version": generation["schema_version"],
+        "mutations": copy.deepcopy(raw_mutations),
+        "rationale": rationale,
+    }
+    response_sha256 = _sha256_json(response_payload)
 
     source_by_path = {item.path: item for item in context.files}
     normalized: list[dict[str, str]] = []
@@ -320,14 +373,64 @@ def _normalize_generation(
                 ).hexdigest(),
             }
         )
-    return normalized, rationale.strip()
+    return normalized, rationale.strip(), evidence_ref.strip(), response_sha256
+
+
+def _validate_generation_evidence(
+    evidence: Any,
+    *,
+    evidence_ref: str,
+    response_sha256: str,
+    provider: str,
+    model: str,
+    contract: dict[str, Any],
+    contract_sha256: str,
+    context: SolutionSourceContext,
+    prompt_sha256: str,
+) -> VerifiedGenerationEvidence:
+    if not isinstance(evidence, VerifiedGenerationEvidence):
+        raise SolutionProviderError("generation verifier returned invalid evidence")
+    if evidence.evidence_ref != evidence_ref:
+        raise SolutionProviderError("generation evidence reference mismatch")
+    if evidence.provider != provider or evidence.model != model:
+        raise SolutionProviderError("generation evidence producer mismatch")
+    if evidence.frozen_contract_sha256 != contract_sha256:
+        raise SolutionProviderError("generation evidence frozen contract mismatch")
+    if (
+        evidence.repository != context.repository
+        or evidence.commit != context.commit
+        or evidence.tree != context.tree
+    ):
+        raise SolutionProviderError("generation evidence source mismatch")
+    if evidence.context_sha256 != context.context_sha256:
+        raise SolutionProviderError("generation evidence context mismatch")
+    if evidence.prompt_sha256 != prompt_sha256:
+        raise SolutionProviderError("generation evidence prompt mismatch")
+    if _require_sha256(evidence.response_sha256, label="generation response hash") != response_sha256:
+        raise SolutionProviderError("generation evidence response hash mismatch")
+    if not isinstance(evidence.verification_method, str) or not evidence.verification_method.strip():
+        raise SolutionProviderError("generation verification method is required")
+
+    generated_at = _parse_utc(evidence.generated_at, label="generation evidence generated_at")
+    snapshot = contract.get("authority_snapshot")
+    if not isinstance(snapshot, dict):
+        raise SolutionProviderError("frozen authority snapshot is missing")
+    frozen_at = _parse_utc(snapshot.get("verified_at"), label="authority snapshot verified_at")
+    if generated_at <= frozen_at:
+        raise SolutionProviderError("verified generation does not postdate frozen contract")
+    return evidence
 
 
 class SolutionProvider:
-    """Bind external intelligence to one exact frozen, effect-free solution proposal."""
+    """Bind independently verified external intelligence to one exact frozen proposal."""
 
-    def __init__(self, generator: SolutionGenerator) -> None:
+    def __init__(
+        self,
+        generator: SolutionGenerator,
+        generation_verifier: SolutionGenerationVerifier,
+    ) -> None:
         self._generator = generator
+        self._generation_verifier = generation_verifier
         provider = getattr(generator, "provider", None)
         model = getattr(generator, "model", None)
         if not isinstance(provider, str) or not provider.strip():
@@ -354,17 +457,33 @@ class SolutionProvider:
             generation = self._generator.generate(copy.deepcopy(prompt))
         except Exception as exc:  # adapter failure is data-plane failure, never authority
             raise SolutionProviderError(f"solution generator failed: {exc}") from exc
-        mutations, rationale = _normalize_generation(
+        mutations, rationale, evidence_ref, response_sha256 = _normalize_generation(
             generation,
             context=context,
             contract=contract,
+        )
+        try:
+            raw_evidence = self._generation_verifier.verify(evidence_ref)
+        except Exception as exc:
+            raise SolutionProviderError(f"generation evidence verification failed: {exc}") from exc
+        verified_generation = _validate_generation_evidence(
+            raw_evidence,
+            evidence_ref=evidence_ref,
+            response_sha256=response_sha256,
+            provider=self.provider,
+            model=self.model,
+            contract=contract,
+            contract_sha256=contract_sha256,
+            context=context,
+            prompt_sha256=prompt_sha256,
         )
 
         generation_binding = {
             "frozen_contract_sha256": contract_sha256,
             "context_sha256": context.context_sha256,
             "prompt_sha256": prompt_sha256,
-            "generation": copy.deepcopy(generation),
+            "generation_evidence_ref": verified_generation.evidence_ref,
+            "generation_response_sha256": verified_generation.response_sha256,
         }
         proposal_id = f"proposal-{_sha256_json(generation_binding)[:24]}"
         task = contract["task"]
@@ -384,25 +503,28 @@ class SolutionProvider:
         }
         request_evidence = contract["request_evidence"]
         provenance = {
-            "schema_version": "executor-solution-provenance/1.1",
+            "schema_version": "executor-solution-provenance/1.2",
             "producer_role": "EXTERNAL_INTELLIGENCE",
-            "provider": self.provider,
-            "model": self.model,
-            "generated_at": _timestamp(_utc_now()),
+            "provider": verified_generation.provider,
+            "model": verified_generation.model,
+            "generated_at": verified_generation.generated_at,
             "request": {
                 "repository": request_evidence["repository"],
                 "issue_number": request_evidence["issue_number"],
                 "issue_node_id": request_evidence["issue_node_id"],
                 "body_sha256": request_evidence["body_sha256"],
             },
-            "frozen_contract_sha256": contract_sha256,
+            "frozen_contract_sha256": verified_generation.frozen_contract_sha256,
             "source": {
-                "repository": context.repository,
-                "commit": context.commit,
-                "tree": context.tree,
+                "repository": verified_generation.repository,
+                "commit": verified_generation.commit,
+                "tree": verified_generation.tree,
             },
-            "context_sha256": context.context_sha256,
-            "prompt_sha256": prompt_sha256,
+            "context_sha256": verified_generation.context_sha256,
+            "prompt_sha256": verified_generation.prompt_sha256,
+            "generation_evidence_ref": verified_generation.evidence_ref,
+            "generation_response_sha256": verified_generation.response_sha256,
+            "generation_verification_method": verified_generation.verification_method,
             "human_solution_edits": 0,
             "effect_capability": "NONE",
             "derivation": "GENERATED_AFTER_FROZEN_CONTRACT",
@@ -427,4 +549,6 @@ class SolutionProvider:
             model=self.model,
             context_sha256=context.context_sha256,
             prompt_sha256=prompt_sha256,
+            generation_evidence_ref=verified_generation.evidence_ref,
+            generation_response_sha256=verified_generation.response_sha256,
         )
