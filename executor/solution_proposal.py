@@ -161,6 +161,8 @@ def _validate_provenance(
         "source",
         "context_sha256",
         "prompt_sha256",
+        "generation_challenge_sha256",
+        "generation_challenge_issued_at",
         "generation_evidence_ref",
         "generation_response_sha256",
         "generation_verification_method",
@@ -171,7 +173,7 @@ def _validate_provenance(
     }
     if not isinstance(value, dict) or set(value) != expected:
         raise SolutionProposalError("solution provenance has invalid fields")
-    if value.get("schema_version") != "executor-solution-provenance/1.2":
+    if value.get("schema_version") != "executor-solution-provenance/1.3":
         raise SolutionProposalError("solution provenance schema is invalid")
     if value.get("producer_role") != "EXTERNAL_INTELLIGENCE":
         raise SolutionProposalError("solution must be produced by external intelligence")
@@ -183,8 +185,8 @@ def _validate_provenance(
         raise SolutionProposalError("human solution edits must be zero")
     if value.get("effect_capability") != "NONE":
         raise SolutionProposalError("solution producer must have no effect capability")
-    if value.get("derivation") != "GENERATED_AFTER_FROZEN_CONTRACT":
-        raise SolutionProposalError("solution provenance must be generated after freeze")
+    if value.get("derivation") != "GENERATED_AFTER_POST_FREEZE_CHALLENGE":
+        raise SolutionProposalError("solution provenance must derive from post-freeze challenge")
     if value.get("historical_candidate_relation") not in {
         "SAME_FIX_REDERIVED",
         "NEW_FIX",
@@ -196,11 +198,14 @@ def _validate_provenance(
         raise SolutionProposalError("solution provenance frozen contract binding mismatch")
     context_sha = value.get("context_sha256")
     prompt_sha = value.get("prompt_sha256")
+    challenge_sha = value.get("generation_challenge_sha256")
     response_sha = value.get("generation_response_sha256")
     if not isinstance(context_sha, str) or _SHA256.fullmatch(context_sha) is None:
         raise SolutionProposalError("solution provenance context hash is invalid")
     if not isinstance(prompt_sha, str) or _SHA256.fullmatch(prompt_sha) is None:
         raise SolutionProposalError("solution provenance prompt hash is invalid")
+    if not isinstance(challenge_sha, str) or _SHA256.fullmatch(challenge_sha) is None:
+        raise SolutionProposalError("solution provenance generation challenge hash is invalid")
     if not isinstance(response_sha, str) or _SHA256.fullmatch(response_sha) is None:
         raise SolutionProposalError("solution provenance generation response hash is invalid")
     evidence_ref = value.get("generation_evidence_ref")
@@ -231,6 +236,10 @@ def _validate_provenance(
         raise SolutionProposalError("solution provenance source binding mismatch")
 
     generated = _parse_utc(value.get("generated_at"), label="provenance.generated_at")
+    challenge_issued = _parse_utc(
+        value.get("generation_challenge_issued_at"),
+        label="provenance.generation_challenge_issued_at",
+    )
     request_created = _parse_utc(
         request_evidence.get("created_at"), label="request_evidence.created_at"
     )
@@ -239,11 +248,17 @@ def _validate_provenance(
     snapshot = contract.get("authority_snapshot")
     if not isinstance(snapshot, dict):
         raise SolutionProposalError("frozen authority snapshot is missing from solution input")
-    frozen_at = _parse_utc(
+    live_verified_at = _parse_utc(
         snapshot.get("verified_at"), label="authority_snapshot.verified_at"
     )
-    if generated <= frozen_at:
-        raise SolutionProposalError("solution provenance does not postdate the frozen contract")
+    if challenge_issued <= live_verified_at:
+        raise SolutionProposalError(
+            "solution generation challenge does not postdate final live verification"
+        )
+    if generated <= challenge_issued:
+        raise SolutionProposalError(
+            "solution provenance does not postdate post-freeze generation challenge"
+        )
 
     normalized = copy.deepcopy(value)
     sha = hashlib.sha256(canonical_json(normalized).encode("utf-8")).hexdigest()
