@@ -1,4 +1,4 @@
-name: One-shot refine frozen product transport validator
+name: One-shot minimal product CLI serializer fix
 
 on:
   push:
@@ -11,9 +11,9 @@ permissions:
   contents: write
 
 jobs:
-  patch-product-branch:
+  patch-product-cli:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 10
     steps:
       - name: Checkout current product branch
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -23,35 +23,52 @@ jobs:
           fetch-depth: 0
           token: ${{ github.token }}
 
-      - name: Assert exact current validator blob
-        shell: bash
-        run: test "$(git rev-parse HEAD:executor/frozen_pilot_authority.py)" = 'd69ff642532c654c7acac7f640ab3351d285d891'
-
-      - name: Fetch and apply exact detector refinement
+      - name: Restore exact pre-serializer file and apply minimal reorder
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL 'https://raw.githubusercontent.com/FJ899/Executor/10e873add68009bf3c0e79fb9d9d67b36238a072/tools/refine_frozen_transport_mode_detection.py' -o "${RUNNER_TEMP}/patch.py"
-          python "${RUNNER_TEMP}/patch.py"
+          git checkout fda645f0b8a294297f0a32782c596a29e5db0a53 -- executor/product_cli.py
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('executor/product_cli.py')
+          s=p.read_text(encoding='utf-8')
+          old='''def _json_default(value: object) -> object:\n    to_dict = getattr(value, "to_dict", None)\n    if callable(to_dict):\n        return to_dict()\n    if dataclasses.is_dataclass(value):\n'''
+          new='''def _json_default(value: object) -> object:\n    if dataclasses.is_dataclass(value):\n'''
+          if s.count(old)!=1: raise SystemExit('expected serializer prefix not found exactly once')
+          s=s.replace(old,new,1)
+          needle='''            if not field.name.startswith("_")\n        }\n    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")\n'''
+          replacement='''            if not field.name.startswith("_")\n        }\n    to_dict = getattr(value, "to_dict", None)\n    if callable(to_dict):\n        return to_dict()\n    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")\n'''
+          if s.count(needle)!=1: raise SystemExit('expected serializer suffix not found exactly once')
+          p.write_text(s.replace(needle,replacement,1),encoding='utf-8')
+          PY
 
-      - name: Run affected frozen authority regression suites
-        shell: bash
-        run: |
-          python -m unittest \
-            tests.test_frozen_product_transport_authority \
-            tests.test_product_system_transport_authority \
-            tests.test_product_authority_transport \
-            tests.test_pilot_runtime \
-            tests.test_revocation_cutoff \
-            -v
-
-      - name: Commit and push exact detector fix
+      - name: Prove diff is serializer-only and smoke nested proof sentinel
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
+          changed="$(git diff --unified=0 fda645f0b8a294297f0a32782c596a29e5db0a53 -- executor/product_cli.py)"
+          printf '%s\n' "$changed"
+          test "$(printf '%s\n' "$changed" | grep -c '^@@')" -eq 2
+          python - <<'PY'
+          import dataclasses,json
+          from executor.product_cli import _json_default
+          @dataclasses.dataclass
+          class Proof:
+              value: str
+              _proof: object = dataclasses.field(default_factory=object)
+              def to_dict(self): return {'value':self.value,'_proof':self._proof}
+          encoded=json.dumps({'x':Proof('ok')},default=_json_default)
+          if encoded != '{"x": {"value": "ok"}}': raise SystemExit(encoded)
+          print('SERIALIZER_SENTINEL_SMOKE=PASS')
+          PY
+
+      - name: Commit and push minimal fix
+        shell: bash
+        run: |
+          set -euo pipefail
           git config user.name FJ8
           git config user.email frommjenny899@gmail.com
-          git add executor/frozen_pilot_authority.py
-          git commit -m 'Detect Formation transport only from explicit markers'
+          git add executor/product_cli.py
+          git commit -m 'Serialize proof dataclasses before public to_dict'
           git push origin HEAD:product/e2e-formation-provider-draft-pr
