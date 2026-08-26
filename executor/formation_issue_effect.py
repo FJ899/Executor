@@ -185,8 +185,8 @@ class FormationRequestPublisher:
         issue_payload = {
             "schema_version": "executor-formation-authority-issue/1.0",
             "title": f"Executor authority request: {payload['request_id']}",
-            # The body is EXACTLY the existing GitHub request object consumed by
-            # verify_github_request. No human or CLI transformation is permitted.
+            # Body transport is byte-semantically derived from the formation payload.
+            # The issue itself is NOT human authority; only a later verified decision is.
             "body": canonical_json(payload),
         }
         gateway.bind_effect_payload(issue_payload)
@@ -205,15 +205,34 @@ class FormationRequestPublisher:
             evidence_directory=self.evidence_directory,
             ledger=self.ledger,
         ).execute(gateway)
+        completed = result.get("status") in {
+            "EFFECT_COMPLETED_AND_OBSERVED",
+            "RECOVERED_EXTERNAL_EFFECT",
+        }
+        transport = {
+            "origin": "FORMATION_PUBLISHED_REQUEST",
+            "authority": False,
+            "publisher": "EXECUTOR_FORMATION",
+            "provider": "GITHUB",
+            "action_kind": "CREATE_ISSUE",
+            "target": gateway.repository,
+            "object_id": result.get("object_id"),
+            "object_url": result.get("object_url"),
+            "effect_sha256": result.get("effect_sha256"),
+            "observation_ref": result.get("observation_ref"),
+            "human_decision_required": True,
+        }
         return {
-            "schema_version": "executor-formation-publication-result/1.0",
+            "schema_version": "executor-formation-publication-result/1.1",
             "status": (
                 "AWAITING_VERIFIED_HUMAN_DECISION"
-                if result.get("status") in {"EFFECT_COMPLETED_AND_OBSERVED", "RECOVERED_EXTERNAL_EFFECT"}
+                if completed
                 else "FORMATION_PUBLICATION_INCOMPLETE"
             ),
+            "canonical_contract_request": canonical,
             "formation_binding": binding,
             "github_request_payload": payload,
+            "request_transport_provenance": transport,
             "publication_effect": result,
             "manual_request_rewrite_required": False,
             "executable": False,
