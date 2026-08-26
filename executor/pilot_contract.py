@@ -83,6 +83,67 @@ def build_pilot_draft(request: VerifiedGitHubRequest) -> dict[str, Any]:
     }
 
 
+def _validate_formation_binding(
+    binding: dict[str, Any],
+    *,
+    authority_draft_sha256: str,
+    request_payload: dict[str, Any],
+    request_id: str,
+) -> None:
+    if binding.get("schema_version") != "executor-contract-formation-binding/1.0":
+        raise PilotContractError("formation binding schema is missing or unsupported")
+
+    draft = binding.get("draft")
+    if not isinstance(draft, dict):
+        raise PilotContractError("formation binding draft is missing")
+    computed_draft_sha256 = hashlib.sha256(
+        canonical_json(draft).encode("utf-8")
+    ).hexdigest()
+    if computed_draft_sha256 != authority_draft_sha256:
+        raise PilotContractError("formation binding draft content hash mismatch")
+    if binding.get("draft_sha256") != authority_draft_sha256:
+        raise PilotContractError("formation binding draft hash mismatch")
+
+    if binding.get("request_id") != request_id or draft.get("request_id") != request_id:
+        raise PilotContractError("formation binding request id mismatch")
+    if binding.get("authority_request_payload") != request_payload:
+        raise PilotContractError("formation binding request payload mismatch")
+    expected_request_sha256 = hashlib.sha256(
+        canonical_json(request_payload).encode("utf-8")
+    ).hexdigest()
+    if binding.get("authority_request_payload_sha256") != expected_request_sha256:
+        raise PilotContractError("formation binding request payload hash mismatch")
+
+    expected_pairs = (
+        ("executor_repository", "executor_repository"),
+        ("executor_commit", "executor_commit"),
+        ("formation_profile_sha256", "profile_sha256"),
+        ("canonical_task_sha256", "canonical_task_sha256"),
+        ("draft_version", "draft_version"),
+        ("supersedes_draft_sha256", "supersedes_draft_sha256"),
+    )
+    for binding_key, draft_key in expected_pairs:
+        if binding.get(binding_key) != draft.get(draft_key):
+            raise PilotContractError(
+                f"formation binding {binding_key} differs from hashed formation draft"
+            )
+    if binding.get("formation_profile") != draft.get("profile_id"):
+        raise PilotContractError(
+            "formation binding profile identity differs from hashed formation draft"
+        )
+
+    invalidated = binding.get("invalidated_draft_sha256s")
+    if not isinstance(invalidated, list) or not all(
+        isinstance(item, str) and len(item) == 64 for item in invalidated
+    ):
+        raise PilotContractError("formation invalidated draft set is malformed")
+    supersedes = binding.get("supersedes_draft_sha256")
+    if supersedes is not None and supersedes not in invalidated:
+        raise PilotContractError(
+            "formation superseded draft is not recorded as invalidated"
+        )
+
+
 def apply_github_decision(
     *,
     draft: dict[str, Any],
@@ -96,12 +157,22 @@ def apply_github_decision(
 ) -> dict[str, Any]:
     """Final-live verify and consume one exact GitHub contract decision.
 
-    By default the authority-bearing draft is the canonical pilot draft, which
-    preserves the existing P4 behavior. Contract formation may instead supply
-    ``authority_draft_sha256`` so the same final-live GitHub boundary freezes an
-    independently governed formation draft. The provider request still has to
-    reproduce the exact pilot target/task projection at the revocation cutoff.
+    Existing P4 callers keep the canonical pilot draft as the authority-bearing
+    identity. Contract formation may use a different governed draft hash only
+    when the exact generated provider request and complete formation binding are
+    supplied together and independently validated before authority consumption.
     """
+
+    formation_values = (
+        authority_draft_sha256,
+        expected_request_payload,
+        formation_binding,
+    )
+    formation_mode = any(value is not None for value in formation_values)
+    if formation_mode and not all(value is not None for value in formation_values):
+        raise PilotContractError(
+            "formation authority override requires draft hash, request payload and binding"
+        )
 
     current = _utc_now().astimezone(timezone.utc)
     recording = RecordingGitHubSource(source)
@@ -111,33 +182,38 @@ def apply_github_decision(
         issue_number=decision.issue_number,
         now=current,
     )
-    if expected_request_payload is not None and final_request.payload != expected_request_payload:
-        raise PilotContractError(
-            "GitHub request payload differs from the governed formation export"
-        )
 
     final_draft = build_pilot_draft(final_request)
     pilot_draft_hash = pilot_draft_sha256(final_draft)
     if pilot_draft_hash != pilot_draft_sha256(draft):
         raise PilotContractError("GitHub request changed before final live verification")
 
-    authority_hash = (
-        pilot_draft_hash
-        if authority_draft_sha256 is None
-        else _require_sha256(authority_draft_sha256, label="authority_draft_sha256")
-    )
-    if decision.draft_sha256 != authority_hash:
-        raise PilotContractError("reviewed GitHub decision is bound to a different authority draft")
-
-    if formation_binding is not None:
+    if formation_mode:
+        if not isinstance(expected_request_payload, dict):
+            raise PilotContractError("formation expected request payload must be an object")
+        if final_request.payload != expected_request_payload:
+            raise PilotContractError(
+                "GitHub request payload differs from the governed formation export"
+            )
+        authority_hash = _require_sha256(
+            authority_draft_sha256,
+            label="authority_draft_sha256",
+        )
         if not isinstance(formation_binding, dict):
-            raise PilotContractError("formation_binding must be an object")
-        if formation_binding.get("draft_sha256") != authority_hash:
-            raise PilotContractError("formation binding draft hash mismatch")
-        if formation_binding.get("request_id") != final_draft.get("request_id"):
-            raise PilotContractError("formation binding request id mismatch")
-        if formation_binding.get("authority_request_payload") != final_request.payload:
-            raise PilotContractError("formation binding request payload mismatch")
+            raise PilotContractError("formation binding must be an object")
+        _validate_formation_binding(
+            formation_binding,
+            authority_draft_sha256=authority_hash,
+            request_payload=final_request.payload,
+            request_id=str(final_draft.get("request_id", "")),
+        )
+    else:
+        authority_hash = pilot_draft_hash
+
+    if decision.draft_sha256 != authority_hash:
+        raise PilotContractError(
+            "reviewed GitHub decision is bound to a different authority draft"
+        )
 
     final_decision = verify_github_decision(
         recording,
@@ -209,7 +285,7 @@ def apply_github_decision(
             "status": "AUTHORIZED_AND_FROZEN",
             "executable": True,
         }
-        if formation_binding is not None:
+        if formation_mode:
             contract["formation_binding"] = copy.deepcopy(formation_binding)
         contract_sha256 = hashlib.sha256(
             canonical_json(contract).encode("utf-8")
