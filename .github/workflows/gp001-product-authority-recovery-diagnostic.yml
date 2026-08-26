@@ -11,36 +11,33 @@ permissions:
   actions: read
 
 jobs:
-  inspect-post-human-pilot-failure:
+  inspect-product-execution-recovery:
     if: github.repository == 'FJ899/Executor' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Download failed post-human artifact
+      - name: Download failed product execution recovery artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          artifact-ids: 9620546156
+          artifact-ids: 9620813685
           path: diagnostic
           github-token: ${{ github.token }}
           repository: FJ899/Executor
-          run-id: 33005980771
+          run-id: 33006665936
 
-      - name: Print bounded pilot failure artifacts
+      - name: Print exact bounded execution state
         shell: bash
         run: |
           set -euo pipefail
-          find diagnostic -type f -maxdepth 8 -print | sort
+          find diagnostic -type f -maxdepth 10 -print | sort
           echo '--- pilot-report.json ---'
           report="$(find diagnostic -type f -name pilot-report.json -print -quit)"
           test -n "$report"
           cat "$report"
           echo
-          echo '--- frozen status ---'
-          frozen="$(find diagnostic -type f -name frozen.json -print -quit)"
-          test -n "$frozen"
-          python - "$frozen" <<'PY'
-          import json,sys
-          value=json.load(open(sys.argv[1]))
-          print(value.get('status'))
-          print(value.get('contract_sha256'))
-          PY
+          echo '--- persisted runtime JSON ---'
+          for f in $(find diagnostic -type f -path '*runs*' -name '*.json' -print | sort); do
+            echo "### $f"
+            cat "$f"
+            echo
+          done
