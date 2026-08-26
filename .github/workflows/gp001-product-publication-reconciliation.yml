@@ -1,128 +1,55 @@
-name: GP001 product publication reconciliation
+name: GP001 ACCEPT-002 freeze diagnostic
 
 on:
   pull_request:
     branches: [main]
     paths:
       - .github/workflows/gp001-product-publication-reconciliation.yml
-      - governance/WORKFLOW_CLASSIFICATION.json
 
 permissions:
   contents: read
   actions: read
 
 jobs:
-  reconcile-publication:
+  diagnose-freeze:
     if: github.repository == 'FJ899/Executor' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    env:
-      EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: FJ899/Executor
-      EXECUTOR_GITHUB_EFFECT_TOKEN: ${{ secrets.EXECUTOR_GITHUB_EFFECT_TOKEN }}
-      PUBLICATION_RUN_ID: 33011126247
-      PUBLICATION_ARTIFACT_ID: 9622552745
-      CONTRACT_SHA256: 74bd926bb2a105d5ac5efc71d56edd7889e86a7ecf29a9b54fb3ba4700d17bf4
-
+    timeout-minutes: 5
     steps:
       - name: Checkout exact diagnostic candidate
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
           persist-credentials: false
 
-      - name: Download failed publication evidence
+      - name: Download ACCEPT-002 failed freeze evidence
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          artifact-ids: ${{ env.PUBLICATION_ARTIFACT_ID }}
-          path: failed-publication
+          artifact-ids: 9623244092
+          path: failed-freeze
           github-token: ${{ github.token }}
           repository: FJ899/Executor
-          run-id: ${{ env.PUBLICATION_RUN_ID }}
+          run-id: 33012855792
 
-      - name: Inspect publication artifact without mutation
+      - name: Inspect freeze result without mutation
         shell: bash
         run: |
           set -euo pipefail
           echo '=== FILES ==='
-          find failed-publication -type f -print | sort
-          result="$(find failed-publication -type f -name publication-result.json -print -quit)"
-          if [ -n "$result" ]; then
-            echo '=== PUBLICATION RESULT ==='
-            cat "$result"
-          else
-            echo 'PUBLICATION_RESULT_MISSING=true'
-          fi
-          echo '=== EFFECT EVIDENCE ==='
-          find failed-publication -type f \( -path '*/effect-evidence/*' -o -name '*effect*' -o -name '*attempt*' -o -name '*observation*' \) -print | sort | while read -r f; do
-            echo "--- $f"
-            cat "$f" || true
-          done
-
-      - name: Reconcile global authority refs and target provider state
-        shell: bash
-        env:
-          GLOBAL_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import hashlib, json, os, pathlib, urllib.parse, urllib.request, urllib.error
-
-          contract=os.environ['CONTRACT_SHA256']
-          global_token=os.environ['GLOBAL_TOKEN']
-          effect_token=os.environ['EXECUTOR_GITHUB_EFFECT_TOKEN']
-          authority_repo='FJ899/Executor'
-          target_repo='FJ899/executor-pilot-target'
-
-          def request(url, token):
-              req=urllib.request.Request(url, headers={
-                  'Accept':'application/vnd.github+json',
-                  'Authorization':f'Bearer {token}',
-                  'X-GitHub-Api-Version':'2022-11-28',
-                  'User-Agent':'executor-read-only-reconciliation/1.0',
-              })
-              try:
-                  with urllib.request.urlopen(req, timeout=15) as r:
-                      return r.status, json.loads(r.read().decode('utf-8'))
-              except urllib.error.HTTPError as e:
-                  body=e.read().decode('utf-8', errors='replace')
-                  return e.code, {'error': body[:500]}
-
-          keys={
-              'PUSH_DRAFT_BRANCH': f'draft-pr:{contract}:PUSH_DRAFT_BRANCH',
-              'CREATE_DRAFT_PR': f'draft-pr:{contract}:CREATE_DRAFT_PR',
-          }
-          for label,key in keys.items():
-              digest=hashlib.sha256(key.encode('utf-8')).hexdigest()
-              ref=f'heads/executor-authority/{digest}'
-              status,value=request(f'https://api.github.com/repos/{authority_repo}/git/ref/{urllib.parse.quote(ref, safe="/")}', global_token)
-              print(f'{label}_AUTHORITY_REF_HTTP={status}')
-              if status == 200:
-                  sha=((value.get('object') or {}).get('sha'))
-                  print(f'{label}_AUTHORITY_REF_SHA={sha}')
-                  cstatus,commit=request(f'https://api.github.com/repos/{authority_repo}/git/commits/{sha}', global_token)
-                  print(f'{label}_AUTHORITY_COMMIT_HTTP={cstatus}')
-                  print(f'{label}_AUTHORITY_MESSAGE={json.dumps(commit.get("message"), ensure_ascii=False)}')
-
-          report_path=next(pathlib.Path('failed-publication').rglob('pilot-report.json'))
-          report=json.loads(report_path.read_text(encoding='utf-8'))
-          req=report.get('draft_pr_request') or {}
-          head=req.get('head_branch')
-          title=req.get('title')
-          print(f'EXPECTED_HEAD={head}')
-          print(f'EXPECTED_TITLE={title}')
-          if isinstance(head,str) and head:
-              status,value=request(f'https://api.github.com/repos/{target_repo}/git/ref/{urllib.parse.quote("heads/"+head, safe="/")}', effect_token)
-              print(f'TARGET_HEAD_REF_HTTP={status}')
-              if status == 200:
-                  print(f'TARGET_HEAD_SHA={((value.get("object") or {}).get("sha"))}')
-              q=urllib.parse.urlencode({'state':'all','head':f'FJ899:{head}','base':'main','per_page':100})
-              pstatus,prs=request(f'https://api.github.com/repos/{target_repo}/pulls?{q}', effect_token)
-              print(f'TARGET_PR_LIST_HTTP={pstatus}')
-              if pstatus == 200 and isinstance(prs,list):
-                  matched=[p for p in prs if p.get('title')==title and p.get('head',{}).get('ref')==head]
-                  print('TARGET_MATCHING_PRS='+json.dumps([
-                      {'number':p.get('number'),'html_url':p.get('html_url'),'draft':p.get('draft'),'state':p.get('state')}
-                      for p in matched
-                  ], sort_keys=True))
+          find failed-freeze -type f -print | sort
+          frozen="$(find failed-freeze -type f -name frozen.json -print -quit)"
+          publication="$(find failed-freeze -type f -name publication.json -print -quit)"
+          test -n "$frozen"
+          test -n "$publication"
+          echo '=== FROZEN RESULT ==='
+          cat "$frozen"
+          echo '=== PUBLICATION BINDING ==='
+          python - "$publication" <<'PY'
+          import json,sys
+          v=json.load(open(sys.argv[1],encoding='utf-8'))
+          print(json.dumps({
+            'status':v.get('status'),
+            'object_id':(v.get('request_transport_provenance') or {}).get('object_id'),
+            'canonical_request_id':(v.get('canonical_contract_request') or {}).get('request_id')
+          },sort_keys=True))
           PY
