@@ -38,7 +38,7 @@ USER REQUEST
 
 `PilotRuntime` is the active product lifecycle engine.
 
-`RunStore` and its historical `PASS`/replay state machine are `LEGACY_GENERIC_COMPATIBILITY_ONLY`. The active product path MUST NOT use `RunStore.PASS` as a success signal.
+`RunStore` is `LEGACY_GENERIC_COMPATIBILITY_ONLY`. It is not a second product lifecycle engine and it no longer defines a `PASS` state. Historical records that contain the text `PASS` remain historical evidence only; they are not silently reinterpreted as current runtime state.
 
 Active state is factored into independent axes:
 
@@ -79,6 +79,14 @@ VERIFY
 ```
 
 Unknown write outcomes are never retried blindly. Timeout, provider 5xx, missing receipt, process interruption after the write, or incomplete observation require reconciliation before any new authority can be used.
+
+The current recovery model distinguishes these cases explicitly:
+
+- provider effect may have happened, receipt missing -> observe first; never repeat the write automatically;
+- provider/global result bound but local result unbound -> bind only the missing local result;
+- timeout or GitHub 5xx after send -> treat the outcome as ambiguous until fresh read-back;
+- restart between write and binding -> recover from the exact durable pre-write attempt and frozen effect hash; `external_write_repeated = false`;
+- complete provider absence -> the spent authority is not reused; any later attempt requires new authority.
 
 ## Publication authority keys
 
