@@ -284,8 +284,6 @@ def validate_frozen_pilot_authority(
     result_transport = frozen_result.get("request_transport_provenance")
     formation_transport_marked = any(
         (
-            contract.get("schema_version") == "executor-frozen-pilot-contract/1.2",
-            frozen_result.get("schema_version") == "executor-pilot-decision-result/1.2",
             contract_transport is not None,
             snapshot_transport is not None,
             result_transport is not None,
