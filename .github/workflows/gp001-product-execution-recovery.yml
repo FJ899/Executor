@@ -1,4 +1,4 @@
-name: GP001 ACCEPT-005 read-only execution inspection
+name: GP001 ACCEPT-005 read-only frozen/proposal recovery verification
 
 on:
   push:
@@ -12,10 +12,26 @@ permissions:
   actions: read
 
 jobs:
-  inspect:
+  verify-recovery-material:
     runs-on: ubuntu-24.04
+    timeout-minutes: 8
     steps:
-      - name: Download exact failed live E2E artifact
+      - name: Checkout exact accepted runtime base
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/Executor
+          ref: 28d631cf35892b0c0df62c9f20ed2b5f7c696015
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Install exact runtime
+        run: python -m pip install --no-deps .
+
+      - name: Download exact globally-bound freeze artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           artifact-ids: 9626679416
@@ -24,26 +40,43 @@ jobs:
           repository: FJ899/Executor
           run-id: 33021461283
 
-      - name: Inspect execution result read only
+      - name: Verify frozen result hash and construct canonical proposal read only
         shell: bash
         run: |
           set -euo pipefail
-          echo 'WRITE_CAPABILITY=false'
-          find evidence -maxdepth 5 -type f -print | sort
-          report="$(find evidence -type f -name pilot-report.json -print -quit)"
           frozen="$(find evidence -type f -name frozen.json -print -quit)"
           proposal="$(find evidence -type f -name proposal.json -print -quit)"
-          test -n "$report" && test -n "$frozen" && test -n "$proposal"
-          echo '--- PILOT REPORT ---'
-          cat "$report"
-          echo '--- FROZEN SUMMARY ---'
-          python - "$frozen" <<'PY'
-          import json, sys
-          value=json.load(open(sys.argv[1],encoding='utf-8'))
-          contract=value.get('contract') or {}
-          decision=contract.get('decision_evidence') or {}
-          print('status='+str(value.get('status')))
-          print('contract_sha256='+str(value.get('contract_sha256')))
-          print('decision_comment_id='+str(decision.get('comment_id')))
-          print('decision='+str(decision.get('decision')))
+          test -n "$frozen" && test -n "$proposal"
+          python - "$frozen" "$proposal" <<'PY'
+          import hashlib,json,sys
+          from executor.github_trust import canonical_json
+          from executor.frozen_pilot_authority import validate_frozen_pilot_authority
+          from executor.solution_proposal import validate_solution_proposal
+          frozen=json.load(open(sys.argv[1],encoding='utf-8'))
+          saved=json.load(open(sys.argv[2],encoding='utf-8'))
+          result_sha=hashlib.sha256(canonical_json(frozen).encode('utf-8')).hexdigest()
+          if result_sha!='9072f0f295a6dbaaa8ac3c8799ee0eea82426cc617ae0508aa939b615931ed92': raise SystemExit('globally bound frozen result SHA mismatch')
+          if frozen.get('status')!='AUTHORIZED_AND_FROZEN' or frozen.get('contract_sha256')!='e35d5cb5cdbd7c21a876e1036cbeeb7e214a2bc9856bcb882db95ccafca5af68': raise SystemExit('frozen identity mismatch')
+          req,dec=validate_frozen_pilot_authority(frozen)
+          if dec.decision!='ACCEPT': raise SystemExit('frozen authority is not ACCEPT')
+          canonical={
+            'schema_version':'executor-solution-proposal/1.0',
+            'proposal_id':saved['proposal_id'],
+            'contract_sha256':saved['contract_sha256'],
+            'repository':saved['repository'],
+            'source_commit':saved['source_commit'],
+            'source_tree':saved['source_tree'],
+            'mutations':saved['mutations'],
+            'rationale':saved['rationale'],
+            'evidence_plan':saved['evidence_plan'],
+            'provenance':saved['provenance'],
+          }
+          validated=validate_solution_proposal(canonical,frozen_result=frozen)
+          if validated.payload_sha256!='f9e0b171359c5ec4d77d258b7c1737e2776f118a56153e2a00258a5e05d59ce4': raise SystemExit('canonical proposal payload hash drift')
+          print('FROZEN_GLOBAL_RESULT_SHA256='+result_sha)
+          print('FROZEN_CONTRACT_SHA256='+frozen['contract_sha256'])
+          print('DECISION_COMMENT_ID='+str((frozen['contract']['decision_evidence'])['comment_id']))
+          print('DECISION_COMMENT_NODE_ID='+str((frozen['contract']['decision_evidence'])['comment_node_id']))
+          print('CANONICAL_PROPOSAL_SHA256='+validated.payload_sha256)
+          print('RECOVERY_WRITE_CAPABILITY=false')
           PY
