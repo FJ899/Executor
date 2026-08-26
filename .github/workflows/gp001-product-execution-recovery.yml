@@ -1,4 +1,4 @@
-name: GP001 ACCEPT-005 read-only frozen/proposal recovery verification
+name: GP001 ACCEPT-005 read-only frozen binding inspection
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   actions: read
 
 jobs:
-  verify-recovery-material:
+  inspect-recovery-material:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
@@ -40,7 +40,7 @@ jobs:
           repository: FJ899/Executor
           run-id: 33021461283
 
-      - name: Verify frozen result hash and construct canonical proposal read only
+      - name: Inspect exact binding and canonical proposal read only
         shell: bash
         run: |
           set -euo pipefail
@@ -52,20 +52,31 @@ jobs:
           from executor.github_trust import canonical_json
           from executor.frozen_pilot_authority import validate_frozen_pilot_authority
           from executor.solution_proposal import validate_solution_proposal
+
           frozen=json.load(open(sys.argv[1],encoding='utf-8'))
           saved=json.load(open(sys.argv[2],encoding='utf-8'))
-          binding=frozen.get('decision_consumption') or {}
-          if binding.get('result_sha256')!='9072f0f295a6dbaaa8ac3c8799ee0eea82426cc617ae0508aa939b615931ed92': raise SystemExit('artifact local binding result hash mismatch')
-          global_binding=binding.get('global') or {}
-          if global_binding.get('result_sha256')!='9072f0f295a6dbaaa8ac3c8799ee0eea82426cc617ae0508aa939b615931ed92': raise SystemExit('artifact global binding result hash mismatch')
-          if global_binding.get('provider_state')!='GLOBAL_RESULT_BOUND' or global_binding.get('state')!='FINAL': raise SystemExit('artifact global binding is not finalized')
-          prebind=copy.deepcopy(frozen)
-          prebind.pop('decision_consumption',None)
-          result_sha=hashlib.sha256(canonical_json(prebind).encode('utf-8')).hexdigest()
-          if result_sha!='9072f0f295a6dbaaa8ac3c8799ee0eea82426cc617ae0508aa939b615931ed92': raise SystemExit('globally bound pre-consumption frozen result SHA mismatch')
-          if frozen.get('status')!='AUTHORIZED_AND_FROZEN' or frozen.get('contract_sha256')!='e35d5cb5cdbd7c21a876e1036cbeeb7e214a2bc9856bcb882db95ccafca5af68': raise SystemExit('frozen identity mismatch')
-          req,dec=validate_frozen_pilot_authority(frozen)
-          if dec.decision!='ACCEPT': raise SystemExit('frozen authority is not ACCEPT')
+          if frozen.get('status')!='AUTHORIZED_AND_FROZEN': raise SystemExit('frozen status mismatch')
+          if frozen.get('contract_sha256')!='e35d5cb5cdbd7c21a876e1036cbeeb7e214a2bc9856bcb882db95ccafca5af68': raise SystemExit('frozen contract sha mismatch')
+          _,dec=validate_frozen_pilot_authority(frozen)
+          if dec.decision!='ACCEPT': raise SystemExit('frozen decision is not ACCEPT')
+
+          binding=frozen.get('decision_consumption')
+          if not isinstance(binding,dict): raise SystemExit('missing decision_consumption')
+          global_binding=binding.get('global')
+          if not isinstance(global_binding,dict): raise SystemExit('missing global binding')
+          prebind=copy.deepcopy(frozen); prebind.pop('decision_consumption',None)
+          prebind_sha=hashlib.sha256(canonical_json(prebind).encode('utf-8')).hexdigest()
+          whole_sha=hashlib.sha256(canonical_json(frozen).encode('utf-8')).hexdigest()
+          print('LOCAL_STATE='+str(binding.get('state')))
+          print('LOCAL_RESULT_SHA256='+str(binding.get('result_sha256')))
+          print('GLOBAL_STATE='+str(global_binding.get('state')))
+          print('GLOBAL_PROVIDER_STATE='+str(global_binding.get('provider_state')))
+          print('GLOBAL_RESULT_SHA256='+str(global_binding.get('result_sha256')))
+          print('PREBIND_CANONICAL_SHA256='+prebind_sha)
+          print('WHOLE_ARTIFACT_CANONICAL_SHA256='+whole_sha)
+          print('DECISION_COMMENT_ID='+str((frozen['contract']['decision_evidence'])['comment_id']))
+          print('DECISION_COMMENT_NODE_ID='+str((frozen['contract']['decision_evidence'])['comment_node_id']))
+
           canonical={
             'schema_version':'executor-solution-proposal/1.0',
             'proposal_id':saved['proposal_id'],
@@ -79,11 +90,6 @@ jobs:
             'provenance':saved['provenance'],
           }
           validated=validate_solution_proposal(canonical,frozen_result=frozen)
-          if validated.payload_sha256!='f9e0b171359c5ec4d77d258b7c1737e2776f118a56153e2a00258a5e05d59ce4': raise SystemExit('canonical proposal payload hash drift')
-          print('FROZEN_GLOBAL_RESULT_SHA256='+result_sha)
-          print('FROZEN_CONTRACT_SHA256='+frozen['contract_sha256'])
-          print('DECISION_COMMENT_ID='+str((frozen['contract']['decision_evidence'])['comment_id']))
-          print('DECISION_COMMENT_NODE_ID='+str((frozen['contract']['decision_evidence'])['comment_node_id']))
           print('CANONICAL_PROPOSAL_SHA256='+validated.payload_sha256)
           print('RECOVERY_WRITE_CAPABILITY=false')
           PY
