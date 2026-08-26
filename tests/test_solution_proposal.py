@@ -112,6 +112,10 @@ class SolutionProposalTests(unittest.TestCase):
         self.assertEqual(validated.provenance["producer_role"], "EXTERNAL_INTELLIGENCE")
         self.assertEqual(validated.provenance["human_solution_edits"], 0)
         self.assertEqual(validated.provenance["effect_capability"], "NONE")
+        self.assertEqual(
+            validated.provenance["frozen_contract_sha256"],
+            frozen["contract_sha256"],
+        )
 
     def test_proposal_cannot_smuggle_authority(self):
         temp, frozen = frozen_result()
@@ -132,6 +136,21 @@ class SolutionProposalTests(unittest.TestCase):
         predates["provenance"]["generated_at"] = "2026-08-15T23:59:59Z"
         with self.assertRaisesRegex(SolutionProposalError, "predates"):
             validate_solution_proposal(predates, frozen_result=frozen)
+
+    def test_provenance_must_bind_frozen_contract_and_postdate_freeze(self):
+        temp, frozen = frozen_result()
+        self.addCleanup(temp.cleanup)
+        wrong_contract = proposal(frozen)
+        wrong_contract["provenance"]["frozen_contract_sha256"] = "d" * 64
+        with self.assertRaisesRegex(SolutionProposalError, "frozen contract binding"):
+            validate_solution_proposal(wrong_contract, frozen_result=frozen)
+
+        at_freeze = proposal(frozen)
+        at_freeze["provenance"]["generated_at"] = frozen["contract"][
+            "authority_snapshot"
+        ]["verified_at"]
+        with self.assertRaisesRegex(SolutionProposalError, "postdate"):
+            validate_solution_proposal(at_freeze, frozen_result=frozen)
 
     def test_wrong_contract_scope_or_after_hash_blocks(self):
         temp, frozen = frozen_result()
