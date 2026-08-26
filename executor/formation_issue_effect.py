@@ -142,7 +142,11 @@ class FormationIssueGateway(GitHubEffectGateway):
                 return ProviderReadResult(complete=False, exists=False, raw_response=b"\n".join(raw_pages))
         combined = b"\n".join(raw_pages)
         if not matches:
-            return ProviderReadResult(complete=True, exists=False, raw_response=combined)
+            # GitHub list endpoints can lag a successful CREATE_ISSUE response. A
+            # zero-match read immediately after a confirmed 201 is therefore not
+            # durable evidence that no effect occurred. Fail closed into recovery
+            # instead of binding the false terminal state NO_EFFECT_CONFIRMED.
+            return ProviderReadResult(complete=False, exists=False, raw_response=combined)
         if len(matches) != 1:
             return ProviderReadResult(complete=False, exists=True, raw_response=combined)
         value = matches[0]
