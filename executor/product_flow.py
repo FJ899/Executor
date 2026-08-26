@@ -26,11 +26,11 @@ class ProductFlowError(RuntimeError):
 
 @dataclass
 class FormationPilotFlow:
-    """Canonical product path: natural request -> authority -> frozen -> solution.
+    """Canonical product path: natural request -> publication -> decision -> frozen -> solution.
 
-    GitHub remains the verified human authority provider. Formation remains the
-    semantic source of the request. The bridge refuses a GitHub request whose
-    exact validated payload differs from the payload emitted by formation.
+    Formation is the semantic source of the request. GitHub Issue publication is
+    a system transport with zero human authority. Only the later provider-verified
+    ACCEPT/MODIFY/REJECT is human authority.
     """
 
     formation: RequestToContract001
@@ -38,15 +38,25 @@ class FormationPilotFlow:
     def authorization_request(self) -> dict[str, Any]:
         return self.formation.export_human_authorization_request()
 
-    def build_verified_draft(self, request: VerifiedGitHubRequest) -> dict[str, Any]:
+    def build_verified_draft(
+        self,
+        request: VerifiedGitHubRequest,
+        *,
+        publication: dict[str, Any],
+    ) -> dict[str, Any]:
         canonical = self.formation.canonical_pilot_request()
-        return build_pilot_draft_from_formation(canonical, request)
+        return build_pilot_draft_from_formation(
+            canonical,
+            request,
+            formation_publication=publication,
+        )
 
     def apply_verified_decision(
         self,
         *,
         request: VerifiedGitHubRequest,
         decision: VerifiedGitHubDecision,
+        publication: dict[str, Any],
         source: GitHubEvidenceSource,
         profile: GitHubTrustProfile,
         ledger: GovernedAuthorityLedger,
@@ -54,7 +64,11 @@ class FormationPilotFlow:
         if self.formation.status is not FormationStatus.AWAITING_VERIFIED_HUMAN_AUTHORIZATION:
             raise ProductFlowError("formation is not awaiting a verified human decision")
         canonical = self.formation.canonical_pilot_request()
-        draft = build_pilot_draft_from_formation(canonical, request)
+        draft = build_pilot_draft_from_formation(
+            canonical,
+            request,
+            formation_publication=publication,
+        )
         result = apply_github_decision(
             draft=draft,
             decision=decision,
@@ -62,9 +76,8 @@ class FormationPilotFlow:
             profile=profile,
             ledger=ledger,
             formation_request=canonical,
+            formation_publication=publication,
         )
-        # Formation's state transition is bound to its own draft identity, while
-        # the provider decision is also bound to the derived pilot draft hash.
         state_result = copy.deepcopy(result)
         formation_binding = result.get("formation_binding")
         if isinstance(formation_binding, dict):
