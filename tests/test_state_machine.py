@@ -102,7 +102,10 @@ class StateMachineTest(unittest.TestCase):
         with self.assertRaises(InvalidTransition):
             store.transition(run_id, RunState.FAILED, self.snapshot(), reason="change terminal")
 
-    def test_pass_remains_blocked_after_replaying(self):
+    def test_pass_is_not_a_run_state(self):
+        self.assertNotIn("PASS", {state.value for state in RunState})
+
+    def test_pass_is_retired_after_replaying(self):
         store, run_id = self.create()
         for state in (
             RunState.CONTRACT_VALIDATED,
@@ -114,14 +117,14 @@ class StateMachineTest(unittest.TestCase):
             RunState.REPLAYING,
         ):
             store.transition(run_id, state, self.snapshot(), reason=state.value)
-        with self.assertRaisesRegex(InvalidTransition, "M3 replay gate"):
-            store.transition(run_id, RunState.PASS, self.snapshot(), reason="replay verified")
+        with self.assertRaisesRegex(InvalidTransition, "retired"):
+            store.transition(run_id, "PASS", self.snapshot(), reason="replay verified")
         self.assertEqual(store.load_state(run_id)["state"], "REPLAYING")
 
-    def test_direct_pass_is_blocked(self):
+    def test_direct_pass_is_retired(self):
         store, run_id = self.create()
-        with self.assertRaisesRegex(InvalidTransition, "M3 replay gate"):
-            store.transition(run_id, RunState.PASS, self.snapshot(), reason="premature pass")
+        with self.assertRaisesRegex(InvalidTransition, "retired"):
+            store.transition(run_id, "PASS", self.snapshot(), reason="premature pass")
         self.assertEqual(store.load_state(run_id)["state"], "CREATED")
 
     def test_unchanged_resume(self):
@@ -201,14 +204,14 @@ class StateMachineTest(unittest.TestCase):
         with self.assertRaisesRegex(RunIntegrityError, "last verified event"):
             store.load_state(run_id)
 
-    def test_tampered_state_cannot_fabricate_replaying_or_pass(self):
+    def test_tampered_state_cannot_fabricate_replaying_or_terminal_result(self):
         store, run_id = self.create()
         state_path = self.runs / run_id / "state.json"
         state = json.loads(state_path.read_text(encoding="utf-8"))
         state["state"] = "REPLAYING"
         state_path.write_text(json.dumps(state), encoding="utf-8")
         with self.assertRaises(RunIntegrityError):
-            store.transition(run_id, RunState.PASS, self.snapshot(), reason="fabricated replay")
+            store.transition(run_id, RunState.BLOCKED, self.snapshot(), reason="fabricated replay")
 
     def test_tampered_state_cannot_suppress_stale(self):
         store, run_id = self.create()
