@@ -1,12 +1,137 @@
-name: Simple diagnostic workflow
+name: GP001 fresh zero-authority request 003 push harness
 
 on:
   push:
-  workflow_dispatch:
+    branches:
+      - ops/fresh-gp001-request-003
+
+permissions:
+  contents: write
+  issues: write
+  actions: read
 
 jobs:
-  diagnostic:
+  publish-fresh-request:
     runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: FJ899/Executor
+      EXECUTOR_GLOBAL_AUTHORITY_TOKEN: ${{ github.token }}
+      EXECUTOR_GITHUB_EFFECT_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
-      - name: Report runner status
-        run: echo runner-ok
+      - name: Checkout exact product candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/Executor
+          ref: 843ee131118c0c5fe1d4e6bfa2acff069829aee7
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact candidate identity
+        run: test "$(git rev-parse HEAD)" = '843ee131118c0c5fe1d4e6bfa2acff069829aee7'
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Install exact product runtime
+        run: python -m pip install --no-deps .
+
+      - name: Form fresh canonical GP001 request
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p product-authority/effect-evidence
+          creative-os-product form \
+            --request-id gp001-product-authority-e2e-003 \
+            --request 'Napraw regresję atomowości batcha w ProjectRegistry.add_many bez zmiany testów.' \
+            --understood-objective 'Naprawić regresję atomowości ProjectRegistry.add_many w dozwolonym pliku i zachować acceptance tests.' \
+            --executor-root . \
+            --executor-commit "$(git rev-parse HEAD)" \
+            > product-authority/formation.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          v=json.loads(Path('product-authority/formation.json').read_text(encoding='utf-8'))
+          c=v.get('canonical_contract_request') or {}
+          p=c.get('github_request_payload') or {}
+          if p.get('request_id') != 'gp001-product-authority-e2e-003': raise SystemExit('fresh request id mismatch')
+          target=p.get('target') or {}
+          if target.get('repository') != 'FJ899/executor-pilot-target' or target.get('commit') != '3934a94a5eebf750079200589d6dc40e024d44a0' or target.get('tree') != '26d307afcbb3ce72b2911ca44936712c11558c4c': raise SystemExit('target identity drift')
+          task=p.get('task') or {}
+          if task.get('allowed_paths') != ['project_registry/registry.py'] or task.get('max_production_files') != 1 or task.get('max_patch_lines') != 80: raise SystemExit('bounded task scope drift')
+          print('REQUEST_EXPIRES_AT='+str(p.get('expires_at')))
+          PY
+
+      - name: Publish fresh zero-authority request exactly once
+        shell: bash
+        run: |
+          set -euo pipefail
+          creative-os-product publish-authority-request \
+            --formation product-authority/formation.json \
+            --profile trust_profiles/github-product-gp001.json \
+            --ledger "${RUNNER_TEMP}/gp001-product-authority.sqlite3" \
+            --evidence-dir product-authority/effect-evidence \
+            > product-authority/publication-initial.json
+          python -m json.tool product-authority/publication-initial.json >/dev/null
+
+      - name: Reconcile visibility read-only if needed and derive exact Human binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          from executor.formation_publication_recovery import recover_formation_publication, FormationPublicationRecoveryError
+          from executor.github_trust import GitHubRestClient, GitHubTrustProfile
+          from executor.pilot_contract import build_pilot_draft_from_formation, pilot_draft_sha256
+          from executor.product_github_authority import verify_formation_published_request
+
+          initial=json.loads(Path('product-authority/publication-initial.json').read_text(encoding='utf-8'))
+          if initial.get('status') == 'AWAITING_VERIFIED_HUMAN_DECISION':
+              final=initial
+          elif initial.get('status') == 'FORMATION_PUBLICATION_INCOMPLETE':
+              try:
+                  final=recover_formation_publication(
+                      incomplete_publication=initial,
+                      evidence_directory=Path('product-authority/effect-evidence'),
+                      source=GitHubRestClient(),
+                  )
+              except FormationPublicationRecoveryError as exc:
+                  raise SystemExit(f'read-only formation recovery failed: {exc}')
+          else:
+              raise SystemExit(f'unexpected publication status: {initial.get("status")}')
+          if final.get('status') != 'AWAITING_VERIFIED_HUMAN_DECISION': raise SystemExit('fresh request did not reach Human boundary')
+          t=final.get('request_transport_provenance') or {}
+          if t.get('authority') is not False or t.get('origin') != 'FORMATION_PUBLISHED_REQUEST': raise SystemExit('transport gained authority')
+          canonical=final['canonical_contract_request']; payload=final['github_request_payload']
+          issue_number=int(t['object_id'])
+          profile=GitHubTrustProfile.from_dict(json.load(open('trust_profiles/github-product-gp001.json',encoding='utf-8')))
+          source=GitHubRestClient()
+          request=verify_formation_published_request(source, profile=profile, issue_number=issue_number, expected_payload=payload)
+          draft=build_pilot_draft_from_formation(canonical, request, formation_publication=final)
+          body_sha=hashlib.sha256(json.dumps(payload,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode('utf-8')).hexdigest()
+          Path('product-authority/publication.json').write_text(json.dumps(final,indent=2,sort_keys=True,default=lambda x: x.to_dict() if hasattr(x,'to_dict') else str(x))+'\n',encoding='utf-8')
+          summary={
+              'issue_number': issue_number,
+              'issue_url': t['object_url'],
+              'issue_node_id': request.issue_node_id,
+              'request_body_sha256': body_sha,
+              'pilot_draft_sha256': pilot_draft_sha256(draft),
+              'request_expires_at': payload['expires_at'],
+              'transport_authority': False,
+          }
+          Path('product-authority/human-binding.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print(json.dumps(summary,sort_keys=True))
+          PY
+
+      - name: Preserve fresh request evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gp001-fresh-request-003-${{ github.run_id }}-${{ github.run_attempt }}
+          path: product-authority
+          if-no-files-found: error
+          retention-days: 30
