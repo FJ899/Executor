@@ -46,6 +46,16 @@ def pilot_draft_sha256(draft: dict[str, Any]) -> str:
     return hashlib.sha256(canonical_json(material).encode("utf-8")).hexdigest()
 
 
+def _require_sha256(value: object, *, label: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise PilotContractError(f"{label} must be a lowercase SHA-256")
+    return value
+
+
 def build_pilot_draft(request: VerifiedGitHubRequest) -> dict[str, Any]:
     target = copy.deepcopy(request.payload["target"])
     task = copy.deepcopy(request.payload["task"])
@@ -80,8 +90,18 @@ def apply_github_decision(
     source: GitHubEvidenceSource,
     profile: GitHubTrustProfile,
     ledger: GovernedAuthorityLedger,
+    authority_draft_sha256: str | None = None,
+    expected_request_payload: dict[str, Any] | None = None,
+    formation_binding: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Final-live verify and consume one exact GitHub contract decision."""
+    """Final-live verify and consume one exact GitHub contract decision.
+
+    By default the authority-bearing draft is the canonical pilot draft, which
+    preserves the existing P4 behavior. Contract formation may instead supply
+    ``authority_draft_sha256`` so the same final-live GitHub boundary freezes an
+    independently governed formation draft. The provider request still has to
+    reproduce the exact pilot target/task projection at the revocation cutoff.
+    """
 
     current = _utc_now().astimezone(timezone.utc)
     recording = RecordingGitHubSource(source)
@@ -91,16 +111,40 @@ def apply_github_decision(
         issue_number=decision.issue_number,
         now=current,
     )
+    if expected_request_payload is not None and final_request.payload != expected_request_payload:
+        raise PilotContractError(
+            "GitHub request payload differs from the governed formation export"
+        )
+
     final_draft = build_pilot_draft(final_request)
-    expected_draft = pilot_draft_sha256(final_draft)
-    if expected_draft != pilot_draft_sha256(draft):
+    pilot_draft_hash = pilot_draft_sha256(final_draft)
+    if pilot_draft_hash != pilot_draft_sha256(draft):
         raise PilotContractError("GitHub request changed before final live verification")
+
+    authority_hash = (
+        pilot_draft_hash
+        if authority_draft_sha256 is None
+        else _require_sha256(authority_draft_sha256, label="authority_draft_sha256")
+    )
+    if decision.draft_sha256 != authority_hash:
+        raise PilotContractError("reviewed GitHub decision is bound to a different authority draft")
+
+    if formation_binding is not None:
+        if not isinstance(formation_binding, dict):
+            raise PilotContractError("formation_binding must be an object")
+        if formation_binding.get("draft_sha256") != authority_hash:
+            raise PilotContractError("formation binding draft hash mismatch")
+        if formation_binding.get("request_id") != final_draft.get("request_id"):
+            raise PilotContractError("formation binding request id mismatch")
+        if formation_binding.get("authority_request_payload") != final_request.payload:
+            raise PilotContractError("formation binding request payload mismatch")
+
     final_decision = verify_github_decision(
         recording,
         profile=profile,
         request=final_request,
         comment_id=decision.comment_id,
-        draft_sha256=expected_draft,
+        draft_sha256=authority_hash,
         now=current,
     )
     if (
@@ -115,7 +159,7 @@ def apply_github_decision(
         recording=recording,
         request=final_request,
         decision=final_decision,
-        draft_sha256=expected_draft,
+        draft_sha256=authority_hash,
     )
     snapshot_sha256 = authority_snapshot_sha256(snapshot)
     consumption = ledger.consume(
@@ -130,7 +174,7 @@ def apply_github_decision(
         result = {
             "schema_version": "executor-pilot-decision-result/1.0",
             "status": "MODIFICATION_REQUIRED",
-            "draft_sha256": expected_draft,
+            "draft_sha256": authority_hash,
             "authority_snapshot": snapshot,
             "authority_snapshot_sha256": snapshot_sha256,
             "decision_evidence": final_decision.to_dict(),
@@ -140,7 +184,7 @@ def apply_github_decision(
         result = {
             "schema_version": "executor-pilot-decision-result/1.0",
             "status": "REJECTED",
-            "draft_sha256": expected_draft,
+            "draft_sha256": authority_hash,
             "authority_snapshot": snapshot,
             "authority_snapshot_sha256": snapshot_sha256,
             "decision_evidence": final_decision.to_dict(),
@@ -156,7 +200,7 @@ def apply_github_decision(
             "decision_evidence": final_decision.to_dict(),
             "authority_snapshot": snapshot,
             "authority_snapshot_sha256": snapshot_sha256,
-            "draft_sha256": expected_draft,
+            "draft_sha256": authority_hash,
             "authority_boundary": {
                 **copy.deepcopy(final_draft["authority_boundary"]),
                 "revocation_cutoff": REVOCATION_CUTOFF,
@@ -165,6 +209,8 @@ def apply_github_decision(
             "status": "AUTHORIZED_AND_FROZEN",
             "executable": True,
         }
+        if formation_binding is not None:
+            contract["formation_binding"] = copy.deepcopy(formation_binding)
         contract_sha256 = hashlib.sha256(
             canonical_json(contract).encode("utf-8")
         ).hexdigest()
@@ -173,7 +219,7 @@ def apply_github_decision(
             "status": "AUTHORIZED_AND_FROZEN",
             "contract": contract,
             "contract_sha256": contract_sha256,
-            "draft_sha256": expected_draft,
+            "draft_sha256": authority_hash,
             "authority_snapshot_sha256": snapshot_sha256,
             "decision_evidence": final_decision.to_dict(),
             "executable": True,
