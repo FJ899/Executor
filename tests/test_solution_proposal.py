@@ -110,11 +110,16 @@ class SolutionProposalTests(unittest.TestCase):
         self.assertEqual(len(validated.mutations), 1)
         self.assertEqual(validated.repository, "FJ899/scriptops")
         self.assertEqual(validated.provenance["producer_role"], "EXTERNAL_INTELLIGENCE")
+        self.assertEqual(validated.provenance["schema_version"], "executor-solution-provenance/1.3")
         self.assertEqual(validated.provenance["human_solution_edits"], 0)
         self.assertEqual(validated.provenance["effect_capability"], "NONE")
         self.assertEqual(
             validated.provenance["frozen_contract_sha256"],
             frozen["contract_sha256"],
+        )
+        self.assertEqual(
+            validated.provenance["derivation"],
+            "GENERATED_AFTER_POST_FREEZE_CHALLENGE",
         )
 
     def test_proposal_cannot_smuggle_authority(self):
@@ -137,7 +142,7 @@ class SolutionProposalTests(unittest.TestCase):
         with self.assertRaisesRegex(SolutionProposalError, "predates"):
             validate_solution_proposal(predates, frozen_result=frozen)
 
-    def test_provenance_must_bind_frozen_contract_and_postdate_freeze(self):
+    def test_provenance_must_bind_frozen_contract_and_postdate_challenge(self):
         temp, frozen = frozen_result()
         self.addCleanup(temp.cleanup)
         wrong_contract = proposal(frozen)
@@ -145,12 +150,19 @@ class SolutionProposalTests(unittest.TestCase):
         with self.assertRaisesRegex(SolutionProposalError, "frozen contract binding"):
             validate_solution_proposal(wrong_contract, frozen_result=frozen)
 
-        at_freeze = proposal(frozen)
-        at_freeze["provenance"]["generated_at"] = frozen["contract"][
-            "authority_snapshot"
-        ]["verified_at"]
-        with self.assertRaisesRegex(SolutionProposalError, "postdate"):
-            validate_solution_proposal(at_freeze, frozen_result=frozen)
+        challenge_at_live_verify = proposal(frozen)
+        challenge_at_live_verify["provenance"]["generation_challenge_issued_at"] = frozen[
+            "contract"
+        ]["authority_snapshot"]["verified_at"]
+        with self.assertRaisesRegex(SolutionProposalError, "challenge does not postdate"):
+            validate_solution_proposal(challenge_at_live_verify, frozen_result=frozen)
+
+        at_challenge = proposal(frozen)
+        at_challenge["provenance"]["generated_at"] = at_challenge["provenance"][
+            "generation_challenge_issued_at"
+        ]
+        with self.assertRaisesRegex(SolutionProposalError, "postdate post-freeze"):
+            validate_solution_proposal(at_challenge, frozen_result=frozen)
 
     def test_wrong_contract_scope_or_after_hash_blocks(self):
         temp, frozen = frozen_result()
