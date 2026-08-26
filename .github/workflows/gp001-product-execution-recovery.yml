@@ -1,4 +1,4 @@
-name: GP001 ACCEPT-005 patched recovery verification
+name: GP001 ACCEPT-005 refined recovery verification
 
 on:
   push:
@@ -12,30 +12,30 @@ permissions:
   actions: read
 
 jobs:
-  verify-patched-recovery:
+  verify-refined-recovery:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - name: Checkout exact patched product head
+      - name: Checkout exact refined product head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: FJ899/Executor
-          ref: aeacddd3210e550f66f70b4cf3b9d8c605d78729
+          ref: fda645f0b8a294297f0a32782c596a29e5db0a53
           persist-credentials: false
 
-      - name: Verify exact patched product identity
+      - name: Verify exact refined product identity
         shell: bash
-        run: test "$(git rev-parse HEAD)" = 'aeacddd3210e550f66f70b4cf3b9d8c605d78729'
+        run: test "$(git rev-parse HEAD)" = 'fda645f0b8a294297f0a32782c596a29e5db0a53'
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.11'
 
-      - name: Install exact patched runtime
+      - name: Install exact refined runtime
         run: python -m pip install --no-deps .
 
-      - name: Run full unit suite on exact patched head
+      - name: Run full unit suite on exact refined head
         run: python -m unittest discover -s tests -v
 
       - name: Download exact globally-bound ACCEPT-005 artifact
@@ -94,7 +94,7 @@ jobs:
           validated=validate_solution_proposal(canonical,frozen_result=frozen)
           if validated.payload_sha256!='f9e0b171359c5ec4d77d258b7c1737e2776f118a56153e2a00258a5e05d59ce4': raise SystemExit('canonical proposal payload hash mismatch')
           if validated.repository!='FJ899/executor-pilot-target' or validated.source_commit!='3934a94a5eebf750079200589d6dc40e024d44a0' or validated.source_tree!='26d307afcbb3ce72b2911ca44936712c11558c4c': raise SystemExit('proposal target identity mismatch')
-          print('PATCHED_FROZEN_AUTHORITY_VALID=true')
+          print('REFINED_FROZEN_AUTHORITY_VALID=true')
           print('CONTRACT_SHA256='+frozen['contract_sha256'])
           print('CANONICAL_PROPOSAL_SHA256='+validated.payload_sha256)
           print('RECOVERY_WRITE_CAPABILITY=false')
