@@ -1,0 +1,43 @@
+{
+  "schema_version": "executor-workflow-classification/1.0",
+  "policy": {
+    "active_product_runtime_may_depend_on": ["ACTIVE_PRODUCTION_FOUNDATION"],
+    "active_test_may_prove_but_not_define_product_runtime": true,
+    "historical_evidence_is_non_executable_product_input": true,
+    "obsolete_is_not_supported": true
+  },
+  "workflows": {
+    ".github/workflows/verify.yml": {"classification": "ACTIVE_PRODUCTION_FOUNDATION", "reason": "current repository foundation verification on pull requests and main"},
+    ".github/workflows/gp001-real-e2e.yml": {"classification": "ACTIVE_TEST", "reason": "bounded GP001 end-to-end proof path; not a product authority source"},
+    ".github/workflows/gp001-replay.yml": {"classification": "ACTIVE_TEST", "reason": "GP001 replay/test harness; not an active product front door"},
+    ".github/workflows/diagnostic.yml": {"classification": "ACTIVE_TEST", "reason": "diagnostic-only workflow"},
+    ".github/workflows/p1-bootstrap-minimal-test.yml": {"classification": "ACTIVE_TEST", "reason": "bootstrap test harness"},
+    ".github/workflows/runner-allocation-competition-test.yml": {"classification": "ACTIVE_TEST", "reason": "runner allocation test"},
+    ".github/workflows/runner-allocation-heavy-test.yml": {"classification": "ACTIVE_TEST", "reason": "runner allocation test"},
+    ".github/workflows/trusted-authoritative-artifact-pipeline.yml": {"classification": "ACTIVE_TEST", "reason": "trusted-controller/artifact proof harness"},
+    ".github/workflows/trusted-authoritative-download-test.yml": {"classification": "ACTIVE_TEST", "reason": "trusted download test"},
+    ".github/workflows/trusted-authoritative-verifier-minimal.yml": {"classification": "ACTIVE_TEST", "reason": "trusted verifier test"},
+    ".github/workflows/trusted-authoritative-verifier-pipeline.yml": {"classification": "ACTIVE_TEST", "reason": "trusted verifier test pipeline"},
+    ".github/workflows/trusted-authoritative-verifier-run.yml": {"classification": "ACTIVE_TEST", "reason": "trusted verifier test run"},
+    ".github/workflows/trusted-controller-allocation-test.yml": {"classification": "ACTIVE_TEST", "reason": "trusted controller regression"},
+    ".github/workflows/trusted-controller-artifact-hash-test.yml": {"classification": "ACTIVE_TEST", "reason": "trusted controller regression"},
+    ".github/workflows/trusted-controller-artifact-test.yml": {"classification": "ACTIVE_TEST", "reason": "trusted controller regression"},
+    ".github/workflows/trusted-controller-artifact-upload-test.yml": {"classification": "ACTIVE_TEST", "reason": "trusted controller regression"},
+    ".github/workflows/trusted-controller-bind-minimal.yml": {"classification": "ACTIVE_TEST", "reason": "trusted controller regression"},
+    ".github/workflows/trusted-controller-checkout-pin-test.yml": {"classification": "ACTIVE_TEST", "reason": "trusted controller regression"},
+    ".github/workflows/trusted-controller-env-test.yml": {"classification": "ACTIVE_TEST", "reason": "trusted controller regression"},
+    ".github/workflows/trusted-controller-extract-blob-test.yml": {"classification": "ACTIVE_TEST", "reason": "trusted controller regression"},
+    ".github/workflows/trusted-controller-manifest-test.yml": {"classification": "ACTIVE_TEST", "reason": "trusted controller regression"},
+    ".github/workflows/trusted-controller-minimal-bind.yml": {"classification": "ACTIVE_TEST", "reason": "trusted controller regression"},
+    ".github/workflows/trusted-controller-scope-diff-test.yml": {"classification": "ACTIVE_TEST", "reason": "trusted controller regression"},
+    ".github/workflows/trusted-controller-test.yml": {"classification": "ACTIVE_TEST", "reason": "trusted controller regression"},
+    ".github/workflows/p4-real-pilots-one-shot.yml": {"classification": "HISTORICAL_EVIDENCE", "reason": "one-shot P4 proof bound to JTJ07 repositories, fixed issue IDs, old SHAs and preflight branch"},
+    ".github/workflows/p4-run94-final-closure-reconciliation.yml": {"classification": "HISTORICAL_EVIDENCE", "reason": "run94 closure evidence"},
+    ".github/workflows/p4-run94-final-g18-persistence.yml": {"classification": "HISTORICAL_EVIDENCE", "reason": "run94 persistence evidence"},
+    ".github/workflows/p4-run94-post-merge-g02-status-correction.yml": {"classification": "HISTORICAL_EVIDENCE", "reason": "run94 post-merge evidence"},
+    ".github/workflows/p4-run94-trusted-verifier-rebind.yml": {"classification": "HISTORICAL_EVIDENCE", "reason": "run94 trusted-verifier evidence"},
+    ".github/workflows/manual-exact-ref-verify.yml": {"classification": "HISTORICAL_EVIDENCE", "reason": "large exact-ref proof harness retained for historical verification, not current runtime"}
+  },
+  "current_product_rule": "No ACTIVE_PRODUCTION_FOUNDATION workflow may depend on JTJ07/*, fixed historical issue IDs, fixed historical source SHAs, or preflight/* branches.",
+  "historical_p4_rule": "p4-real-pilots-one-shot.yml is retained only as historical evidence and MUST NOT be called by the current product flow."
+}
