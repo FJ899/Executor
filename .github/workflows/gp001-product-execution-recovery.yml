@@ -1,4 +1,4 @@
-name: GP001 ACCEPT-005 read-only frozen binding inspection
+name: GP001 ACCEPT-005 patched recovery verification
 
 on:
   push:
@@ -12,26 +12,33 @@ permissions:
   actions: read
 
 jobs:
-  inspect-recovery-material:
+  verify-patched-recovery:
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 15
     steps:
-      - name: Checkout exact accepted runtime base
+      - name: Checkout exact patched product head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: FJ899/Executor
-          ref: 28d631cf35892b0c0df62c9f20ed2b5f7c696015
+          ref: aeacddd3210e550f66f70b4cf3b9d8c605d78729
           persist-credentials: false
+
+      - name: Verify exact patched product identity
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = 'aeacddd3210e550f66f70b4cf3b9d8c605d78729'
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.11'
 
-      - name: Install exact runtime
+      - name: Install exact patched runtime
         run: python -m pip install --no-deps .
 
-      - name: Download exact globally-bound freeze artifact
+      - name: Run full unit suite on exact patched head
+        run: python -m unittest discover -s tests -v
+
+      - name: Download exact globally-bound ACCEPT-005 artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           artifact-ids: 9626679416
@@ -40,7 +47,7 @@ jobs:
           repository: FJ899/Executor
           run-id: 33021461283
 
-      - name: Inspect exact binding and canonical proposal read only
+      - name: Validate frozen authority and canonical provider proposal read only
         shell: bash
         run: |
           set -euo pipefail
@@ -48,8 +55,7 @@ jobs:
           proposal="$(find evidence -type f -name proposal.json -print -quit)"
           test -n "$frozen" && test -n "$proposal"
           python - "$frozen" "$proposal" <<'PY'
-          import copy,hashlib,json,sys
-          from executor.github_trust import canonical_json
+          import json,sys
           from executor.frozen_pilot_authority import validate_frozen_pilot_authority
           from executor.solution_proposal import validate_solution_proposal
 
@@ -57,25 +63,21 @@ jobs:
           saved=json.load(open(sys.argv[2],encoding='utf-8'))
           if frozen.get('status')!='AUTHORIZED_AND_FROZEN': raise SystemExit('frozen status mismatch')
           if frozen.get('contract_sha256')!='e35d5cb5cdbd7c21a876e1036cbeeb7e214a2bc9856bcb882db95ccafca5af68': raise SystemExit('frozen contract sha mismatch')
-          _,dec=validate_frozen_pilot_authority(frozen)
-          if dec.decision!='ACCEPT': raise SystemExit('frozen decision is not ACCEPT')
+          request,decision=validate_frozen_pilot_authority(frozen)
+          if decision.decision!='ACCEPT': raise SystemExit('frozen decision is not ACCEPT')
+          if decision.comment_id!=5431977112 or decision.comment_node_id!='IC_kwDOTpqUf88AAAABQ8VkmA': raise SystemExit('frozen decision identity mismatch')
+          if request.issue_number!=94 or request.issue_node_id!='I_kwDOTpqUf88AAAABOaSz2w': raise SystemExit('frozen request identity mismatch')
 
-          binding=frozen.get('decision_consumption')
-          if not isinstance(binding,dict): raise SystemExit('missing decision_consumption')
-          global_binding=binding.get('global')
-          if not isinstance(global_binding,dict): raise SystemExit('missing global binding')
-          prebind=copy.deepcopy(frozen); prebind.pop('decision_consumption',None)
-          prebind_sha=hashlib.sha256(canonical_json(prebind).encode('utf-8')).hexdigest()
-          whole_sha=hashlib.sha256(canonical_json(frozen).encode('utf-8')).hexdigest()
-          print('LOCAL_STATE='+str(binding.get('state')))
-          print('LOCAL_RESULT_SHA256='+str(binding.get('result_sha256')))
-          print('GLOBAL_STATE='+str(global_binding.get('state')))
-          print('GLOBAL_PROVIDER_STATE='+str(global_binding.get('provider_state')))
-          print('GLOBAL_RESULT_SHA256='+str(global_binding.get('result_sha256')))
-          print('PREBIND_CANONICAL_SHA256='+prebind_sha)
-          print('WHOLE_ARTIFACT_CANONICAL_SHA256='+whole_sha)
-          print('DECISION_COMMENT_ID='+str((frozen['contract']['decision_evidence'])['comment_id']))
-          print('DECISION_COMMENT_NODE_ID='+str((frozen['contract']['decision_evidence'])['comment_node_id']))
+          transport=frozen.get('request_transport_provenance') or {}
+          if transport.get('origin')!='FORMATION_PUBLISHED_REQUEST' or transport.get('authority') is not False: raise SystemExit('transport authority boundary mismatch')
+          if transport.get('object_id')!='94' or transport.get('object_url')!='https://github.com/FJ899/Executor/issues/94': raise SystemExit('transport object mismatch')
+
+          consumption=frozen.get('decision_consumption') or {}
+          global_binding=consumption.get('global') or {}
+          expected_key='github-decision:IC_kwDOTpqUf88AAAABQ8VkmA'
+          if consumption.get('authority_key')!=expected_key or global_binding.get('authority_key')!=expected_key: raise SystemExit('decision consumption key mismatch')
+          if consumption.get('state')!='FINAL' or global_binding.get('state')!='FINAL': raise SystemExit('decision consumption is not final')
+          if global_binding.get('provider_state')!='GLOBAL_RESULT_BOUND': raise SystemExit('global decision result is not bound')
 
           canonical={
             'schema_version':'executor-solution-proposal/1.0',
@@ -90,6 +92,10 @@ jobs:
             'provenance':saved['provenance'],
           }
           validated=validate_solution_proposal(canonical,frozen_result=frozen)
+          if validated.payload_sha256!='f9e0b171359c5ec4d77d258b7c1737e2776f118a56153e2a00258a5e05d59ce4': raise SystemExit('canonical proposal payload hash mismatch')
+          if validated.repository!='FJ899/executor-pilot-target' or validated.source_commit!='3934a94a5eebf750079200589d6dc40e024d44a0' or validated.source_tree!='26d307afcbb3ce72b2911ca44936712c11558c4c': raise SystemExit('proposal target identity mismatch')
+          print('PATCHED_FROZEN_AUTHORITY_VALID=true')
+          print('CONTRACT_SHA256='+frozen['contract_sha256'])
           print('CANONICAL_PROPOSAL_SHA256='+validated.payload_sha256)
           print('RECOVERY_WRITE_CAPABILITY=false')
           PY
