@@ -6,8 +6,9 @@ import json
 import subprocess
 import tempfile
 import unittest
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from executor.github_trust import canonical_json, verify_github_decision, verify_github_request
 from executor.pilot_contract import apply_github_decision, build_pilot_draft, pilot_draft_sha256
@@ -30,7 +31,6 @@ from tests.test_github_trust import (
     profile,
     request_payload,
 )
-from unittest.mock import patch
 
 
 SOURCE_PATH = "phase6/scriptops-v2-hardening.py"
@@ -56,6 +56,11 @@ def _response_sha256(generation: dict) -> str:
         "rationale": generation["rationale"],
     }
     return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+
+
+def _after(timestamp: str, *, seconds: int = 1) -> str:
+    parsed = datetime.fromisoformat(timestamp[:-1] + "+00:00")
+    return (parsed + timedelta(seconds=seconds)).isoformat().replace("+00:00", "Z")
 
 
 class FakeGenerationVerifier:
@@ -99,6 +104,7 @@ class FakeGenerator:
         *,
         generated_at: str | None = None,
         publish_evidence: bool = True,
+        evidence_generation: dict | None = None,
     ) -> None:
         self.verifier = verifier
         self.generation = generation or {
@@ -112,10 +118,9 @@ class FakeGenerator:
             ],
             "rationale": "Replace the bounded source with the corrected implementation.",
         }
-        self.generated_at = generated_at or (NOW + timedelta(seconds=1)).isoformat().replace(
-            "+00:00", "Z"
-        )
+        self.generated_at = generated_at
         self.publish_evidence = publish_evidence
+        self.evidence_generation = copy.deepcopy(evidence_generation)
         self.calls = 0
         self.last_prompt = None
 
@@ -123,13 +128,17 @@ class FakeGenerator:
         self.calls += 1
         self.last_prompt = copy.deepcopy(prompt)
         generation = copy.deepcopy(self.generation)
+        generated_at = self.generated_at or _after(
+            prompt["generation_challenge"]["issued_at"]
+        )
         if self.publish_evidence:
+            evidence_generation = copy.deepcopy(self.evidence_generation or generation)
             self.verifier.publish(
                 prompt=prompt,
-                generation=generation,
+                generation=evidence_generation,
                 provider=self.provider,
                 model=self.model,
-                generated_at=self.generated_at,
+                generated_at=generated_at,
             )
         return generation
 
@@ -216,18 +225,29 @@ class SolutionProviderTests(unittest.TestCase):
             hashlib.sha256(REPLACEMENT_TEXT.encode("utf-8")).hexdigest(),
         )
         provenance = result.validated.provenance
-        self.assertEqual(provenance["schema_version"], "executor-solution-provenance/1.2")
+        self.assertEqual(provenance["schema_version"], "executor-solution-provenance/1.3")
         self.assertEqual(
             provenance["frozen_contract_sha256"], self.frozen["contract_sha256"]
         )
         self.assertEqual(provenance["context_sha256"], result.context_sha256)
         self.assertEqual(provenance["prompt_sha256"], result.prompt_sha256)
+        self.assertEqual(
+            provenance["generation_challenge_sha256"],
+            result.generation_challenge_sha256,
+        )
+        self.assertEqual(
+            provenance["generation_challenge_issued_at"],
+            result.generation_challenge_issued_at,
+        )
         self.assertEqual(provenance["generation_evidence_ref"], result.generation_evidence_ref)
         self.assertEqual(
             provenance["generation_response_sha256"], result.generation_response_sha256
         )
         self.assertEqual(
             provenance["generation_verification_method"], "FAKE_PROVIDER_RECORD_LOOKUP"
+        )
+        self.assertEqual(
+            provenance["derivation"], "GENERATED_AFTER_POST_FREEZE_CHALLENGE"
         )
         self.assertEqual(provenance["effect_capability"], "NONE")
         self.assertEqual(provenance["human_solution_edits"], 0)
@@ -241,6 +261,11 @@ class SolutionProviderTests(unittest.TestCase):
             generator.last_prompt["source_context"]["allowed_paths"],
             [SOURCE_PATH],
         )
+        self.assertEqual(
+            generator.last_prompt["generation_challenge"]["issued_at"],
+            result.generation_challenge_issued_at,
+        )
+        self.assertEqual(len(generator.last_prompt["generation_challenge"]["nonce"]), 64)
 
     def test_scope_expansion_is_blocked_before_materialization(self):
         verifier = FakeGenerationVerifier()
@@ -315,17 +340,39 @@ class SolutionProviderTests(unittest.TestCase):
                 checkout_root=self.repo,
             )
 
-    def test_verified_generation_must_postdate_frozen_contract(self):
+    def test_provider_timestamp_between_live_verify_and_post_freeze_challenge_is_blocked(self):
         verifier = FakeGenerationVerifier()
         generator = FakeGenerator(
             verifier,
-            generated_at=NOW.isoformat().replace("+00:00", "Z"),
+            generated_at=(NOW + timedelta(seconds=1)).isoformat().replace("+00:00", "Z"),
         )
-        with self.assertRaisesRegex(SolutionProviderError, "postdate"):
-            SolutionProvider(generator, verifier).provide(
+        challenge_time = NOW + timedelta(seconds=2)
+        with patch("executor.solution_provider._utc_now", return_value=challenge_time):
+            with self.assertRaisesRegex(SolutionProviderError, "post-freeze generation challenge"):
+                SolutionProvider(generator, verifier).provide(
+                    frozen_result=self.frozen,
+                    checkout_root=self.repo,
+                )
+
+    def test_cached_generation_same_frozen_contract_cannot_cross_fresh_challenge(self):
+        verifier = FakeGenerationVerifier()
+        original_generator = FakeGenerator(verifier)
+        original_result = SolutionProvider(original_generator, verifier).provide(
+            frozen_result=self.frozen,
+            checkout_root=self.repo,
+        )
+        stale_generation = copy.deepcopy(original_generator.generation)
+        replay_generator = FakeGenerator(
+            verifier,
+            stale_generation,
+            publish_evidence=False,
+        )
+        with self.assertRaisesRegex(SolutionProviderError, "generation evidence prompt mismatch"):
+            SolutionProvider(replay_generator, verifier).provide(
                 frozen_result=self.frozen,
                 checkout_root=self.repo,
             )
+        self.assertEqual(stale_generation["evidence_ref"], original_result.generation_evidence_ref)
 
     def test_cached_generation_from_other_frozen_contract_cannot_be_rebound(self):
         verifier = FakeGenerationVerifier()
@@ -359,22 +406,28 @@ class SolutionProviderTests(unittest.TestCase):
             )
         self.assertEqual(stale_generation["evidence_ref"], stale_evidence_ref)
 
-    def test_generation_content_cannot_be_changed_under_old_evidence_ref(self):
+    def test_generation_content_cannot_be_changed_under_current_evidence_ref(self):
         verifier = FakeGenerationVerifier()
-        original_generator = FakeGenerator(verifier)
-        SolutionProvider(original_generator, verifier).provide(
-            frozen_result=self.frozen,
-            checkout_root=self.repo,
-        )
-        changed_generation = copy.deepcopy(original_generator.generation)
+        original_generation = {
+            "schema_version": "executor-solution-generation/1.1",
+            "evidence_ref": "provider-generation:tamper",
+            "mutations": [
+                {
+                    "path": SOURCE_PATH,
+                    "replacement_text": REPLACEMENT_TEXT,
+                }
+            ],
+            "rationale": "Original bounded response.",
+        }
+        changed_generation = copy.deepcopy(original_generation)
         changed_generation["mutations"][0]["replacement_text"] = "VALUE = 4\n"
-        replay_generator = FakeGenerator(
+        generator = FakeGenerator(
             verifier,
             changed_generation,
-            publish_evidence=False,
+            evidence_generation=original_generation,
         )
         with self.assertRaisesRegex(SolutionProviderError, "response hash mismatch"):
-            SolutionProvider(replay_generator, verifier).provide(
+            SolutionProvider(generator, verifier).provide(
                 frozen_result=self.frozen,
                 checkout_root=self.repo,
             )
