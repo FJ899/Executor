@@ -93,7 +93,8 @@ class M0M2BEntryGateTest(unittest.TestCase):
             {issue.code for issue in result.issues},
         )
 
-    def test_state_machine_cannot_reach_pass_before_m3(self):
+    def test_state_machine_has_no_pass_state(self):
+        self.assertNotIn("PASS", {state.value for state in RunState})
         with tempfile.TemporaryDirectory() as temp_name:
             root = Path(temp_name)
             workspace = root / "workspace"
@@ -116,8 +117,8 @@ class M0M2BEntryGateTest(unittest.TestCase):
             store = RunStore(root / "runs")
             run_id = "ENTRY-GATE"
             store.create(snapshot, run_id=run_id)
-            with self.assertRaises(InvalidTransition):
-                store.transition(run_id, RunState.PASS, snapshot, reason="premature")
+            with self.assertRaisesRegex(InvalidTransition, "retired"):
+                store.transition(run_id, "PASS", snapshot, reason="premature")
 
     def test_sandbox_rejects_unverified_policy_dictionary(self):
         with self.assertRaises(SandboxExecutionError):
