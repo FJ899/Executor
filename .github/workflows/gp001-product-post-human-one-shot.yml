@@ -1,0 +1,278 @@
+name: GP001 product post-human one-shot
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/gp001-product-post-human-one-shot.yml
+      - governance/WORKFLOW_CLASSIFICATION.json
+
+permissions:
+  contents: read
+  actions: read
+  issues: read
+
+jobs:
+  product-post-human-e2e:
+    if: github.repository == 'FJ899/Executor' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: FJ899/Executor
+      EXECUTOR_GLOBAL_AUTHORITY_TOKEN: ${{ secrets.EXECUTOR_GLOBAL_AUTHORITY_TOKEN }}
+      EXECUTOR_GITHUB_EFFECT_TOKEN: ${{ secrets.EXECUTOR_GITHUB_EFFECT_TOKEN }}
+      GITHUB_TOKEN: ${{ github.token }}
+      DECISION_COMMENT_ID: '5430092638'
+      TARGET_COMMIT: 3934a94a5eebf750079200589d6dc40e024d44a0
+      TARGET_TREE: 26d307afcbb3ce72b2911ca44936712c11558c4c
+
+    steps:
+      - name: Checkout exact Executor candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact Executor identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Install exact product runtime
+        run: python -m pip install --no-deps .
+
+      - name: Download recovered publication artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: 9620012182
+          path: recovered
+          github-token: ${{ github.token }}
+          repository: FJ899/Executor
+          run-id: 33004652210
+
+      - name: Materialize recovered publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p run-output effect-evidence runs
+          publication="$(find recovered -type f -name publication.json -print -quit)"
+          test -n "$publication"
+          cp "$publication" run-output/publication.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          value = json.loads(Path('run-output/publication.json').read_text(encoding='utf-8'))
+          if value.get('status') != 'AWAITING_VERIFIED_HUMAN_DECISION':
+              raise SystemExit(f"unexpected recovered publication status: {value.get('status')}")
+          transport = value.get('request_transport_provenance', {})
+          if transport.get('object_id') != '88' or transport.get('object_url') != 'https://github.com/FJ899/Executor/issues/88':
+              raise SystemExit('recovered publication is not bound to Issue #88')
+          if value.get('publication_effect', {}).get('external_write_repeated') is not False:
+              raise SystemExit('recovery does not prove no repeated external write')
+          PY
+
+      - name: Verify Human decision and freeze exact contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          creative-os-product decide \
+            --publication run-output/publication.json \
+            --profile trust_profiles/github-product-gp001.json \
+            --comment "$DECISION_COMMENT_ID" \
+            --ledger "${RUNNER_TEMP}/product-authority.sqlite3" \
+            > run-output/frozen.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          value = json.loads(Path('run-output/frozen.json').read_text(encoding='utf-8'))
+          if value.get('status') != 'AUTHORIZED_AND_FROZEN':
+              raise SystemExit(f"decision did not freeze contract: {value}")
+          print('FROZEN_CONTRACT_SHA256=' + value['contract_sha256'])
+          PY
+
+      - name: Checkout exact bounded target source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/executor-pilot-target
+          ref: ${{ env.TARGET_COMMIT }}
+          path: target
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify target commit and tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C target rev-parse HEAD)" = "$TARGET_COMMIT"
+          test "$(git -C target rev-parse 'HEAD^{tree}')" = "$TARGET_TREE"
+          test -z "$(git -C target status --porcelain)"
+
+      - name: Re-derive zero-effect solution candidate through provider boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          from executor.solution_provider import generate_validated_solution
+          from executor.solution_proposal import validate_solution_proposal
+
+          frozen = json.loads(Path('run-output/frozen.json').read_text(encoding='utf-8'))
+          source_path = Path('target/project_registry/registry.py')
+          source = source_path.read_text(encoding='utf-8')
+          old = '''    def add_many(self, projects: Iterable[Project]) -> None:\n        """Add projects one by one, leaving earlier writes after a late duplicate."""\n\n        for project in projects:\n            if project.project_id in self._projects:\n                raise DuplicateProjectError(\n                    f"duplicate project_id: {project.project_id}"\n                )\n            self._projects[project.project_id] = project\n'''
+          new = '''    def add_many(self, projects: Iterable[Project]) -> None:\n        """Add a batch atomically after validating all project identifiers."""\n\n        batch = list(projects)\n        seen = set(self._projects)\n        for project in batch:\n            if project.project_id in seen:\n                raise DuplicateProjectError(\n                    f"duplicate project_id: {project.project_id}"\n                )\n            seen.add(project.project_id)\n        for project in batch:\n            self._projects[project.project_id] = project\n'''
+          if source.count(old) != 1:
+              raise SystemExit('pinned target no longer contains the exact bounded defect block')
+          replacement = source.replace(old, new, 1)
+          before_sha = hashlib.sha256(source.encode('utf-8')).hexdigest()
+          after_sha = hashlib.sha256(replacement.encode('utf-8')).hexdigest()
+          contract = frozen['contract']
+          task = contract['task']
+          target = contract['target']
+
+          class ChatGPTSessionProvider:
+              provider_name = 'OPENAI_CHATGPT'
+              model_name = 'chatgpt-session'
+
+              def generate_candidate(self, *, frozen_contract, prompt):
+                  return {
+                      'schema_version': 'executor-solution-candidate/1.0',
+                      'status': 'AWAITING_FROZEN_CONTRACT_SHA',
+                      'proposal_id': 'gp001-product-solution-001',
+                      'repository': target['repository'],
+                      'source_commit': target['commit'],
+                      'source_tree': target['tree'],
+                      'mutations': [{
+                          'path': 'project_registry/registry.py',
+                          'expected_before_sha256': before_sha,
+                          'replacement_text': replacement,
+                          'expected_after_sha256': after_sha,
+                      }],
+                      'rationale': 'Validate the complete batch against existing and intra-batch identifiers before mutating ProjectRegistry state.',
+                      'evidence_plan': [
+                          *task['postcondition_argv'],
+                          *task['regression_argv'],
+                      ],
+                  }
+
+          validated = generate_validated_solution(
+              provider=ChatGPTSessionProvider(),
+              frozen_result=frozen,
+              prompt='Re-derive a bounded one-file fix for the frozen ProjectRegistry.add_many atomic batch regression without changing protected tests.',
+              historical_candidate_relation='SAME_FIX_REDERIVED',
+          )
+          proposal = {
+              'schema_version': 'executor-solution-proposal/1.0',
+              'proposal_id': validated.proposal_id,
+              'contract_sha256': validated.contract_sha256,
+              'repository': validated.repository,
+              'source_commit': validated.source_commit,
+              'source_tree': validated.source_tree,
+              'mutations': [item.to_dict() for item in validated.mutations],
+              'rationale': validated.rationale,
+              'evidence_plan': [list(item) for item in validated.evidence_plan],
+              'provenance': validated.provenance,
+          }
+          checked = validate_solution_proposal(proposal, frozen_result=frozen)
+          Path('run-output/proposal.json').write_text(
+              json.dumps(proposal, ensure_ascii=False, indent=2, sort_keys=True) + '\n',
+              encoding='utf-8',
+          )
+          print('PROPOSAL_SHA256=' + checked.payload_sha256)
+          print('PROVENANCE_SHA256=' + checked.provenance_sha256)
+          PY
+
+      - name: Resolve immutable sandbox image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull python:3.11-slim
+          image="$(docker image inspect --format='{{.Id}}' python:3.11-slim)"
+          case "$image" in
+            sha256:????????????????????????????????????????????????????????????????) ;;
+            *) echo "unexpected immutable image id: $image" >&2; exit 1 ;;
+          esac
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Execute bounded pilot under frozen authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          creative-os-product execute \
+            --frozen run-output/frozen.json \
+            --proposal run-output/proposal.json \
+            --profile trust_profiles/github-product-gp001.json \
+            --ledger "${RUNNER_TEMP}/product-authority.sqlite3" \
+            --workspace target \
+            --runs-root runs \
+            --run-id "gp001-product-${GITHUB_RUN_ID}" \
+            --image "${{ steps.image.outputs.image }}" \
+            --executor-root . \
+            --executor-commit "$(git rev-parse HEAD)" \
+            > run-output/pilot-report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          value = json.loads(Path('run-output/pilot-report.json').read_text(encoding='utf-8'))
+          if value.get('status') != 'ACTION_COMPLETED_REVIEW_REQUIRED':
+              raise SystemExit(f"pilot did not complete review-required: {value}")
+          print('PILOT_STATUS=' + value['status'])
+          PY
+          git -C target diff --binary > run-output/pilot.patch
+          test -s run-output/pilot.patch
+
+      - name: Publish bounded draft PR through product effect lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          creative-os-product publish-draft-pr \
+            --frozen run-output/frozen.json \
+            --pilot-report run-output/pilot-report.json \
+            --profile trust_profiles/github-product-gp001.json \
+            --ledger "${RUNNER_TEMP}/product-authority.sqlite3" \
+            --evidence-dir effect-evidence \
+            --workspace target \
+            > run-output/draft-pr-publication.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          value = json.loads(Path('run-output/draft-pr-publication.json').read_text(encoding='utf-8'))
+          if value.get('status') != 'DRAFT_PR_CREATED_REVIEW_REQUIRED':
+              raise SystemExit(f"draft PR publication incomplete: {value}")
+          print('DRAFT_PR_STATUS=' + value['status'])
+          print('DRAFT_PR_URL=' + str(value.get('object_url') or value.get('pull_request_url') or ''))
+          PY
+
+      - name: Verify sandbox cleanup
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          remaining="$(docker ps -a --filter label=creative-os-executor-pilot=p4-bounded-real-pilot --format '{{.ID}}')"
+          if [ -n "$remaining" ]; then
+            echo "bounded pilot container cleanup failure: $remaining" >&2
+            docker ps -a --no-trunc
+            exit 1
+          fi
+
+      - name: Preserve exact product evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gp001-product-post-human-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            run-output
+            effect-evidence
+            runs
+          if-no-files-found: warn
+          retention-days: 30
