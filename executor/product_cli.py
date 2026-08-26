@@ -41,9 +41,6 @@ PRODUCT_BASE_BRANCH = "main"
 
 
 def _json_default(value: object) -> object:
-    to_dict = getattr(value, "to_dict", None)
-    if callable(to_dict):
-        return to_dict()
     if dataclasses.is_dataclass(value):
         # Verified evidence dataclasses intentionally carry private in-memory
         # proof sentinels such as ``_proof = object()``. Those sentinels prove
@@ -54,6 +51,9 @@ def _json_default(value: object) -> object:
             for field in dataclasses.fields(value)
             if not field.name.startswith("_")
         }
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        return to_dict()
     raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
@@ -126,19 +126,28 @@ def main(argv: list[str] | None = None) -> int:
     form.add_argument("--out-of-scope", action="append", default=[])
     form.add_argument("--open-question", action="append", default=[])
 
-    publish = sub.add_parser("publish-authority-request", help="publish the exact formation payload as a zero-authority GitHub transport issue")
+    publish = sub.add_parser(
+        "publish-authority-request",
+        help="publish the exact formation payload as a zero-authority GitHub transport issue",
+    )
     publish.add_argument("--formation", required=True)
     publish.add_argument("--profile", default=DEFAULT_PROFILE)
     publish.add_argument("--ledger", required=True)
     publish.add_argument("--evidence-dir", required=True)
 
-    decide = sub.add_parser("decide", help="publication artifact + verified GitHub ACCEPT/MODIFY/REJECT -> bound result")
+    decide = sub.add_parser(
+        "decide",
+        help="publication artifact + verified GitHub ACCEPT/MODIFY/REJECT -> bound result",
+    )
     decide.add_argument("--publication", required=True)
     decide.add_argument("--profile", default=DEFAULT_PROFILE)
     decide.add_argument("--comment", required=True, type=int)
     decide.add_argument("--ledger", required=True)
 
-    execute = sub.add_parser("execute", help="exact frozen contract + validated proposal -> bounded pilot execution")
+    execute = sub.add_parser(
+        "execute",
+        help="exact frozen contract + validated proposal -> bounded pilot execution",
+    )
     execute.add_argument("--frozen", required=True)
     execute.add_argument("--proposal", required=True)
     execute.add_argument("--profile", default=DEFAULT_PROFILE)
@@ -151,7 +160,10 @@ def main(argv: list[str] | None = None) -> int:
     execute.add_argument("--executor-commit", default=None)
     execute.add_argument("--docker-binary", default="docker")
 
-    publish_pr = sub.add_parser("publish-draft-pr", help="successful pilot -> commit -> branch -> push -> observed draft PR")
+    publish_pr = sub.add_parser(
+        "publish-draft-pr",
+        help="successful pilot -> commit -> branch -> push -> observed draft PR",
+    )
     publish_pr.add_argument("--frozen", required=True)
     publish_pr.add_argument("--pilot-report", required=True)
     publish_pr.add_argument("--profile", default=DEFAULT_PROFILE)
@@ -204,19 +216,28 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "decide":
             publication = load_json_object(args.publication)
             formation, issue_number = _publication_inputs(publication)
+            payload = formation.get("github_request_payload")
+            if not isinstance(payload, dict):
+                raise FormationError("canonical formation request lacks GitHub payload")
             source = GitHubRestClient()
-            request = verify_github_request(source, profile=profile, issue_number=issue_number)
+            request = verify_github_request(
+                source,
+                profile=profile,
+                issue_number=issue_number,
+                expected_payload=payload,
+            )
             draft = build_pilot_draft_from_formation(
                 formation,
                 request,
                 formation_publication=publication,
             )
+            draft_sha = pilot_draft_sha256(draft)
             decision = verify_github_decision(
                 source,
                 profile=profile,
                 request=request,
                 comment_id=args.comment,
-                draft_sha256=pilot_draft_sha256(draft),
+                draft_sha256=draft_sha,
             )
             result = apply_github_decision(
                 draft=draft,
@@ -233,6 +254,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "execute":
             frozen = load_json_object(args.frozen)
             request, decision = validate_frozen_pilot_authority(frozen)
+            proposal = load_json_object(args.proposal)
             commit = args.executor_commit or _git_head(args.executor_root)
             environment = build_github_actions_environment(
                 image_id=args.image,
@@ -243,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
                 executor_root=args.executor_root,
                 executor_commit=commit,
                 frozen_result=frozen,
-                proposal=load_json_object(args.proposal),
+                proposal=proposal,
                 verified_request=request,
                 verified_decision=decision,
                 ledger=governed,
@@ -297,6 +319,7 @@ def main(argv: list[str] | None = None) -> int:
     ) as exc:
         _print({"status": "BLOCKED", "error": str(exc)})
         return 2
+    return 2
 
 
 if __name__ == "__main__":
