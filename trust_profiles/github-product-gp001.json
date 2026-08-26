@@ -1,0 +1,13 @@
+{
+  "schema_version": "executor-github-trust-profile/1.0",
+  "profile_id": "GITHUB-PRODUCT-GP001-001",
+  "intake_repository": "FJ899/Executor",
+  "allowed_actor": {
+    "login": "FJ899",
+    "id": 275481581
+  },
+  "allowed_target_repositories": [
+    "FJ899/executor-pilot-target"
+  ],
+  "max_decision_lifetime_seconds": 3600
+}
