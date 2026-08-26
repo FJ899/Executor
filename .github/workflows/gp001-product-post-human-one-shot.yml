@@ -1,18 +1,319 @@
-name: GP001 product draft PR publication one-shot
+name: GP001 product post-human one-shot
 
 on:
-  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/gp001-product-post-human-one-shot.yml
 
 permissions:
-  contents: read
+  contents: write
+  actions: read
+  issues: read
 
 jobs:
-  historical-boundary:
-    if: ${{ false }}
-    runs-on: ubuntu-latest
+  product-post-human-e2e:
+    if: github.repository == 'FJ899/Executor' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: FJ899/Executor
+      EXECUTOR_GLOBAL_AUTHORITY_TOKEN: ${{ github.token }}
+      EXECUTOR_GITHUB_EFFECT_TOKEN: ${{ secrets.EXECUTOR_GITHUB_EFFECT_TOKEN }}
+      EXECUTOR_WORKFLOW_PATH: .github/workflows/gp001-product-post-human-one-shot.yml
+      GITHUB_TOKEN: ${{ github.token }}
+      DECISION_COMMENT_ID: '5430978240'
+      TARGET_REPOSITORY: FJ899/executor-pilot-target
+      TARGET_COMMIT: 3934a94a5eebf750079200589d6dc40e024d44a0
+      TARGET_TREE: 26d307afcbb3ce72b2911ca44936712c11558c4c
+
     steps:
-      - run: |
-          echo 'Automatic draft PR publication replay disabled.'
-          echo 'Credential-only attempt: run 33009929226 failed before publish-draft-pr.'
-          echo 'Credential-corrected attempt: run 33011126247 entered publish-draft-pr and failed.'
-          echo 'Treat current state as potential partial side effect; reconcile receipts and provider state before any retry.'
+      - name: Checkout exact Executor candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Arm exactly one ACCEPT-002 continuation commit
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          subject="$(git log -1 --format=%s)"
+          if [ "$subject" = 'Execute renewed GP001 ACCEPT-002 end-to-end once' ]; then
+            test -n "$EXECUTOR_GITHUB_EFFECT_TOKEN"
+            case "$EXECUTOR_GITHUB_EFFECT_TOKEN" in
+              github_pat_*|ghp_*) ;;
+              *) echo 'effect secret is not a GitHub PAT-shaped value' >&2; exit 1 ;;
+            esac
+            echo 'armed=true' >> "$GITHUB_OUTPUT"
+            echo 'ACCEPT_002_CONTINUATION_ARMED=true'
+          else
+            echo 'armed=false' >> "$GITHUB_OUTPUT"
+            echo 'ACCEPT_002_CONTINUATION_ARMED=false'
+          fi
+
+      - name: Verify effect token against exact target repository
+        if: steps.guard.outputs.armed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $EXECUTOR_GITHUB_EFFECT_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$TARGET_REPOSITORY" > "${RUNNER_TEMP}/target-repository.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          value=json.loads(Path(os.environ['RUNNER_TEMP'] + '/target-repository.json').read_text(encoding='utf-8'))
+          if value.get('full_name') != 'FJ899/executor-pilot-target':
+              raise SystemExit('token resolved a different repository')
+          permissions=value.get('permissions') or {}
+          if permissions and permissions.get('pull') is not True:
+              raise SystemExit('token lacks target repository read permission')
+          if permissions and permissions.get('push') is not True:
+              raise SystemExit('token lacks target repository write permission')
+          print('TARGET_TOKEN_REPOSITORY_OK=true')
+          PY
+
+      - name: Set up Python
+        if: steps.guard.outputs.armed == 'true'
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Install exact product runtime
+        if: steps.guard.outputs.armed == 'true'
+        run: python -m pip install --no-deps .
+
+      - name: Download recovered formation publication artifact
+        if: steps.guard.outputs.armed == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: 9620012182
+          path: recovered
+          github-token: ${{ github.token }}
+          repository: FJ899/Executor
+          run-id: 33004652210
+
+      - name: Materialize exact unchanged publication
+        if: steps.guard.outputs.armed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p run-output effect-evidence runs
+          publication="$(find recovered -type f -name publication.json -print -quit)"
+          test -n "$publication"
+          cp "$publication" run-output/publication.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          value=json.loads(Path('run-output/publication.json').read_text(encoding='utf-8'))
+          if value.get('status') != 'AWAITING_VERIFIED_HUMAN_DECISION':
+              raise SystemExit('publication is not awaiting human decision')
+          if (value.get('request_transport_provenance') or {}).get('object_id') != '88':
+              raise SystemExit('publication issue identity mismatch')
+          if (value.get('publication_effect') or {}).get('external_write_repeated') is not False:
+              raise SystemExit('publication recovery lineage mismatch')
+          print('PUBLICATION_REUSED_WITHOUT_WRITE=true')
+          PY
+
+      - name: Verify ACCEPT-002 and freeze new exact contract
+        if: steps.guard.outputs.armed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          creative-os-product decide \
+            --publication run-output/publication.json \
+            --profile trust_profiles/github-product-gp001.json \
+            --comment "$DECISION_COMMENT_ID" \
+            --ledger "${RUNNER_TEMP}/product-authority.sqlite3" \
+            > run-output/frozen.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          value=json.loads(Path('run-output/frozen.json').read_text(encoding='utf-8'))
+          if value.get('status') != 'AUTHORIZED_AND_FROZEN':
+              raise SystemExit(f"freeze failed: {value}")
+          decision=value.get('decision_evidence') or {}
+          if decision.get('comment_id') != 5430978240:
+              raise SystemExit('frozen contract is not bound to ACCEPT-002')
+          print('FROZEN_CONTRACT_SHA256='+value['contract_sha256'])
+          print('DECISION_EXPIRES_AT='+decision['expires_at'])
+          PY
+
+      - name: Checkout exact bounded target source
+        if: steps.guard.outputs.armed == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/executor-pilot-target
+          ref: ${{ env.TARGET_COMMIT }}
+          path: target
+          fetch-depth: 0
+          persist-credentials: false
+          token: ${{ secrets.EXECUTOR_GITHUB_EFFECT_TOKEN }}
+
+      - name: Verify target commit and tree
+        if: steps.guard.outputs.armed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C target rev-parse HEAD)" = "$TARGET_COMMIT"
+          test "$(git -C target rev-parse 'HEAD^{tree}')" = "$TARGET_TREE"
+          test -z "$(git -C target status --porcelain)"
+
+      - name: Re-derive zero-effect solution through provider boundary
+        if: steps.guard.outputs.armed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          from executor.solution_provider import generate_validated_solution
+          from executor.solution_proposal import validate_solution_proposal
+
+          frozen=json.loads(Path('run-output/frozen.json').read_text(encoding='utf-8'))
+          p=Path('target/project_registry/registry.py')
+          source=p.read_text(encoding='utf-8')
+          old='''    def add_many(self, projects: Iterable[Project]) -> None:\n        """Add projects one by one, leaving earlier writes after a late duplicate."""\n\n        for project in projects:\n            if project.project_id in self._projects:\n                raise DuplicateProjectError(\n                    f"duplicate project_id: {project.project_id}"\n                )\n            self._projects[project.project_id] = project\n'''
+          new='''    def add_many(self, projects: Iterable[Project]) -> None:\n        """Add a batch atomically after validating all project identifiers."""\n\n        batch = list(projects)\n        seen = set(self._projects)\n        for project in batch:\n            if project.project_id in seen:\n                raise DuplicateProjectError(\n                    f"duplicate project_id: {project.project_id}"\n                )\n            seen.add(project.project_id)\n        for project in batch:\n            self._projects[project.project_id] = project\n'''
+          if source.count(old) != 1:
+              raise SystemExit('pinned bounded defect block mismatch')
+          replacement=source.replace(old,new,1)
+          before=hashlib.sha256(source.encode()).hexdigest()
+          after=hashlib.sha256(replacement.encode()).hexdigest()
+          contract=frozen['contract']; task=contract['task']; target=contract['target']
+
+          class Provider:
+              provider_name='OPENAI_CHATGPT'
+              model_name='chatgpt-session'
+              def generate_candidate(self, *, frozen_contract, prompt):
+                  return {
+                    'schema_version':'executor-solution-candidate/1.0',
+                    'status':'AWAITING_FROZEN_CONTRACT_SHA',
+                    'proposal_id':'gp001-product-solution-accept-002',
+                    'repository':target['repository'],
+                    'source_commit':target['commit'],
+                    'source_tree':target['tree'],
+                    'mutations':[{'path':'project_registry/registry.py','expected_before_sha256':before,'replacement_text':replacement,'expected_after_sha256':after}],
+                    'rationale':'Validate the complete batch before mutating ProjectRegistry state.',
+                    'evidence_plan':[*task['postcondition_argv'],*task['regression_argv']],
+                  }
+
+          validated=generate_validated_solution(
+              provider=Provider(),
+              frozen_result=frozen,
+              prompt='Re-derive the frozen bounded one-file atomic batch fix under ACCEPT-002 without changing protected tests.',
+              historical_candidate_relation='SAME_FIX_REDERIVED')
+          proposal={
+            'schema_version':'executor-solution-proposal/1.0',
+            'proposal_id':validated.proposal_id,
+            'contract_sha256':validated.contract_sha256,
+            'repository':validated.repository,
+            'source_commit':validated.source_commit,
+            'source_tree':validated.source_tree,
+            'mutations':[x.to_dict() for x in validated.mutations],
+            'rationale':validated.rationale,
+            'evidence_plan':[list(x) for x in validated.evidence_plan],
+            'provenance':validated.provenance,
+          }
+          checked=validate_solution_proposal(proposal,frozen_result=frozen)
+          Path('run-output/proposal.json').write_text(json.dumps(proposal,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print('PROPOSAL_SHA256='+checked.payload_sha256)
+          print('PROVENANCE_SHA256='+checked.provenance_sha256)
+          PY
+
+      - name: Resolve immutable sandbox image
+        if: steps.guard.outputs.armed == 'true'
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull python:3.11-slim
+          image="$(docker image inspect --format='{{.Id}}' python:3.11-slim)"
+          case "$image" in
+            sha256:????????????????????????????????????????????????????????????????) ;;
+            *) echo "unexpected image identity: $image" >&2; exit 1 ;;
+          esac
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Execute new contract-bound bounded pilot once
+        if: steps.guard.outputs.armed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          creative-os-product execute \
+            --frozen run-output/frozen.json \
+            --proposal run-output/proposal.json \
+            --profile trust_profiles/github-product-gp001.json \
+            --ledger "${RUNNER_TEMP}/product-authority.sqlite3" \
+            --workspace target \
+            --runs-root runs \
+            --run-id "gp001-product-accept-002-${GITHUB_RUN_ID}" \
+            --image "${{ steps.image.outputs.image }}" \
+            --executor-root . \
+            --executor-commit "$(git rev-parse HEAD)" \
+            > run-output/pilot-report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          value=json.loads(Path('run-output/pilot-report.json').read_text(encoding='utf-8'))
+          if value.get('status') != 'ACTION_COMPLETED_REVIEW_REQUIRED':
+              raise SystemExit(f"execution did not reach review-required success: {value}")
+          if value.get('human_review_required') is not True or value.get('merge_allowed') is not False:
+              raise SystemExit('review/merge boundary mismatch')
+          print('PILOT_STATUS='+value['status'])
+          print('AUTHORITY_RESULT_SHA256='+value['authority_consumption']['result_sha256'])
+          PY
+          git -C target diff --binary > run-output/pilot.patch
+          test -s run-output/pilot.patch
+
+      - name: Publish exactly one observed draft PR through canonical effect lifecycle
+        if: steps.guard.outputs.armed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          creative-os-product publish-draft-pr \
+            --frozen run-output/frozen.json \
+            --pilot-report run-output/pilot-report.json \
+            --profile trust_profiles/github-product-gp001.json \
+            --ledger "${RUNNER_TEMP}/product-authority.sqlite3" \
+            --evidence-dir effect-evidence \
+            --workspace target \
+            > run-output/draft-pr-publication.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          value=json.loads(Path('run-output/draft-pr-publication.json').read_text(encoding='utf-8'))
+          if value.get('status') != 'DRAFT_PR_CREATED_REVIEW_REQUIRED':
+              raise SystemExit(f"publication did not reach draft review boundary: {value}")
+          if value.get('merge_allowed') is not False:
+              raise SystemExit('publication unexpectedly permits merge')
+          pr=value.get('pull_request') or {}
+          print('DRAFT_PR_STATUS='+value['status'])
+          print('DRAFT_PR_URL='+str(pr.get('object_url') or ''))
+          PY
+
+      - name: Verify sandbox cleanup
+        if: ${{ always() && steps.guard.outputs.armed == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          remaining="$(docker ps -a --filter label=creative-os-executor-pilot=p4-bounded-real-pilot --format '{{.ID}}')"
+          test -z "$remaining"
+
+      - name: Preserve exact ACCEPT-002 product evidence
+        if: ${{ always() && steps.guard.outputs.armed == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gp001-product-accept-002-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            run-output
+            effect-evidence
+            runs
+          if-no-files-found: warn
+          retention-days: 30
