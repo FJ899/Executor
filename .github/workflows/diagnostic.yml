@@ -1,12 +1,225 @@
-name: Simple diagnostic workflow
+name: ACCEPT-005 exact no-effect reauthorization plan
 
 on:
   push:
-  workflow_dispatch:
+    branches:
+      - ops/accept005-reauth-plan
+    paths:
+      - .github/workflows/diagnostic.yml
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
-  diagnostic:
+  derive-plan:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PRODUCT_SHA: e02a21dc40836f56e0302a59ae42c58c1239e7ec
+      TARGET_REPOSITORY: FJ899/executor-pilot-target
+      TARGET_COMMIT: 3934a94a5eebf750079200589d6dc40e024d44a0
+      TARGET_TREE: 26d307afcbb3ce72b2911ca44936712c11558c4c
+      PILOT_PATCH_SHA256: 556bd1936b52c8d1a0335614330aa329b7f36c77d28246c1d7308f27a077e29
+      CONTRACT_SHA256: e35d5cb5cdbd7c21a876e1036cbeeb7e214a2bc9856bcb882db95ccafca5af68
+      PILOT_RUN_ID: gp001-accept005-continuation-33021870013
+      SOURCE_RUN_ID: '33021870013'
+      SOURCE_ARTIFACT_ID: '9626842914'
+
     steps:
-      - name: Report runner status
-        run: echo runner-ok
+      - name: Checkout exact product candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/Executor
+          ref: e02a21dc40836f56e0302a59ae42c58c1239e7ec
+          path: product
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact product identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C product rev-parse HEAD)" = "$PRODUCT_SHA"
+          echo 'WRITE_CAPABILITY=false'
+          echo 'EXECUTION_RETRY=false'
+          echo 'PUBLISH_RETRY=false'
+          echo 'PLAN_ONLY=true'
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Install exact product candidate
+        run: python -m pip install --no-deps ./product
+
+      - name: Download exact successful-pilot and NO_EFFECT publication evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: 9626842914
+          path: evidence
+          github-token: ${{ github.token }}
+          repository: FJ899/Executor
+          run-id: 33021870013
+
+      - name: Checkout frozen target twice read only
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/executor-pilot-target
+          ref: 3934a94a5eebf750079200589d6dc40e024d44a0
+          path: target-a
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout second frozen target for determinism proof
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/executor-pilot-target
+          ref: 3934a94a5eebf750079200589d6dc40e024d44a0
+          path: target-b
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Reconstruct exact verified pilot worktree locally only
+        shell: bash
+        run: |
+          set -euo pipefail
+          frozen="$(find evidence -type f -name frozen.json -print -quit)"
+          report="$(find evidence -type f -name pilot-report.json -print -quit)"
+          publication="$(find evidence -type f -name draft-pr-publication.json -print -quit)"
+          patch="$(find evidence -type f -name change.patch -print -quit)"
+          test -n "$frozen" && test -n "$report" && test -n "$publication" && test -n "$patch"
+
+          python - "$frozen" "$report" "$publication" <<'PY'
+          import json, sys
+          frozen=json.load(open(sys.argv[1],encoding='utf-8'))
+          report=json.load(open(sys.argv[2],encoding='utf-8'))
+          publication=json.load(open(sys.argv[3],encoding='utf-8'))
+          if frozen.get('status')!='AUTHORIZED_AND_FROZEN' or frozen.get('contract_sha256')!='e35d5cb5cdbd7c21a876e1036cbeeb7e214a2bc9856bcb882db95ccafca5af68': raise SystemExit('frozen identity mismatch')
+          if report.get('status')!='ACTION_COMPLETED_REVIEW_REQUIRED' or report.get('run_id')!='gp001-accept005-continuation-33021870013': raise SystemExit('pilot report identity mismatch')
+          if report.get('repository')!='FJ899/executor-pilot-target' or report.get('source_commit')!='3934a94a5eebf750079200589d6dc40e024d44a0': raise SystemExit('pilot target mismatch')
+          if report.get('changed_paths')!=['project_registry/registry.py']: raise SystemExit('pilot scope mismatch')
+          if (report.get('patch') or {}).get('sha256')!='556bd1936b52c8d1a0335614330aa329b7f36c77d28246c1d7308f27a077e29': raise SystemExit('pilot patch hash mismatch')
+          if publication.get('status')!='DRAFT_PR_PUBLICATION_INCOMPLETE' or publication.get('stage')!='PUSH_DRAFT_BRANCH': raise SystemExit('prior publication state mismatch')
+          push=publication.get('push') or {}
+          if push.get('status')!='NO_EFFECT_CONFIRMED' or push.get('automatic_retry_allowed') is not False or push.get('next_attempt_requires_new_authority') is not True: raise SystemExit('prior push is not confirmed no-effect')
+          absence=push.get('absence_observation') or {}
+          if absence.get('complete') is not True or absence.get('exists') is not False: raise SystemExit('absence proof mismatch')
+          print('EVIDENCE_STATE=EXACT_NO_EFFECT_CONFIRMED')
+          PY
+
+          for dir in target-a target-b; do
+            test "$(git -C "$dir" rev-parse HEAD)" = "$TARGET_COMMIT"
+            test "$(git -C "$dir" rev-parse 'HEAD^{tree}')" = "$TARGET_TREE"
+            test -z "$(git -C "$dir" status --porcelain)"
+            git -C "$dir" apply --whitespace=nowarn "$(realpath "$patch")"
+            actual="$(git -C "$dir" diff --no-ext-diff --no-textconv --binary "$TARGET_COMMIT" | sha256sum | awk '{print $1}')"
+            test "$actual" = "$PILOT_PATCH_SHA256"
+            test "$(git -C "$dir" status --porcelain | wc -l)" = '1'
+            test "$(git -C "$dir" status --porcelain | sed 's/^...//')" = 'project_registry/registry.py'
+          done
+          echo 'LOCAL_RECONSTRUCTION=EXACT_TWICE'
+
+      - name: Derive exact retry plan twice and require byte-stable effects
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p plan-output
+          frozen="$(find evidence -type f -name frozen.json -print -quit)"
+          report="$(find evidence -type f -name pilot-report.json -print -quit)"
+          publication="$(find evidence -type f -name draft-pr-publication.json -print -quit)"
+          python - "$frozen" "$report" "$publication" <<'PY'
+          import json, pathlib, sys
+          from executor.product_draft_pr_retry import ProductDraftPrRetryExecutor
+
+          frozen=json.load(open(sys.argv[1],encoding='utf-8'))
+          report=json.load(open(sys.argv[2],encoding='utf-8'))
+          prior=json.load(open(sys.argv[3],encoding='utf-8'))
+
+          def derive(workspace, evidence_dir):
+              executor=ProductDraftPrRetryExecutor(
+                  frozen_result=frozen,
+                  pilot_report=report,
+                  ledger=object(),
+                  evidence_directory=evidence_dir,
+                  base_branch='main',
+              )
+              return executor.plan_retry(workspace=workspace, prior_publication=prior)
+
+          plan_a=derive('target-a','plan-output/evidence-a')
+          plan_b=derive('target-b','plan-output/evidence-b')
+          if plan_a != plan_b:
+              raise SystemExit('retry plan is not deterministic across fresh target checkouts')
+          if plan_a.get('requires_verified_human_reauthorization') is not True or plan_a.get('automatic_retry_allowed') is not False:
+              raise SystemExit('retry plan authority semantics widened')
+          for key in ('merge_allowed','deploy_allowed','release_allowed','tag_allowed'):
+              if plan_a.get(key) is not False: raise SystemExit(f'{key} unexpectedly authorized')
+
+          push=plan_a['push']; pr=plan_a['pull_request']; prepared=plan_a['prepared']
+          if push['target']!='FJ899/executor-pilot-target@refs/heads/executor-pilot/gp001-accept005-continuation-33021870013':
+              raise SystemExit('retry push target drift')
+          if pr['target']!='FJ899/executor-pilot-target' or pr['payload'].get('draft') is not True:
+              raise SystemExit('retry PR target/draft drift')
+          if prepared.get('patch_sha256')!='556bd1936b52c8d1a0335614330aa329b7f36c77d28246c1d7308f27a077e29':
+              raise SystemExit('prepared patch drift')
+
+          request=(frozen.get('contract') or {}).get('request_evidence') or {}
+          old=prior['push']
+          reauth={
+              'schema_version':'executor-github-effect-reauthorization/1.0',
+              'request':{
+                  'repository':'FJ899/Executor',
+                  'issue_number':request['issue_number'],
+                  'issue_node_id':request['issue_node_id'],
+                  'body_sha256':request['body_sha256'],
+              },
+              'contract_sha256':frozen['contract_sha256'],
+              'pilot_run_id':report['run_id'],
+              'prior_no_effect':{
+                  'action_kind':'CREATE_GIT_REF',
+                  'target':old['target'],
+                  'effect_sha256':old['effect_sha256'],
+                  'attempt_id':old['attempt_id'],
+                  'result_sha256':old['authority_result_binding']['result_sha256'],
+                  'absence_evidence_sha256':old['absence_observation']['evidence_sha256'],
+              },
+              'authorized_effects':{
+                  'push':{
+                      'action_kind':'CREATE_GIT_REF',
+                      'target':push['target'],
+                      'effect_sha256':push['effect_sha256'],
+                  },
+                  'pull_request':{
+                      'action_kind':'CREATE_PULL_REQUEST',
+                      'target':pr['target'],
+                      'effect_sha256':pr['effect_sha256'],
+                      'draft':True,
+                  },
+                  'merge':False,
+                  'deploy':False,
+                  'release':False,
+                  'tag':False,
+              },
+              'decision':'REAUTHORIZE_NO_EFFECT',
+              'valid_for_seconds':3600,
+              'nonce':'human-gp001-product-effect-reauth-001',
+          }
+          pathlib.Path('plan-output/retry-plan.json').write_text(json.dumps(plan_a,ensure_ascii=False,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          pathlib.Path('plan-output/human-reauthorization.json').write_text(json.dumps(reauth,ensure_ascii=False,separators=(',',':'))+'\n',encoding='utf-8')
+          print('PREPARED_COMMIT_SHA='+prepared['commit_sha'])
+          print('PREPARED_TREE_SHA='+prepared['tree_sha'])
+          print('NEW_PUSH_EFFECT_SHA256='+push['effect_sha256'])
+          print('NEW_PR_EFFECT_SHA256='+pr['effect_sha256'])
+          print('HUMAN_REAUTHORIZATION='+json.dumps(reauth,ensure_ascii=False,separators=(',',':')))
+          print('PLAN_DETERMINISM=EXACT_TWICE')
+          print('WRITE_CAPABILITY=false')
+          PY
+
+      - name: Preserve read-only plan evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gp001-accept005-reauth-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: plan-output
+          if-no-files-found: error
+          retention-days: 30
