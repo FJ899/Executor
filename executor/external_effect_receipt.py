@@ -22,8 +22,15 @@ class ExternalEffectReceiptError(ValueError):
 _SCHEMA_VERSION = "executor-external-effect-receipt/2.0"
 _EVIDENCE_SCHEMA_VERSION = "executor-external-effect-evidence/1.0"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
-_GITHUB_TARGET = re.compile(
+_GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+_GITHUB_REPOSITORY = re.compile(
+    r"^(?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+)$"
+)
+_GITHUB_COMMENT_TARGET = re.compile(
     r"^(?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+)#(?P<issue>[1-9][0-9]*)$"
+)
+_GITHUB_REF_TARGET = re.compile(
+    r"^(?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+)@(?P<ref>refs/heads/[A-Za-z0-9._/-]+)$"
 )
 _GITHUB_COMMENT_FRAGMENT = re.compile(r"^issuecomment-(?P<id>[1-9][0-9]*)$")
 _VERIFIED_RECEIPT_PROOF = object()
@@ -115,22 +122,73 @@ def _validate_expected_identity(
         raise ExternalEffectReceiptError("target mismatch")
 
 
+def _validate_ref_name(value: str) -> None:
+    if (
+        not value.startswith("refs/heads/")
+        or value.endswith("/")
+        or "//" in value
+        or ".." in value
+        or "@{" in value
+        or value.endswith(".")
+        or any(ch in value for ch in " ~^:?*[\\")
+    ):
+        raise ExternalEffectReceiptError("GitHub ref target is not a safe branch ref")
+
+
 def _validate_provider_target(
     *,
     provider: str,
     action_kind: str,
     target: str,
 ) -> re.Match[str]:
-    if provider != "GITHUB" or action_kind != "CREATE_ISSUE_COMMENT":
+    if provider != "GITHUB":
         raise ExternalEffectReceiptError(
-            "provider/target binding is not implemented for this write kind"
+            "provider/target binding is not implemented for this provider"
         )
-    target_match = _GITHUB_TARGET.fullmatch(target)
-    if target_match is None:
+    if action_kind == "CREATE_ISSUE_COMMENT":
+        target_match = _GITHUB_COMMENT_TARGET.fullmatch(target)
+        if target_match is None:
+            raise ExternalEffectReceiptError(
+                "GitHub issue-comment target must use owner/repo#issue form"
+            )
+        return target_match
+    if action_kind in {"CREATE_ISSUE", "CREATE_PULL_REQUEST"}:
+        target_match = _GITHUB_REPOSITORY.fullmatch(target)
+        if target_match is None:
+            raise ExternalEffectReceiptError(
+                "GitHub repository write target must use owner/repo form"
+            )
+        return target_match
+    if action_kind in {"CREATE_GIT_REF", "UPDATE_GIT_REF"}:
+        target_match = _GITHUB_REF_TARGET.fullmatch(target)
+        if target_match is None:
+            raise ExternalEffectReceiptError(
+                "GitHub ref target must use owner/repo@refs/heads/<branch> form"
+            )
+        _validate_ref_name(target_match.group("ref"))
+        return target_match
+    raise ExternalEffectReceiptError(
+        "provider/target binding is not implemented for this write kind"
+    )
+
+
+def _validate_github_url_base(parsed, *, owner: str, repo: str) -> None:
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "github.com"
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.port not in (None, 443)
+        or parsed.params
+        or parsed.query
+    ):
         raise ExternalEffectReceiptError(
-            "GitHub issue-comment target must use owner/repo#issue form"
+            "GitHub object identity is not bound to the expected target"
         )
-    return target_match
+    if not parsed.path.startswith(f"/{owner}/{repo}/"):
+        raise ExternalEffectReceiptError(
+            "GitHub object identity is not bound to the expected target"
+        )
 
 
 def _validate_provider_object_binding(
@@ -146,33 +204,45 @@ def _validate_provider_object_binding(
         action_kind=action_kind,
         target=target,
     )
-
-    if not object_id.isdecimal() or int(object_id) <= 0:
-        raise ExternalEffectReceiptError(
-            "GitHub issue-comment object_id must be a positive integer string"
-        )
-
     parsed = urlparse(object_url)
-    expected_path = (
-        f"/{target_match.group('owner')}/{target_match.group('repo')}/issues/"
-        f"{target_match.group('issue')}"
-    )
-    fragment_match = _GITHUB_COMMENT_FRAGMENT.fullmatch(parsed.fragment)
+    owner = target_match.group("owner")
+    repo = target_match.group("repo")
+    _validate_github_url_base(parsed, owner=owner, repo=repo)
 
-    if (
-        parsed.scheme != "https"
-        or parsed.hostname != "github.com"
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.port not in (None, 443)
-        or parsed.path != expected_path
-        or parsed.params
-        or parsed.query
-        or fragment_match is None
-        or fragment_match.group("id") != object_id
-    ):
+    if action_kind == "CREATE_ISSUE_COMMENT":
+        if not object_id.isdecimal() or int(object_id) <= 0:
+            raise ExternalEffectReceiptError(
+                "GitHub issue-comment object_id must be a positive integer string"
+            )
+        expected_path = f"/{owner}/{repo}/issues/{target_match.group('issue')}"
+        fragment_match = _GITHUB_COMMENT_FRAGMENT.fullmatch(parsed.fragment)
+        valid = (
+            parsed.path == expected_path
+            and fragment_match is not None
+            and fragment_match.group("id") == object_id
+        )
+    elif action_kind == "CREATE_ISSUE":
+        if not object_id.isdecimal() or int(object_id) <= 0:
+            raise ExternalEffectReceiptError(
+                "GitHub issue object_id must be a positive integer string"
+            )
+        valid = parsed.path == f"/{owner}/{repo}/issues/{object_id}" and not parsed.fragment
+    elif action_kind == "CREATE_PULL_REQUEST":
+        if not object_id.isdecimal() or int(object_id) <= 0:
+            raise ExternalEffectReceiptError(
+                "GitHub pull-request object_id must be a positive integer string"
+            )
+        valid = parsed.path == f"/{owner}/{repo}/pull/{object_id}" and not parsed.fragment
+    else:
+        if _GIT_SHA.fullmatch(object_id) is None:
+            raise ExternalEffectReceiptError(
+                "GitHub ref receipt object_id must be the resulting commit SHA"
+            )
+        valid = parsed.path == f"/{owner}/{repo}/commit/{object_id}" and not parsed.fragment
+
+    if not valid:
         raise ExternalEffectReceiptError(
-            "GitHub issue-comment object identity is not bound to the expected target"
+            "GitHub object identity is not bound to the expected target"
         )
 
 
