@@ -31,13 +31,12 @@ class RunState(StrEnum):
     EXECUTING = "EXECUTING"
     VERIFYING = "VERIFYING"
     REPLAYING = "REPLAYING"
-    PASS = "PASS"
     BLOCKED = "BLOCKED"
     FAILED = "FAILED"
     STALE = "STALE"
 
 
-TERMINAL_STATES = {RunState.PASS, RunState.BLOCKED, RunState.FAILED, RunState.STALE}
+TERMINAL_STATES = {RunState.BLOCKED, RunState.FAILED, RunState.STALE}
 
 _ALLOWED: dict[RunState, set[RunState]] = {
     RunState.CREATED: {RunState.CONTRACT_VALIDATED, RunState.BLOCKED, RunState.FAILED, RunState.STALE},
@@ -48,9 +47,7 @@ _ALLOWED: dict[RunState, set[RunState]] = {
     RunState.APPROVED: {RunState.EXECUTING, RunState.BLOCKED, RunState.FAILED, RunState.STALE},
     RunState.EXECUTING: {RunState.VERIFYING, RunState.BLOCKED, RunState.FAILED, RunState.STALE},
     RunState.VERIFYING: {RunState.REPLAYING, RunState.BLOCKED, RunState.FAILED, RunState.STALE},
-    # PASS remains locked until the separately approved M3 replay gate exists.
     RunState.REPLAYING: {RunState.BLOCKED, RunState.FAILED, RunState.STALE},
-    RunState.PASS: set(),
     RunState.BLOCKED: set(),
     RunState.FAILED: set(),
     RunState.STALE: set(),
@@ -115,11 +112,15 @@ class RevalidationResult:
 
 
 class RunStore:
-    """Fail-closed store whose canonical state is the verified event chain.
+    """Fail-closed legacy/generic store whose canonical state is the verified event chain.
 
     ``state.json`` and checkpoint files are materialized integrity mirrors. Every
     public read or mutation verifies all three representations while holding the
     run lock. A transaction journal is the commit guard for multi-file writes.
+
+    ``PASS`` was a dead pre-M3 state and is retired. It is not part of the
+    canonical state enum and cannot be newly written or accepted as current
+    lifecycle state.
     """
 
     def __init__(self, runs_root: str | Path):
@@ -203,12 +204,15 @@ class RunStore:
             return rows
 
     def transition(self, run_id: str, new_state: RunState | str, snapshot: Snapshot, *, reason: str) -> dict[str, Any]:
-        target = RunState(new_state)
+        if str(new_state) == "PASS":
+            raise InvalidTransition("PASS state has been retired; no active replay gate writes PASS")
+        try:
+            target = RunState(new_state)
+        except (TypeError, ValueError) as exc:
+            raise InvalidTransition(f"unknown run state: {new_state!r}") from exc
         with self._run_lock(run_id) as run_dir:
             current, rows = self._load_verified_locked(run_id, run_dir)
             current_state = RunState(current["state"])
-            if target == RunState.PASS:
-                raise InvalidTransition("PASS is locked until the deterministic M3 replay gate is implemented")
             if target not in _ALLOWED[current_state]:
                 raise InvalidTransition(f"{current_state.value} -> {target.value} is not allowed")
             event = self._build_event(
@@ -316,8 +320,6 @@ class RunStore:
                         f"Transition for {event.run_id} failed and rollback could not be verified: {recovery_exc}"
                     ) from exc
                 raise
-            # The journal removal is the commit point. If it completed before a
-            # directory fsync error, accept only a fully verified new state.
             if not commit_complete:
                 raise
             try:
@@ -399,12 +401,6 @@ class RunStore:
         if checkpoint is not None and checkpoint != event_row:
             raise RunIntegrityError("Pending checkpoint cannot be safely rolled back")
 
-        # A journal found by a later process has no authenticity boundary: its
-        # ordinary hash can be recomputed by anyone who can write this directory.
-        # Cleanup is therefore automatic only while the canonical event log and
-        # state still equal the previous committed value. Once either canonical
-        # artifact contains the target value, restart recovery is ambiguous and
-        # must not silently roll a committed terminal event backwards.
         if trusted_transaction is None and (
             current_rows != (previous_rows if previous_rows else None)
             or current_state != previous_state
@@ -563,8 +559,11 @@ class RunStore:
             run_id = row.get("run_id")
             if not isinstance(run_id, str) or (expected_run_id is not None and run_id != expected_run_id):
                 raise RunIntegrityError("Event run_id mismatch")
+            raw_state = row.get("state")
+            if raw_state == "PASS":
+                raise RunIntegrityError("Event contains retired PASS state")
             try:
-                state_value = RunState(row.get("state"))
+                state_value = RunState(raw_state)
             except (TypeError, ValueError) as exc:
                 raise RunIntegrityError("Event contains an unknown state") from exc
             expected_previous_state = previous_state.value if previous_state is not None else None
@@ -576,8 +575,6 @@ class RunStore:
                 if state_value != RunState.CREATED:
                     raise RunIntegrityError("First event must be CREATED")
             elif state_value not in _ALLOWED[previous_state]:
-                if state_value == RunState.PASS:
-                    raise RunIntegrityError("PASS cannot be verified before the M3 replay gate exists")
                 raise RunIntegrityError(
                     f"Stored transition {previous_state.value} -> {state_value.value} is not allowed"
                 )
@@ -648,5 +645,4 @@ class RunStore:
             run_dir.rmdir()
             fsync_directory(run_dir.parent)
         except OSError:
-            # The failed create remains unusable and therefore fail-closed.
             return
