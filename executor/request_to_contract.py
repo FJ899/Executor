@@ -4,11 +4,26 @@ import copy
 import hashlib
 import json
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable
 
+from executor.github_authority import GovernedAuthorityLedger
+from executor.github_trust import (
+    GitHubEvidenceSource,
+    GitHubTrustError,
+    GitHubTrustProfile,
+    canonical_json,
+    verify_github_decision,
+    verify_github_request,
+)
 from executor.gp001_contract import validate_gp001_task_contract
+from executor.pilot_contract import (
+    PilotContractError,
+    apply_github_decision,
+    build_pilot_draft,
+)
 from executor.repository_identity import RepositoryIdentityError, verify_repository_checkout
 from executor.repository_snapshot import RepositorySnapshotError, verify_worktree_file
 
@@ -16,6 +31,7 @@ from executor.repository_snapshot import RepositorySnapshotError, verify_worktre
 _PROFILE_SCHEMA = "executor-contract-formation-profile/1.0"
 _PROFILE_PATH = "formation_profiles/REQUEST_TO_CONTRACT_001.json"
 _EXECUTOR_REPOSITORY = "FJ899/Executor"
+_FORMATION_BINDING_SCHEMA = "executor-contract-formation-binding/1.0"
 
 
 class FormationError(RuntimeError):
@@ -29,6 +45,9 @@ class FormationStatus(str, Enum):
     DRAFT_CRITIQUED = "DRAFT_CRITIQUED"
     NEEDS_CLARIFICATION = "NEEDS_CLARIFICATION"
     AWAITING_VERIFIED_HUMAN_AUTHORIZATION = "AWAITING_VERIFIED_HUMAN_AUTHORIZATION"
+    MODIFICATION_REQUIRED = "MODIFICATION_REQUIRED"
+    REJECTED = "REJECTED"
+    AUTHORIZED_AND_FROZEN = "AUTHORIZED_AND_FROZEN"
 
 
 @dataclass(frozen=True)
@@ -96,14 +115,16 @@ def _decode_object(raw: bytes, *, label: str) -> dict[str, Any]:
     return payload
 
 
-class RequestToContract001:
-    """Govern one known GP001 request up to a verified human authority boundary.
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
-    Phase 1 deliberately stops before authorization/freeze. Canonical formation
-    inputs are read from a verified exact Executor checkout. The only direct USER
-    provenance is the verbatim request; structured extraction remains MODEL
-    provenance. A later superior boundary must provide verified external human
-    evidence bound to this exact draft before executable authority can exist.
+
+class RequestToContract001:
+    """Govern one known GP001 request through verified human freeze.
+
+    Formation preserves the original request/model provenance boundary and may
+    only become executable through the existing provider-verified GitHub
+    authority path. No caller-created object can self-declare human authority.
     """
 
     def __init__(
@@ -166,9 +187,23 @@ class RequestToContract001:
             raise FormationError("canonical GP001 task contract is not valid")
 
         self.status = FormationStatus.REQUEST_RECEIVED
+        self._draft_version = 1
+        self._supersedes_draft_sha256: str | None = None
+        self._invalidated_draft_sha256s: list[str] = []
         self._understood_objective: str | None = None
         self._proposed_task: dict[str, Any] | None = None
-        self._provenance: list[ProvenanceRecord] = [
+        self._provenance: list[ProvenanceRecord] = self._base_provenance()
+        self._out_of_scope_discoveries: list[str] = []
+        self._open_questions: list[str] = []
+        self._draft_sha256: str | None = None
+        self._draft_payload: dict[str, Any] | None = None
+        self._critique: list[CritiqueFinding] = []
+        self._github_authority_request_payload: dict[str, Any] | None = None
+        self._last_decision_result: dict[str, Any] | None = None
+        self._frozen_result: dict[str, Any] | None = None
+
+    def _base_provenance(self) -> list[ProvenanceRecord]:
+        return [
             ProvenanceRecord(
                 path="$.user_request",
                 source="USER",
@@ -176,14 +211,14 @@ class RequestToContract001:
                 note="verbatim request supplied by the user",
             )
         ]
-        self._out_of_scope_discoveries: list[str] = []
-        self._open_questions: list[str] = []
-        self._draft_sha256: str | None = None
-        self._critique: list[CritiqueFinding] = []
 
     @property
     def draft_sha256(self) -> str | None:
         return self._draft_sha256
+
+    @property
+    def draft_version(self) -> int:
+        return self._draft_version
 
     def propose_interpretation(
         self,
@@ -263,6 +298,8 @@ class RequestToContract001:
             "profile_sha256": self._profile_sha256,
             "canonical_task_sha256": self._canonical_task_sha256,
             "request_id": self.request_id,
+            "draft_version": self._draft_version,
+            "supersedes_draft_sha256": self._supersedes_draft_sha256,
             "user_request": self.user_request,
             "understood_objective": self._understood_objective,
             "provenance": [record.to_dict() for record in self._provenance],
@@ -270,7 +307,9 @@ class RequestToContract001:
             "out_of_scope_discoveries": self._out_of_scope_discoveries,
             "open_questions": self._open_questions,
         }
+        self._draft_payload = copy.deepcopy(payload)
         self._draft_sha256 = _sha256_text(_canonical_json(payload))
+        self._github_authority_request_payload = None
         self._critique = []
         self.status = FormationStatus.DRAFT_CONTRACT_CREATED
         return self.decision_surface()
@@ -345,9 +384,12 @@ class RequestToContract001:
             "unresolved_assumptions": list(self._open_questions),
             "provenance": [record.to_dict() for record in self._provenance],
             "critique": [finding.to_dict() for finding in self._critique],
+            "draft_version": self._draft_version,
+            "supersedes_draft_sha256": self._supersedes_draft_sha256,
+            "invalidated_draft_sha256s": list(self._invalidated_draft_sha256s),
             "draft_sha256": self._draft_sha256,
             "status": self.status.value,
-            "executable": False,
+            "executable": self.status is FormationStatus.AUTHORIZED_AND_FROZEN,
         }
 
     def export_human_authorization_request(self) -> dict[str, Any]:
@@ -365,6 +407,8 @@ class RequestToContract001:
             "formation_profile": self._profile["id"],
             "formation_profile_sha256": self._profile_sha256,
             "canonical_task_sha256": self._canonical_task_sha256,
+            "draft_version": self._draft_version,
+            "supersedes_draft_sha256": self._supersedes_draft_sha256,
             "draft_sha256": self._draft_sha256,
             "allowed_decisions": ["ACCEPT", "MODIFY", "REJECT"],
             "decision_surface": self.decision_surface(),
@@ -372,8 +416,247 @@ class RequestToContract001:
             "status": "AWAITING_VERIFIED_HUMAN_AUTHORIZATION",
         }
 
-    def frozen_task_contract(self) -> dict[str, Any]:
-        raise FormationError(
-            "no executable contract exists: verified external human authorization "
-            "and freeze are not implemented in REQUEST_TO_CONTRACT_001 phase 1"
+    def _github_task_projection(self) -> dict[str, Any]:
+        if self._proposed_task is None:
+            raise FormationError("no proposed task contract")
+        golden = self._proposed_task.get("golden_path")
+        budgets = self._proposed_task.get("budgets")
+        if not isinstance(golden, dict) or not isinstance(budgets, dict):
+            raise FormationError("GP001 task lacks golden path or budgets")
+        problem = golden.get("problem")
+        scope = golden.get("scope")
+        commands = golden.get("commands")
+        if not all(isinstance(item, dict) for item in (problem, scope, commands)):
+            raise FormationError("GP001 task cannot be projected into GitHub authority request")
+        allowed_paths = copy.deepcopy(scope.get("allowed_paths"))
+        protected_paths = copy.deepcopy(scope.get("protected_paths"))
+        target_test = copy.deepcopy(commands.get("target_test_argv"))
+        regression = copy.deepcopy(commands.get("regression_argv"))
+        if not isinstance(allowed_paths, list) or not 1 <= len(allowed_paths) <= 3:
+            raise FormationError("GP001 authority request exceeds the bounded file limit")
+        if not isinstance(target_test, list) or not target_test:
+            raise FormationError("GP001 target test command is missing")
+        if not isinstance(regression, list) or not regression:
+            raise FormationError("GP001 regression commands are missing")
+        return {
+            "class": "BOUNDED_CORRECTNESS_OR_QUALITY_FIX",
+            "problem_statement": problem.get("statement"),
+            "allowed_paths": allowed_paths,
+            "protected_paths": protected_paths,
+            "precondition_argv": [target_test],
+            "postcondition_argv": [copy.deepcopy(target_test)],
+            "regression_argv": regression,
+            "max_production_files": len(allowed_paths),
+            "max_patch_lines": budgets.get("max_patch_lines"),
+        }
+
+    def build_github_authority_request(
+        self,
+        *,
+        source: GitHubEvidenceSource,
+        profile: GitHubTrustProfile,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Build the exact provider request payload from the governed draft.
+
+        The target tree and request lifetime are derived by the system. Callers
+        no longer hand-author a second GitHub request JSON between formation and
+        verified authority.
+        """
+
+        if self.status is not FormationStatus.AWAITING_VERIFIED_HUMAN_AUTHORIZATION:
+            raise FormationError("GitHub authority request requires a clean current draft")
+        if self._draft_sha256 is None or self._draft_payload is None:
+            raise FormationError("current formation draft is missing")
+        if self._github_authority_request_payload is not None:
+            return copy.deepcopy(self._github_authority_request_payload)
+        if self._draft_sha256 in self._invalidated_draft_sha256s:
+            raise FormationError("invalidated formation draft cannot request authority")
+
+        repositories = self._proposed_task.get("repositories", {}) if self._proposed_task else {}
+        target = repositories.get("target", {}) if isinstance(repositories, dict) else {}
+        repository = target.get("name") if isinstance(target, dict) else None
+        commit = target.get("commit") if isinstance(target, dict) else None
+        if not isinstance(repository, str) or not isinstance(commit, str):
+            raise FormationError("formation target repository/commit is missing")
+        if repository.lower() not in {
+            item.lower() for item in profile.allowed_target_repositories
+        }:
+            raise FormationError("formation target repository is outside the trust profile")
+
+        commit_url = f"https://api.github.com/repos/{repository}/git/commits/{commit}"
+        try:
+            commit_evidence = source.fetch_json(commit_url)
+        except GitHubTrustError as exc:
+            raise FormationError(f"target commit evidence is unavailable: {exc}") from exc
+        tree = commit_evidence.get("tree")
+        if (
+            commit_evidence.get("sha") != commit
+            or not isinstance(tree, dict)
+            or not isinstance(tree.get("sha"), str)
+        ):
+            raise FormationError("target commit/tree provider binding is invalid")
+
+        current = (now or _utc_now()).astimezone(timezone.utc)
+        expires = current + timedelta(seconds=profile.max_decision_lifetime_seconds)
+        nonce = f"formation-{self._draft_version}-{self._draft_sha256[:24]}"
+        payload = {
+            "schema_version": "executor-github-request/1.0",
+            "request_id": self.request_id,
+            "target": {
+                "repository": repository,
+                "commit": commit,
+                "tree": tree["sha"],
+            },
+            "task": self._github_task_projection(),
+            "expires_at": expires.isoformat().replace("+00:00", "Z"),
+            "nonce": nonce,
+        }
+        self._github_authority_request_payload = copy.deepcopy(payload)
+        return copy.deepcopy(payload)
+
+    def _formation_binding(self) -> dict[str, Any]:
+        if (
+            self._draft_sha256 is None
+            or self._draft_payload is None
+            or self._github_authority_request_payload is None
+        ):
+            raise FormationError("formation binding cannot be built before authority request")
+        return {
+            "schema_version": _FORMATION_BINDING_SCHEMA,
+            "executor_repository": _EXECUTOR_REPOSITORY,
+            "executor_commit": self.executor_commit,
+            "formation_profile": self._profile["id"],
+            "formation_profile_sha256": self._profile_sha256,
+            "canonical_task_sha256": self._canonical_task_sha256,
+            "request_id": self.request_id,
+            "draft_version": self._draft_version,
+            "supersedes_draft_sha256": self._supersedes_draft_sha256,
+            "draft_sha256": self._draft_sha256,
+            "draft": copy.deepcopy(self._draft_payload),
+            "authority_request_payload": copy.deepcopy(
+                self._github_authority_request_payload
+            ),
+            "authority_request_payload_sha256": hashlib.sha256(
+                canonical_json(self._github_authority_request_payload).encode("utf-8")
+            ).hexdigest(),
+            "invalidated_draft_sha256s": list(self._invalidated_draft_sha256s),
+        }
+
+    def apply_github_authority_decision(
+        self,
+        *,
+        source: GitHubEvidenceSource,
+        profile: GitHubTrustProfile,
+        issue_number: int,
+        comment_id: int,
+        ledger: GovernedAuthorityLedger,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Verify one provider decision and transition formation fail-closed."""
+
+        if self.status is not FormationStatus.AWAITING_VERIFIED_HUMAN_AUTHORIZATION:
+            raise FormationError("only the current authorization-ready draft may be decided")
+        if self._draft_sha256 is None or self._github_authority_request_payload is None:
+            raise FormationError("GitHub authority request has not been built for this draft")
+        if self._draft_sha256 in self._invalidated_draft_sha256s:
+            raise FormationError("invalidated formation draft cannot be authorized")
+
+        try:
+            request = verify_github_request(
+                source,
+                profile=profile,
+                issue_number=issue_number,
+                now=now,
+            )
+            if request.payload != self._github_authority_request_payload:
+                raise FormationError(
+                    "verified GitHub request does not equal the generated formation request"
+                )
+            decision = verify_github_decision(
+                source,
+                profile=profile,
+                request=request,
+                comment_id=comment_id,
+                draft_sha256=self._draft_sha256,
+                now=now,
+            )
+            result = apply_github_decision(
+                draft=build_pilot_draft(request),
+                decision=decision,
+                source=source,
+                profile=profile,
+                ledger=ledger,
+                authority_draft_sha256=self._draft_sha256,
+                expected_request_payload=self._github_authority_request_payload,
+                formation_binding=self._formation_binding(),
+            )
+        except (GitHubTrustError, PilotContractError) as exc:
+            raise FormationError(f"verified human decision blocked: {exc}") from exc
+
+        self._last_decision_result = copy.deepcopy(result)
+        if result.get("status") == "MODIFICATION_REQUIRED":
+            if self._draft_sha256 not in self._invalidated_draft_sha256s:
+                self._invalidated_draft_sha256s.append(self._draft_sha256)
+            self._supersedes_draft_sha256 = self._draft_sha256
+            self._github_authority_request_payload = None
+            self.status = FormationStatus.MODIFICATION_REQUIRED
+        elif result.get("status") == "REJECTED":
+            self.status = FormationStatus.REJECTED
+        elif result.get("status") == "AUTHORIZED_AND_FROZEN":
+            self._frozen_result = copy.deepcopy(result)
+            self.status = FormationStatus.AUTHORIZED_AND_FROZEN
+        else:
+            raise FormationError("unexpected verified formation decision result")
+        return copy.deepcopy(result)
+
+    def revise_after_modify(
+        self,
+        *,
+        understood_objective: str,
+        proposed_task_contract: dict[str, Any],
+        model_inferences: Iterable[tuple[str, Any, float | None]] = (),
+        out_of_scope_discoveries: Iterable[str] = (),
+        open_questions: Iterable[str] = (),
+    ) -> dict[str, Any]:
+        """Create a new non-authorized draft after a verified MODIFY decision."""
+
+        if self.status is not FormationStatus.MODIFICATION_REQUIRED:
+            raise FormationError("revision requires a verified MODIFY decision")
+        self._draft_version += 1
+        self._understood_objective = None
+        self._proposed_task = None
+        self._provenance = self._base_provenance()
+        self._out_of_scope_discoveries = []
+        self._open_questions = []
+        self._draft_sha256 = None
+        self._draft_payload = None
+        self._critique = []
+        self._github_authority_request_payload = None
+        self._frozen_result = None
+        self.status = FormationStatus.REQUEST_RECEIVED
+        self.propose_interpretation(
+            understood_objective=understood_objective,
+            proposed_task_contract=proposed_task_contract,
+            model_inferences=model_inferences,
+            out_of_scope_discoveries=out_of_scope_discoveries,
+            open_questions=open_questions,
         )
+        self.create_draft()
+        self.critique()
+        return self.present_for_authorization()
+
+    def frozen_result(self) -> dict[str, Any]:
+        if (
+            self.status is not FormationStatus.AUTHORIZED_AND_FROZEN
+            or self._frozen_result is None
+        ):
+            raise FormationError("no authorized frozen result exists")
+        return copy.deepcopy(self._frozen_result)
+
+    def frozen_task_contract(self) -> dict[str, Any]:
+        result = self.frozen_result()
+        contract = result.get("contract")
+        if not isinstance(contract, dict):
+            raise FormationError("authorized frozen contract is missing")
+        return copy.deepcopy(contract)
