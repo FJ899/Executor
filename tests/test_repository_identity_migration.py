@@ -2,6 +2,10 @@ import json
 import unittest
 from pathlib import Path
 
+from executor.execution_environment import (
+    ExecutionEnvironmentError,
+    validate_execution_environment,
+)
 from executor.request_to_contract import _EXECUTOR_REPOSITORY
 from executor.sandbox.docker import DockerSandboxBackend
 from executor.sandbox.policy_snapshot import load_execution_policy_snapshot
@@ -10,6 +14,7 @@ from executor.sandbox.policy_snapshot import load_execution_policy_snapshot
 ROOT = Path(__file__).resolve().parents[1]
 CURRENT = "FJ899/Executor"
 PRE_TRANSFER = "JTJ07/Executor"
+CURRENT_PRODUCT_EXECUTION_WORKFLOW = ".github/workflows/gp001-product-execution-recovery.yml"
 HISTORICAL_ACCEPTANCE = (
     ROOT / "docs/governance/EXECUTOR_1_0_FINAL_HUMAN_ACCEPTANCE_RECORD_2026-08-20.md"
 )
@@ -93,6 +98,45 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
             self.assertIn("https://github.com/FJ899/executor-pilot-target.git", workflow)
             self.assertNotIn("https://github.com/litrgratis-pixel/executor-pilot-target.git", workflow)
         self.assertIn('FIXTURE_REPOSITORY = "FJ899/executor-pilot-target"', replay_tool)
+
+    def test_current_product_execution_environment_uses_fj899_only(self):
+        image = "sha256:" + "1" * 64
+        current = {
+            "schema_version": "executor-execution-environment/1.0",
+            "provider": "GITHUB_ACTIONS",
+            "repository": CURRENT,
+            "executor_commit": "e" * 40,
+            "workflow_path": CURRENT_PRODUCT_EXECUTION_WORKFLOW,
+            "workflow_sha256": "d" * 64,
+            "workflow_run_id": "12345",
+            "workflow_run_attempt": "1",
+            "workflow_job": "product-execution-recovery",
+            "sandbox_image_id": image,
+        }
+        self.assertEqual(
+            validate_execution_environment(
+                current,
+                executor_commit="e" * 40,
+                image_id=image,
+            )["repository"],
+            CURRENT,
+        )
+        stale = dict(current)
+        stale["repository"] = PRE_TRANSFER
+        with self.assertRaises(ExecutionEnvironmentError):
+            validate_execution_environment(
+                stale,
+                executor_commit="e" * 40,
+                image_id=image,
+            )
+        historical_workflow = dict(current)
+        historical_workflow["workflow_path"] = ".github/workflows/p4-real-pilots-one-shot.yml"
+        with self.assertRaises(ExecutionEnvironmentError):
+            validate_execution_environment(
+                historical_workflow,
+                executor_commit="e" * 40,
+                image_id=image,
+            )
 
     def test_policy_snapshot_default_is_current_repository(self):
         defaults = load_execution_policy_snapshot.__kwdefaults__
