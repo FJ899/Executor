@@ -22,6 +22,7 @@ jobs:
       EXECUTOR_GLOBAL_AUTHORITY_TOKEN: ${{ github.token }}
       EXECUTOR_GITHUB_EFFECT_TOKEN: ${{ secrets.EXECUTOR_GITHUB_EFFECT_TOKEN }}
       GITHUB_TOKEN: ${{ github.token }}
+      TARGET_REMOTE_URL: https://github.com/FJ899/executor-pilot-target.git
     steps:
       - name: Checkout exact Executor candidate
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
