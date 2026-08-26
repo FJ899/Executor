@@ -1,4 +1,4 @@
-name: GP001 ACCEPT-005 read-only postmortem
+name: GP001 ACCEPT-005 global authority receipt resolver
 
 on:
   push:
@@ -6,47 +6,44 @@ on:
       - ops/fresh-gp001-request-003
 
 permissions:
-  actions: read
   contents: read
 
 jobs:
-  inspect-failed-freeze:
+  resolve-authority-receipt:
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 6
     env:
       GITHUB_TOKEN: ${{ github.token }}
     steps:
-      - name: Download exact failed-run artifact read only
+      - name: Resolve exact provider-backed authority ref and receipt
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL \
+          key='github-decision:IC_kwDOTpqUf88AAAABQ8VkmA'
+          digest="$(python -c 'import hashlib; print(hashlib.sha256(b"github-decision:IC_kwDOTpqUf88AAAABQ8VkmA").hexdigest())')"
+          echo "AUTHORITY_KEY=$key"
+          echo "AUTHORITY_REF_DIGEST=$digest"
+          ref_json="$(curl -fsS \
             -H 'Accept: application/vnd.github+json' \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
-            'https://api.github.com/repos/FJ899/Executor/actions/artifacts/9627212339/zip' \
-            -o "${RUNNER_TEMP}/accept005.zip"
-          mkdir -p "${RUNNER_TEMP}/accept005"
-          unzip -q "${RUNNER_TEMP}/accept005.zip" -d "${RUNNER_TEMP}/accept005"
-
-      - name: Show exact decide result and file inventory
-        shell: bash
-        run: |
-          set -euo pipefail
-          find "${RUNNER_TEMP}/accept005" -type f -print | sort
-          frozen="$(find "${RUNNER_TEMP}/accept005" -type f -name frozen.json -print -quit)"
-          test -n "$frozen"
-          echo '--- FROZEN_JSON_BEGIN ---'
-          cat "$frozen"
-          echo
-          echo '--- FROZEN_JSON_END ---'
-
-      - name: Confirm target still has no pull requests
-        shell: bash
-        run: |
-          set -euo pipefail
+            "https://api.github.com/repos/FJ899/Executor/git/ref/heads/executor-authority/$digest")"
+          printf '%s' "$ref_json" > "${RUNNER_TEMP}/ref.json"
+          sha="$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["object"]["sha"])' "${RUNNER_TEMP}/ref.json")"
+          echo "AUTHORITY_REF_SHA=$sha"
           curl -fsS \
             -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
-            'https://api.github.com/repos/FJ899/executor-pilot-target/pulls?state=all&per_page=100' \
-            | python -c 'import json,sys; v=json.load(sys.stdin); print("TARGET_PR_COUNT="+str(len(v))); print(json.dumps(v,sort_keys=True))'
+            "https://api.github.com/repos/FJ899/Executor/git/commits/$sha" \
+            > "${RUNNER_TEMP}/commit.json"
+          python - "${RUNNER_TEMP}/commit.json" <<'PY'
+          import json,sys
+          v=json.load(open(sys.argv[1]))
+          print('AUTHORITY_COMMIT_MESSAGE_BEGIN')
+          print(v['message'])
+          print('AUTHORITY_COMMIT_MESSAGE_END')
+          print('AUTHORITY_COMMIT_SHA='+v['sha'])
+          print('AUTHORITY_COMMITTER_DATE='+(v.get('committer') or {}).get('date',''))
+          print('AUTHORITY_PARENT_SHAS='+','.join(x['sha'] for x in v.get('parents',[])))
+          PY
