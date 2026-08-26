@@ -11,7 +11,7 @@ dependencies = []
 
 [project.scripts]
 creative-os-executor = "executor.cli:main"
-creative-os-product = "executor.product_cli:main"
+creative-os-product = "executor.product_cli_v2:main"
 
 [tool.setuptools.packages.find]
 include = ["executor*"]
