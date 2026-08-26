@@ -150,7 +150,7 @@ class FormationAuthorityBridgeTests(unittest.TestCase):
         payload = request_payload()
         formation_draft = governed_formation_draft(payload["request_id"])
         authority_hash, binding = self_consistent_binding(formation_draft, payload)
-        binding["draft"]["understood_objective"] = "tampered after hashing"
+        binding["draft"]["out_of_scope_discoveries"].append("tampered after hashing")
         source, _, pilot_draft, decision = self.verified_custom_authority_hash(authority_hash)
         with tempfile.TemporaryDirectory() as directory:
             with patch("executor.pilot_contract._utc_now", return_value=NOW):
