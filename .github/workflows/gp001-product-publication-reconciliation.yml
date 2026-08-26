@@ -1,4 +1,4 @@
-name: GP001 ACCEPT-002 freeze diagnostic
+name: GP001 fresh Issue 90 decision payload diagnostic
 
 on:
   pull_request:
@@ -9,9 +9,10 @@ on:
 permissions:
   contents: read
   actions: read
+  issues: read
 
 jobs:
-  diagnose-freeze:
+  derive-decision-payload:
     if: github.repository == 'FJ899/Executor' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -22,34 +23,59 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
-      - name: Download ACCEPT-002 failed freeze evidence
+      - name: Download fresh formation evidence
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          artifact-ids: 9623244092
-          path: failed-freeze
+          artifact-ids: 9623360112
+          path: fresh-request
           github-token: ${{ github.token }}
           repository: FJ899/Executor
-          run-id: 33012855792
+          run-id: 33013131624
 
-      - name: Inspect freeze result without mutation
+      - name: Derive exact ACCEPT-003 payload read only
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== FILES ==='
-          find failed-freeze -type f -print | sort
-          frozen="$(find failed-freeze -type f -name frozen.json -print -quit)"
-          publication="$(find failed-freeze -type f -name publication.json -print -quit)"
-          test -n "$frozen"
-          test -n "$publication"
-          echo '=== FROZEN RESULT ==='
-          cat "$frozen"
-          echo '=== PUBLICATION BINDING ==='
-          python - "$publication" <<'PY'
-          import json,sys
-          v=json.load(open(sys.argv[1],encoding='utf-8'))
-          print(json.dumps({
-            'status':v.get('status'),
-            'object_id':(v.get('request_transport_provenance') or {}).get('object_id'),
-            'canonical_request_id':(v.get('canonical_contract_request') or {}).get('request_id')
-          },sort_keys=True))
+          curl -fsS \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/FJ899/Executor/issues/90 \
+            > "${RUNNER_TEMP}/issue90.json"
+          formation="$(find fresh-request -type f -name formation.json -print -quit)"
+          test -n "$formation"
+          python - "$formation" "${RUNNER_TEMP}/issue90.json" <<'PY'
+          import hashlib,json,sys
+          formation=json.load(open(sys.argv[1],encoding='utf-8'))
+          issue=json.load(open(sys.argv[2],encoding='utf-8'))
+          canonical=formation.get('canonical_contract_request') or {}
+          binding=canonical.get('formation_binding') or {}
+          payload=canonical.get('github_request_payload') or {}
+          if issue.get('number') != 90 or issue.get('title') != 'Executor authority request: gp001-product-authority-e2e-002':
+              raise SystemExit('Issue #90 identity mismatch')
+          if issue.get('body') != json.dumps(payload,ensure_ascii=False,sort_keys=True,separators=(',',':')):
+              raise SystemExit('Issue #90 body differs from fresh formation payload')
+          draft=binding.get('draft_sha256')
+          body_sha=hashlib.sha256(issue['body'].encode('utf-8')).hexdigest()
+          decision={
+            'schema_version':'executor-github-decision/1.0',
+            'request':{
+              'repository':'FJ899/Executor',
+              'issue_number':90,
+              'issue_node_id':issue['node_id'],
+              'body_sha256':body_sha,
+            },
+            'draft_sha256':draft,
+            'decision':'ACCEPT',
+            'valid_for_seconds':3600,
+            'nonce':'human-gp001-product-accept-003',
+          }
+          print('ISSUE_URL='+issue['html_url'])
+          print('ISSUE_NODE_ID='+issue['node_id'])
+          print('REQUEST_EXPIRES_AT='+payload['expires_at'])
+          print('DRAFT_SHA256='+draft)
+          print('BODY_SHA256='+body_sha)
+          print('ACCEPT_003='+json.dumps(decision,separators=(',',':')))
           PY
