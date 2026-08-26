@@ -79,11 +79,11 @@ def provenance_for(frozen: dict[str, Any]) -> dict[str, Any]:
     request = contract["request_evidence"]
     target = contract["target"]
     return {
-        "schema_version": "executor-solution-provenance/1.2",
+        "schema_version": "executor-solution-provenance/1.3",
         "producer_role": "EXTERNAL_INTELLIGENCE",
         "provider": "OpenAI",
         "model": "GPT-5.6 Sol",
-        "generated_at": "2026-08-16T00:02:01Z",
+        "generated_at": "2026-08-16T00:02:02Z",
         "request": {
             "repository": request["repository"],
             "issue_number": request["issue_number"],
@@ -98,12 +98,14 @@ def provenance_for(frozen: dict[str, Any]) -> dict[str, Any]:
         },
         "context_sha256": "b" * 64,
         "prompt_sha256": "a" * 64,
+        "generation_challenge_sha256": "c" * 64,
+        "generation_challenge_issued_at": "2026-08-16T00:02:01Z",
         "generation_evidence_ref": "provider-generation:test-fixture",
-        "generation_response_sha256": "f" * 64,
-        "generation_verification_method": "TEST_FIXTURE_INDEPENDENT_LOOKUP",
+        "generation_response_sha256": "d" * 64,
+        "generation_verification_method": "TEST_FIXTURE",
         "human_solution_edits": 0,
         "effect_capability": "NONE",
-        "derivation": "GENERATED_AFTER_FROZEN_CONTRACT",
+        "derivation": "GENERATED_AFTER_POST_FREEZE_CHALLENGE",
         "historical_candidate_relation": "NEW_FIX",
     }
 
