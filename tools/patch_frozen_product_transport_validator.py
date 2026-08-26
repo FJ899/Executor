@@ -1,0 +1,143 @@
+from pathlib import Path
+
+path = Path("executor/frozen_pilot_authority.py")
+text = path.read_text(encoding="utf-8")
+old = '''    request_actor = request_event.get("user")
+    decision_actor = decision_event.get("user")
+    if not isinstance(request_actor, dict) or not isinstance(decision_actor, dict):
+        raise FrozenPilotAuthorityError("frozen direct-human actor evidence is missing")
+    for label, event, actor, evidence in (
+        ("request", request_event, request_actor, request_evidence),
+        ("decision", decision_event, decision_actor, decision_evidence),
+    ):
+        expected_actor = evidence.get("actor")
+        if (
+            actor.get("type") != "User"
+            or not isinstance(expected_actor, dict)
+            or actor.get("login") != expected_actor.get("login")
+            or actor.get("id") != expected_actor.get("id")
+            or event.get("author_association") not in {"OWNER", "MEMBER", "COLLABORATOR"}
+            or event.get("performed_via_github_app_present") is not True
+            or event.get("performed_via_github_app") is not None
+        ):
+            raise FrozenPilotAuthorityError(
+                f"frozen {label} direct-human provenance mismatch"
+            )
+'''
+new = '''    request_actor = request_event.get("user")
+    decision_actor = decision_event.get("user")
+    if not isinstance(request_actor, dict) or not isinstance(decision_actor, dict):
+        raise FrozenPilotAuthorityError("frozen actor evidence is missing")
+
+    authority_boundary = contract.get("authority_boundary")
+    contract_transport = contract.get("request_transport_provenance")
+    snapshot_transport = snapshot.get("request_transport_provenance")
+    result_transport = frozen_result.get("request_transport_provenance")
+    formation_transport_marked = any(
+        (
+            contract.get("schema_version") == "executor-frozen-pilot-contract/1.2",
+            frozen_result.get("schema_version") == "executor-pilot-decision-result/1.2",
+            contract_transport is not None,
+            snapshot_transport is not None,
+            result_transport is not None,
+            isinstance(authority_boundary, dict)
+            and (
+                "request_transport_is_authority" in authority_boundary
+                or "human_decision_is_authority" in authority_boundary
+            ),
+        )
+    )
+
+    if formation_transport_marked:
+        if (
+            contract.get("schema_version") != "executor-frozen-pilot-contract/1.2"
+            or frozen_result.get("schema_version") != "executor-pilot-decision-result/1.2"
+            or contract.get("authority_source") != "VERIFIED_HUMAN_DECISION_ONLY"
+            or frozen_result.get("authority_source") != "VERIFIED_HUMAN_DECISION_ONLY"
+        ):
+            raise FrozenPilotAuthorityError(
+                "formation request transport authority model is incomplete"
+            )
+        if (
+            not isinstance(authority_boundary, dict)
+            or authority_boundary.get("request_transport_is_authority") is not False
+            or authority_boundary.get("human_decision_is_authority") is not True
+        ):
+            raise FrozenPilotAuthorityError(
+                "formation request transport authority boundary mismatch"
+            )
+        if not isinstance(contract_transport, dict):
+            raise FrozenPilotAuthorityError("formation request transport provenance is missing")
+        if snapshot_transport != contract_transport or result_transport != contract_transport:
+            raise FrozenPilotAuthorityError("frozen request transport snapshot/result mismatch")
+        expected_transport = {
+            "origin": "FORMATION_PUBLISHED_REQUEST",
+            "authority": False,
+            "publisher": "EXECUTOR_FORMATION",
+            "provider": "GITHUB",
+            "action_kind": "CREATE_ISSUE",
+            "target": request_evidence.get("repository"),
+            "object_id": str(request_evidence.get("issue_number")),
+            "object_url": (
+                f"https://github.com/{request_evidence.get('repository')}/issues/"
+                f"{request_evidence.get('issue_number')}"
+            ),
+            "human_decision_required": True,
+        }
+        for field, expected in expected_transport.items():
+            if contract_transport.get(field) != expected:
+                if field == "authority":
+                    raise FrozenPilotAuthorityError(
+                        "formation request transport must remain zero authority"
+                    )
+                raise FrozenPilotAuthorityError(
+                    f"formation request transport {field} mismatch"
+                )
+        expected_request_actor = request_evidence.get("actor")
+        if (
+            not isinstance(expected_request_actor, dict)
+            or request_actor.get("login") != expected_request_actor.get("login")
+            or request_actor.get("id") != expected_request_actor.get("id")
+            or not isinstance(request_actor.get("type"), str)
+            or not request_actor.get("type")
+        ):
+            raise FrozenPilotAuthorityError(
+                "frozen formation request transport actor identity mismatch"
+            )
+
+        expected_decision_actor = decision_evidence.get("actor")
+        if (
+            decision_actor.get("type") != "User"
+            or not isinstance(expected_decision_actor, dict)
+            or decision_actor.get("login") != expected_decision_actor.get("login")
+            or decision_actor.get("id") != expected_decision_actor.get("id")
+            or decision_event.get("author_association")
+            not in {"OWNER", "MEMBER", "COLLABORATOR"}
+            or decision_event.get("performed_via_github_app_present") is not True
+            or decision_event.get("performed_via_github_app") is not None
+        ):
+            raise FrozenPilotAuthorityError(
+                "frozen decision direct-human provenance mismatch"
+            )
+    else:
+        for label, event, actor, evidence in (
+            ("request", request_event, request_actor, request_evidence),
+            ("decision", decision_event, decision_actor, decision_evidence),
+        ):
+            expected_actor = evidence.get("actor")
+            if (
+                actor.get("type") != "User"
+                or not isinstance(expected_actor, dict)
+                or actor.get("login") != expected_actor.get("login")
+                or actor.get("id") != expected_actor.get("id")
+                or event.get("author_association") not in {"OWNER", "MEMBER", "COLLABORATOR"}
+                or event.get("performed_via_github_app_present") is not True
+                or event.get("performed_via_github_app") is not None
+            ):
+                raise FrozenPilotAuthorityError(
+                    f"frozen {label} direct-human provenance mismatch"
+                )
+'''
+if text.count(old) != 1:
+    raise SystemExit("expected legacy provenance block not found exactly once")
+path.write_text(text.replace(old, new, 1), encoding="utf-8")
