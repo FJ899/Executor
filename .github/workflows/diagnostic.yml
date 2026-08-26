@@ -1,4 +1,4 @@
-name: Chat GP001 fresh zero-authority request 004
+name: Chat GP001 fresh request 004 disarmed
 
 on:
   push:
@@ -6,127 +6,13 @@ on:
       - ops/chat-fresh-gp001-request-004
 
 permissions:
-  contents: write
-  issues: write
+  contents: read
+  issues: read
   actions: read
 
 jobs:
-  publish-fresh-request:
+  disarmed:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
-    env:
-      EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: FJ899/Executor
-      EXECUTOR_GLOBAL_AUTHORITY_TOKEN: ${{ github.token }}
-      EXECUTOR_GITHUB_EFFECT_TOKEN: ${{ github.token }}
-      GITHUB_TOKEN: ${{ github.token }}
     steps:
-      - name: Checkout exact verified product runtime
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          repository: FJ899/Executor
-          ref: fda645f0b8a294297f0a32782c596a29e5db0a53
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Verify exact runtime identity
-        run: test "$(git rev-parse HEAD)" = 'fda645f0b8a294297f0a32782c596a29e5db0a53'
-
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: '3.11'
-
-      - name: Install exact runtime
-        run: python -m pip install --no-deps .
-
-      - name: Form fresh canonical GP001 request
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p product-authority/effect-evidence
-          creative-os-product form \
-            --request-id gp001-product-authority-e2e-004 \
-            --request 'Napraw regresję atomowości batcha w ProjectRegistry.add_many bez zmiany testów.' \
-            --understood-objective 'Naprawić regresję atomowości ProjectRegistry.add_many w dozwolonym pliku i zachować acceptance tests.' \
-            --executor-root . \
-            --executor-commit "$(git rev-parse HEAD)" \
-            > product-authority/formation.json
-          python - <<'PY'
-          import json
-          v=json.load(open('product-authority/formation.json',encoding='utf-8'))
-          p=(v.get('canonical_contract_request') or {}).get('github_request_payload') or {}
-          if p.get('request_id')!='gp001-product-authority-e2e-004': raise SystemExit('request id mismatch')
-          t=p.get('target') or {}
-          if t.get('repository')!='FJ899/executor-pilot-target' or t.get('commit')!='3934a94a5eebf750079200589d6dc40e024d44a0' or t.get('tree')!='26d307afcbb3ce72b2911ca44936712c11558c4c': raise SystemExit('target identity drift')
-          task=p.get('task') or {}
-          if task.get('allowed_paths')!=['project_registry/registry.py'] or task.get('max_production_files')!=1 or task.get('max_patch_lines')!=80: raise SystemExit('task scope drift')
-          print('REQUEST_EXPIRES_AT='+str(p.get('expires_at')))
-          PY
-
-      - name: Publish fresh zero-authority request exactly once
-        id: publish
-        shell: bash
-        run: |
-          set -uo pipefail
-          set +e
-          creative-os-product publish-authority-request \
-            --formation product-authority/formation.json \
-            --profile trust_profiles/github-product-gp001.json \
-            --ledger "${RUNNER_TEMP}/gp001-product-authority-004.sqlite3" \
-            --evidence-dir product-authority/effect-evidence \
-            > product-authority/publication.json 2> product-authority/publication.stderr
-          rc=$?
-          set -e
-          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
-          echo "PUBLISH_EXIT_CODE=$rc"
-          # Never retry here. A nonzero exit may still be post-write.
-          exit 0
-
-      - name: Derive exact Human binding only from completed publication
-        if: steps.publish.outputs.exit_code == '0'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import hashlib, json
-          from pathlib import Path
-          from executor.github_trust import GitHubRestClient, GitHubTrustProfile
-          from executor.pilot_contract import build_pilot_draft_from_formation, pilot_draft_sha256
-          from executor.product_github_authority import verify_formation_published_request
-          publication=json.load(open('product-authority/publication.json',encoding='utf-8'))
-          if publication.get('status')!='AWAITING_VERIFIED_HUMAN_DECISION': raise SystemExit('publication did not reach Human boundary')
-          transport=publication.get('request_transport_provenance') or {}
-          if transport.get('authority') is not False or transport.get('origin')!='FORMATION_PUBLISHED_REQUEST': raise SystemExit('transport gained authority')
-          issue_number=int(transport['object_id'])
-          canonical=publication['canonical_contract_request']
-          payload=publication['github_request_payload']
-          profile=GitHubTrustProfile.from_dict(json.load(open('trust_profiles/github-product-gp001.json',encoding='utf-8')))
-          request=verify_formation_published_request(GitHubRestClient(),profile=profile,issue_number=issue_number,expected_payload=payload)
-          draft=build_pilot_draft_from_formation(canonical,request,formation_publication=publication)
-          summary={
-            'issue_number':issue_number,
-            'issue_url':transport['object_url'],
-            'issue_node_id':request.issue_node_id,
-            'request_body_sha256':request.body_sha256,
-            'pilot_draft_sha256':pilot_draft_sha256(draft),
-            'request_expires_at':payload['expires_at'],
-            'transport_authority':False,
-          }
-          Path('product-authority/human-binding.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n',encoding='utf-8')
-          print('HUMAN_BINDING='+json.dumps(summary,sort_keys=True))
-          PY
-
-      - name: Preserve publication evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: gp001-fresh-request-004-${{ github.run_id }}-${{ github.run_attempt }}
-          path: product-authority
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Fail closed after preserving evidence if publisher did not return cleanly
-        if: steps.publish.outputs.exit_code != '0'
-        run: |
-          echo 'Publisher did not return cleanly; reconciliation required; no retry allowed.'
-          exit 1
+      - name: Confirm no write capability
+        run: echo 'fresh-request-004 publisher disarmed; no external write'
