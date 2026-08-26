@@ -1,4 +1,4 @@
-name: One-shot patch frozen product transport validator
+name: One-shot refine frozen product transport validator
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
 jobs:
   patch-product-branch:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - name: Checkout current product branch
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -23,22 +23,29 @@ jobs:
           fetch-depth: 0
           token: ${{ github.token }}
 
-      - name: Assert exact old validator blob
+      - name: Assert exact current validator blob
         shell: bash
-        run: test "$(git rev-parse HEAD:executor/frozen_pilot_authority.py)" = '5835328b31671adfceba49ba7385931cecbe4ef9'
+        run: test "$(git rev-parse HEAD:executor/frozen_pilot_authority.py)" = 'd69ff642532c654c7acac7f640ab3351d285d891'
 
-      - name: Fetch and apply exact patch script
+      - name: Fetch and apply exact detector refinement
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL 'https://raw.githubusercontent.com/FJ899/Executor/bbfea2f798da993cd177d1b88691ce48621863fb/tools/patch_frozen_product_transport_validator.py' -o "${RUNNER_TEMP}/patch.py"
+          curl -fsSL 'https://raw.githubusercontent.com/FJ899/Executor/10e873add68009bf3c0e79fb9d9d67b36238a072/tools/refine_frozen_transport_mode_detection.py' -o "${RUNNER_TEMP}/patch.py"
           python "${RUNNER_TEMP}/patch.py"
 
-      - name: Run targeted authority regression tests
+      - name: Run affected frozen authority regression suites
         shell: bash
-        run: python -m unittest tests.test_frozen_product_transport_authority -v
+        run: |
+          python -m unittest \
+            tests.test_frozen_product_transport_authority \
+            tests.test_product_system_transport_authority \
+            tests.test_product_authority_transport \
+            tests.test_pilot_runtime \
+            tests.test_revocation_cutoff \
+            -v
 
-      - name: Commit and push exact validator fix
+      - name: Commit and push exact detector fix
         shell: bash
         run: |
           set -euo pipefail
@@ -46,5 +53,5 @@ jobs:
           git config user.name FJ8
           git config user.email frommjenny899@gmail.com
           git add executor/frozen_pilot_authority.py
-          git commit -m 'Honor zero-authority Formation transport in frozen gate'
+          git commit -m 'Detect Formation transport only from explicit markers'
           git push origin HEAD:product/e2e-formation-provider-draft-pr
