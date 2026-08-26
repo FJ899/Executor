@@ -1,0 +1,49 @@
+name: GP001 product authority recovery diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/gp001-product-authority-recovery-diagnostic.yml
+      - .github/workflows/gp001-product-authority-request.yml
+      - governance/WORKFLOW_CLASSIFICATION.json
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  inspect-failed-publication:
+    if: github.repository == 'FJ899/Executor' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Download original authority-publication artifact
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: 9619660600
+          path: recovered
+          github-token: ${{ github.token }}
+          repository: FJ899/Executor
+          run-id: 33003779887
+
+      - name: Print bounded recovery state
+        shell: bash
+        run: |
+          set -euo pipefail
+          find recovered -maxdepth 4 -type f -print | sort
+          echo '--- publication.json ---'
+          cat recovered/publication.json
+          echo
+          echo '--- effect evidence summaries ---'
+          for f in recovered/effect-evidence/*.json; do
+            echo "### $f"
+            cat "$f"
+            echo
+          done

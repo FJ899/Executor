@@ -2,11 +2,6 @@ name: GP001 product authority request one-shot
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - .github/workflows/gp001-product-authority-request.yml
-      - governance/WORKFLOW_CLASSIFICATION.json
 
 permissions:
   contents: write
@@ -18,7 +13,7 @@ concurrency:
 
 jobs:
   publish-authority-request:
-    if: github.repository == 'FJ899/Executor' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.repository == 'FJ899/Executor'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -29,16 +24,12 @@ jobs:
       - name: Checkout exact product runtime
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Verify exact checkout identity
-        shell: bash
-        run: |
-          set -euo pipefail
-          expected="${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-          test "$(git rev-parse HEAD)" = "$expected"
+        run: test "$(git rev-parse HEAD)" = "${{ github.sha }}"
 
       - name: Set up Python
         uses: actions/setup-python@v5
