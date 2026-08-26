@@ -4,6 +4,7 @@
   "request_class": "FIX_KNOWN_GP001_FAILING_TEST",
   "target_task_path": "tasks/GP001_FIX_FAILING_TEST_CASE_001.yaml",
   "expected_task_id": "GP001-FIX-FAILING-TEST-CASE-001",
+  "target_tree": "26d307afcbb3ce72b2911ca44936712c11558c4c",
   "formation_rules": {
     "request_is_contract": false,
     "ai_interpretation_is_user_intent": false,
