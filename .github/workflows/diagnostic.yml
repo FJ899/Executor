@@ -1,4 +1,4 @@
-name: GP001 Issue 94 read-only publication reconciliation
+name: GP001 ACCEPT-005 exact bounded product continuation
 
 on:
   push:
@@ -6,18 +6,21 @@ on:
       - ops/fresh-gp001-request-003
 
 permissions:
-  contents: read
+  contents: write
   issues: read
   actions: read
 
 jobs:
-  reconcile-fresh-request:
+  accept005-product-continuation:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 25
     env:
+      EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: FJ899/Executor
+      EXECUTOR_GLOBAL_AUTHORITY_TOKEN: ${{ github.token }}
+      EXECUTOR_GITHUB_EFFECT_TOKEN: ${{ secrets.EXECUTOR_GITHUB_EFFECT_TOKEN }}
       GITHUB_TOKEN: ${{ github.token }}
     steps:
-      - name: Checkout exact product candidate
+      - name: Checkout exact accepted Executor candidate
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: FJ899/Executor
@@ -25,7 +28,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify exact candidate identity
+      - name: Verify exact accepted candidate identity
+        shell: bash
         run: test "$(git rev-parse HEAD)" = '843ee131118c0c5fe1d4e6bfa2acff069829aee7'
 
       - name: Set up Python
@@ -33,106 +37,35 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install exact product runtime
-        run: python -m pip install --no-deps .
-
-      - name: Download failed publisher evidence
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          artifact-ids: 9626313802
-          path: fresh003
-          github-token: ${{ github.token }}
-          repository: FJ899/Executor
-          run-id: 33020428925
-
-      - name: Recover exact Issue 94 publication and derive Human binding read only
+      - name: Acquire exact ACCEPT-005 control harness
         shell: bash
         run: |
           set -euo pipefail
-          formation="$(find fresh003 -type f -name formation.json -print -quit)"
-          receipt="$(find fresh003 -type f -name 'system_write_receipt-*.json' -print -quit)"
-          attempt_result="$(find fresh003 -type f -name 'external_effect_attempt_result-*.json' -print -quit)"
-          test -n "$formation" && test -n "$receipt" && test -n "$attempt_result"
-          curl -fsS \
-            -H 'Accept: application/vnd.github+json' \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H 'X-GitHub-Api-Version: 2022-11-28' \
-            'https://api.github.com/repos/FJ899/Executor/issues/94' > "${RUNNER_TEMP}/issue94.json"
-          python - "$formation" "$receipt" "$attempt_result" "${RUNNER_TEMP}/issue94.json" <<'PY'
-          import base64, hashlib, json, pathlib, sys
-          from executor.github_effect_transaction import canonical_effect_bytes
-          from executor.github_trust import GitHubRestClient, GitHubTrustProfile, canonical_json
-          from executor.pilot_contract import build_pilot_draft_from_formation, pilot_draft_sha256
-          from executor.product_github_authority import verify_formation_published_request
+          curl -fsSL \
+            'https://raw.githubusercontent.com/FJ899/Executor/cdf3701bbc92094fcb97c1e158b236fca0f2cbeb/tools/run_gp001_accept005_continuation.sh' \
+            -o "${RUNNER_TEMP}/run_gp001_accept005_continuation.sh"
+          test -s "${RUNNER_TEMP}/run_gp001_accept005_continuation.sh"
 
-          formation=json.load(open(sys.argv[1],encoding='utf-8'))
-          receipt_path=pathlib.Path(sys.argv[2]); receipt=json.load(open(receipt_path,encoding='utf-8'))
-          attempt_result=json.load(open(sys.argv[3],encoding='utf-8'))
-          issue=json.load(open(sys.argv[4],encoding='utf-8'))
-          canonical=formation.get('canonical_contract_request') or {}
-          binding=canonical.get('formation_binding') or {}
-          payload=canonical.get('github_request_payload') or {}
-          if payload.get('request_id') != 'gp001-product-authority-e2e-003': raise SystemExit('request identity mismatch')
-          if payload.get('expires_at') != '2026-08-26T23:40:48Z': raise SystemExit('request expiry mismatch')
-          issue_payload={
-              'schema_version':'executor-formation-authority-issue/1.0',
-              'title':'Executor authority request: gp001-product-authority-e2e-003',
-              'body':canonical_json(payload),
-          }
-          effect_sha=hashlib.sha256(canonical_effect_bytes(issue_payload)).hexdigest()
+      - name: Execute guarded ACCEPT-005 continuation
+        shell: bash
+        run: bash "${RUNNER_TEMP}/run_gp001_accept005_continuation.sh"
 
-          if receipt.get('kind') != 'SYSTEM_WRITE_RECEIPT': raise SystemExit('missing durable system write receipt')
-          rp=receipt.get('payload') or {}
-          if rp.get('provider')!='GITHUB' or rp.get('action_kind')!='CREATE_ISSUE' or rp.get('target')!='FJ899/Executor': raise SystemExit('receipt identity mismatch')
-          if rp.get('effect_sha256') != effect_sha or rp.get('provider_outcome')!='SUCCESS' or rp.get('provider_status')!=201: raise SystemExit('receipt does not prove successful exact CREATE_ISSUE')
-          if rp.get('object_id')!='94' or rp.get('object_url')!='https://github.com/FJ899/Executor/issues/94': raise SystemExit('receipt durable object identity mismatch')
-          raw=receipt_path.read_bytes(); digest=hashlib.sha256(raw).hexdigest()
-          if receipt_path.stem.removeprefix('system_write_receipt-') != digest: raise SystemExit('receipt filename hash mismatch')
-          ap=attempt_result.get('payload') or {}
-          if attempt_result.get('kind')!='EXTERNAL_EFFECT_ATTEMPT_RESULT_BINDING' or ap.get('receipt_evidence_sha256')!=digest: raise SystemExit('attempt result does not bind exact receipt')
-          if ap.get('provider_outcome')!='SUCCESS' or ap.get('object_id')!='94' or ap.get('object_url')!='https://github.com/FJ899/Executor/issues/94': raise SystemExit('attempt result durable identity mismatch')
-          response_b64=receipt.get('provider_response_b64')
-          if isinstance(response_b64,str):
-              response=json.loads(base64.b64decode(response_b64,validate=True).decode('utf-8'))
-              if response.get('number')!=94 or response.get('title')!=issue_payload['title'] or response.get('body')!=issue_payload['body']: raise SystemExit('provider response differs from exact Issue 94')
+      - name: Verify sandbox cleanup
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          remaining="$(docker ps -a --filter label=creative-os-executor-pilot=p4-bounded-real-pilot --format '{{.ID}}')"
+          test -z "$remaining"
 
-          if issue.get('number')!=94 or issue.get('state')!='open': raise SystemExit('Issue 94 identity/state mismatch')
-          if issue.get('title')!=issue_payload['title'] or issue.get('body')!=issue_payload['body'] or issue.get('html_url')!='https://github.com/FJ899/Executor/issues/94': raise SystemExit('Issue 94 differs from exact formation payload')
-          body_sha=hashlib.sha256(issue['body'].encode('utf-8')).hexdigest()
-          observation_ref=f"github:issue:{issue['node_id']}:{body_sha}"
-          effect={
-              'schema_version':'executor-github-effect-result/1.0','status':'RECOVERED_EXTERNAL_EFFECT','provider':'GITHUB',
-              'action_kind':'CREATE_ISSUE','target':'FJ899/Executor','effect_sha256':effect_sha,
-              'attempt_id':ap.get('attempt_id'),'object_id':'94','object_url':'https://github.com/FJ899/Executor/issues/94',
-              'observation_ref':observation_ref,'automatic_retry_allowed':False,'external_write_repeated':False,
-              'recovered_from_status':'POST_WRITE_SERIALIZATION_FAILURE',
-          }
-          transport={
-              'origin':'FORMATION_PUBLISHED_REQUEST','authority':False,'publisher':'EXECUTOR_FORMATION','provider':'GITHUB',
-              'action_kind':'CREATE_ISSUE','target':'FJ899/Executor','object_id':'94','object_url':'https://github.com/FJ899/Executor/issues/94',
-              'effect_sha256':effect_sha,'observation_ref':observation_ref,'human_decision_required':True,
-              'recovery_class':'POST_WRITE_SERIALIZATION_FAILURE_RECONCILIATION','external_write_repeated':False,
-          }
-          publication={
-              'schema_version':'executor-formation-publication-result/1.1','status':'AWAITING_VERIFIED_HUMAN_DECISION',
-              'canonical_contract_request':canonical,'formation_binding':binding,'github_request_payload':payload,
-              'request_transport_provenance':transport,'publication_effect':effect,
-              'manual_request_rewrite_required':False,'executable':False,
-              'recovery':{'kind':'READ_ONLY_RECEIPT_AND_PROVIDER_RECONCILIATION','external_write_repeated':False,'source_run_id':33020428925,'source_artifact_id':9626313802},
-          }
-          profile=GitHubTrustProfile.from_dict(json.load(open('trust_profiles/github-product-gp001.json',encoding='utf-8')))
-          source=GitHubRestClient()
-          request=verify_formation_published_request(source,profile=profile,issue_number=94,expected_payload=payload)
-          draft=build_pilot_draft_from_formation(canonical,request,formation_publication=publication)
-          summary={
-              'issue_number':94,
-              'issue_url':'https://github.com/FJ899/Executor/issues/94',
-              'issue_node_id':issue['node_id'],
-              'request_body_sha256':body_sha,
-              'pilot_draft_sha256':pilot_draft_sha256(draft),
-              'request_expires_at':payload['expires_at'],
-              'transport_authority':False,
-              'external_write_repeated':False,
-          }
-          print('HUMAN_BINDING='+json.dumps(summary,sort_keys=True))
-          PY
+      - name: Preserve ACCEPT-005 product evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gp001-product-accept-005-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            run-output
+            effect-evidence
+            runs
+          if-no-files-found: warn
+          retention-days: 30
