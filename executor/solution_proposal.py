@@ -161,6 +161,9 @@ def _validate_provenance(
         "source",
         "context_sha256",
         "prompt_sha256",
+        "generation_evidence_ref",
+        "generation_response_sha256",
+        "generation_verification_method",
         "human_solution_edits",
         "effect_capability",
         "derivation",
@@ -168,7 +171,7 @@ def _validate_provenance(
     }
     if not isinstance(value, dict) or set(value) != expected:
         raise SolutionProposalError("solution provenance has invalid fields")
-    if value.get("schema_version") != "executor-solution-provenance/1.1":
+    if value.get("schema_version") != "executor-solution-provenance/1.2":
         raise SolutionProposalError("solution provenance schema is invalid")
     if value.get("producer_role") != "EXTERNAL_INTELLIGENCE":
         raise SolutionProposalError("solution must be produced by external intelligence")
@@ -193,10 +196,19 @@ def _validate_provenance(
         raise SolutionProposalError("solution provenance frozen contract binding mismatch")
     context_sha = value.get("context_sha256")
     prompt_sha = value.get("prompt_sha256")
+    response_sha = value.get("generation_response_sha256")
     if not isinstance(context_sha, str) or _SHA256.fullmatch(context_sha) is None:
         raise SolutionProposalError("solution provenance context hash is invalid")
     if not isinstance(prompt_sha, str) or _SHA256.fullmatch(prompt_sha) is None:
         raise SolutionProposalError("solution provenance prompt hash is invalid")
+    if not isinstance(response_sha, str) or _SHA256.fullmatch(response_sha) is None:
+        raise SolutionProposalError("solution provenance generation response hash is invalid")
+    evidence_ref = value.get("generation_evidence_ref")
+    if not isinstance(evidence_ref, str) or not evidence_ref.strip():
+        raise SolutionProposalError("solution provenance generation evidence ref is required")
+    verification_method = value.get("generation_verification_method")
+    if not isinstance(verification_method, str) or not verification_method.strip():
+        raise SolutionProposalError("solution provenance generation verification method is required")
 
     request = value.get("request")
     request_evidence = contract.get("request_evidence", {})
