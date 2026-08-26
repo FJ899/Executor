@@ -66,8 +66,10 @@ jobs:
           if frozen.get('contract_sha256')!='e35d5cb5cdbd7c21a876e1036cbeeb7e214a2bc9856bcb882db95ccafca5af68': raise SystemExit('frozen contract sha mismatch')
           request,decision=validate_frozen_pilot_authority(frozen)
           if decision.decision!='ACCEPT': raise SystemExit('frozen decision is not ACCEPT')
-          if decision.comment_id!=5431977112 or decision.comment_node_id!='IC_kwDOTpqUf88AAAABQ8VkmA': raise SystemExit('frozen decision identity mismatch')
-          if request.issue_number!=94 or request.issue_node_id!='I_kwDOTpqUf88AAAABOaSz2w': raise SystemExit('frozen request identity mismatch')
+          decision_evidence=(frozen.get('contract') or {}).get('decision_evidence') or {}
+          if decision_evidence.get('comment_id')!=5431977112 or decision_evidence.get('comment_node_id')!='IC_kwDOTpqUf88AAAABQ8VkmA': raise SystemExit('frozen decision identity mismatch')
+          request_evidence=(frozen.get('contract') or {}).get('request_evidence') or {}
+          if request_evidence.get('issue_number')!=94 or request_evidence.get('issue_node_id')!='I_kwDOTpqUf88AAAABOaSz2w': raise SystemExit('frozen request identity mismatch')
 
           transport=frozen.get('request_transport_provenance') or {}
           if transport.get('origin')!='FORMATION_PUBLISHED_REQUEST' or transport.get('authority') is not False: raise SystemExit('transport authority boundary mismatch')
