@@ -63,17 +63,30 @@ def _ledger(path: str, profile: GitHubTrustProfile) -> GovernedAuthorityLedger:
 
 
 def _token() -> str:
-    token = os.environ.get("EXECUTOR_GITHUB_EFFECT_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
+    token = os.environ.get("EXECUTOR_GITHUB_EFFECT_TOKEN", "")
     if not token:
-        raise RuntimeError("EXECUTOR_GITHUB_EFFECT_TOKEN or GITHUB_TOKEN is required for provider writes")
+        raise RuntimeError("EXECUTOR_GITHUB_EFFECT_TOKEN is required for consequential GitHub writes")
     return token
 
 
-def _formation_request_from_artifact(value: dict) -> dict:
+def _publication_inputs(value: dict) -> tuple[dict, int]:
+    if value.get("schema_version") != "executor-formation-publication-result/1.1":
+        raise FormationError("decide requires executor-formation-publication-result/1.1")
+    if value.get("status") != "AWAITING_VERIFIED_HUMAN_DECISION":
+        raise FormationError("formation publication is not awaiting human decision")
     canonical = value.get("canonical_contract_request")
-    if not isinstance(canonical, dict):
-        raise FormationError("formation artifact lacks canonical_contract_request")
-    return canonical
+    effect = value.get("publication_effect")
+    transport = value.get("request_transport_provenance")
+    if not isinstance(canonical, dict) or not isinstance(effect, dict) or not isinstance(transport, dict):
+        raise FormationError("formation publication lacks canonical request/effect/provenance")
+    if transport.get("origin") != "FORMATION_PUBLISHED_REQUEST" or transport.get("authority") is not False:
+        raise FormationError("published request transport provenance is invalid")
+    object_id = effect.get("object_id")
+    if not isinstance(object_id, str) or not object_id.isdecimal() or int(object_id) <= 0:
+        raise FormationError("formation publication lacks a durable GitHub issue identity")
+    if transport.get("object_id") != object_id:
+        raise FormationError("transport provenance does not bind the published issue")
+    return canonical, int(object_id)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -92,16 +105,15 @@ def main(argv: list[str] | None = None) -> int:
     form.add_argument("--out-of-scope", action="append", default=[])
     form.add_argument("--open-question", action="append", default=[])
 
-    publish = sub.add_parser("publish-authority-request", help="publish the exact formation payload as a GitHub authority issue")
+    publish = sub.add_parser("publish-authority-request", help="publish the exact formation payload as a zero-authority GitHub transport issue")
     publish.add_argument("--formation", required=True)
     publish.add_argument("--profile", default=DEFAULT_PROFILE)
     publish.add_argument("--ledger", required=True)
     publish.add_argument("--evidence-dir", required=True)
 
-    decide = sub.add_parser("decide", help="verified GitHub ACCEPT/MODIFY/REJECT -> bound result")
-    decide.add_argument("--formation", required=True)
+    decide = sub.add_parser("decide", help="publication artifact + verified GitHub ACCEPT/MODIFY/REJECT -> bound result")
+    decide.add_argument("--publication", required=True)
     decide.add_argument("--profile", default=DEFAULT_PROFILE)
-    decide.add_argument("--issue", required=True, type=int)
     decide.add_argument("--comment", required=True, type=int)
     decide.add_argument("--ledger", required=True)
 
@@ -156,10 +168,15 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if result["status"] == "AWAITING_VERIFIED_HUMAN_DECISION" else 3
 
         if args.command == "decide":
-            formation = _formation_request_from_artifact(load_json_object(args.formation))
+            publication = load_json_object(args.publication)
+            formation, issue_number = _publication_inputs(publication)
             source = GitHubRestClient()
-            request = verify_github_request(source, profile=profile, issue_number=args.issue)
-            draft = build_pilot_draft_from_formation(formation, request)
+            request = verify_github_request(source, profile=profile, issue_number=issue_number)
+            draft = build_pilot_draft_from_formation(
+                formation,
+                request,
+                formation_publication=publication,
+            )
             decision = verify_github_decision(
                 source,
                 profile=profile,
@@ -174,6 +191,7 @@ def main(argv: list[str] | None = None) -> int:
                 profile=profile,
                 ledger=governed,
                 formation_request=formation,
+                formation_publication=publication,
             )
             _print(result)
             return 0 if result["status"] in {"AUTHORIZED_AND_FROZEN", "MODIFICATION_REQUIRED", "REJECTED"} else 2
