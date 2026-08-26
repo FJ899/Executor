@@ -31,12 +31,15 @@ jobs:
       - name: Compile package
         run: python -m compileall -q executor
 
-      - name: Build wheel and smoke installed CLI
+      - name: Build wheel and smoke installed CLIs
         run: |
           python -m pip wheel . --no-deps --no-build-isolation --wheel-dir dist
           python -m venv .venv-smoke
           .venv-smoke/bin/python -m pip install --no-index dist/*.whl
           .venv-smoke/bin/creative-os-executor --help
+          product_help=$(.venv-smoke/bin/creative-os-product --help)
+          printf '%s' "$product_help" | grep 'publish-authority-request'
+          printf '%s' "$product_help" | grep 'publish-draft-pr'
 
       - name: Run unit and state tests
         run: python -m unittest discover -s tests -v
