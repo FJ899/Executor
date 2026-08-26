@@ -30,6 +30,7 @@ from executor.product_github_authority import (
 )
 from executor.product_state import state_from_pilot_status
 from executor.request_to_contract import FormationError, RequestToContract001
+from executor.solution_artifact import runtime_solution_proposal
 from executor.strict_json import load_json_object
 
 
@@ -177,6 +178,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "execute":
             frozen = load_json_object(args.frozen)
             request, decision = validate_product_frozen_pilot_authority(frozen)
+            proposal = runtime_solution_proposal(
+                load_json_object(args.proposal),
+                frozen_result=frozen,
+            )
             commit = args.executor_commit or _git_head(args.executor_root)
             environment = build_github_actions_environment(
                 image_id=args.image,
@@ -187,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
                 executor_root=args.executor_root,
                 executor_commit=commit,
                 frozen_result=frozen,
-                proposal=load_json_object(args.proposal),
+                proposal=proposal,
                 verified_request=request,
                 verified_decision=decision,
                 ledger=governed,
