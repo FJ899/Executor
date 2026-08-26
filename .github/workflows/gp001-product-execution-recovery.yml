@@ -1,4 +1,4 @@
-name: GP001 ACCEPT-005 refined recovery verification
+name: GP001 fresh zero-authority request 004
 
 on:
   push:
@@ -8,97 +8,107 @@ on:
       - .github/workflows/gp001-product-execution-recovery.yml
 
 permissions:
-  contents: read
+  contents: write
+  issues: write
   actions: read
 
 jobs:
-  verify-refined-recovery:
+  publish-fresh-request:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 12
+    env:
+      EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: FJ899/Executor
+      EXECUTOR_GLOBAL_AUTHORITY_TOKEN: ${{ github.token }}
+      EXECUTOR_GITHUB_EFFECT_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
-      - name: Checkout exact refined product head
+      - name: Checkout exact current product head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: FJ899/Executor
-          ref: fda645f0b8a294297f0a32782c596a29e5db0a53
+          ref: 9f8b08248a1975651d1a287b4d16b13c96b791a8
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify exact refined product identity
+      - name: Verify exact current product identity
         shell: bash
-        run: test "$(git rev-parse HEAD)" = 'fda645f0b8a294297f0a32782c596a29e5db0a53'
+        run: test "$(git rev-parse HEAD)" = '9f8b08248a1975651d1a287b4d16b13c96b791a8'
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.11'
 
-      - name: Install exact refined runtime
+      - name: Install exact product runtime
         run: python -m pip install --no-deps .
 
-      - name: Run full unit suite on exact refined head
-        run: python -m unittest discover -s tests -v
-
-      - name: Download exact globally-bound ACCEPT-005 artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          artifact-ids: 9626679416
-          path: evidence
-          github-token: ${{ github.token }}
-          repository: FJ899/Executor
-          run-id: 33021461283
-
-      - name: Validate frozen authority and canonical provider proposal read only
+      - name: Form fresh canonical GP001 request
         shell: bash
         run: |
           set -euo pipefail
-          frozen="$(find evidence -type f -name frozen.json -print -quit)"
-          proposal="$(find evidence -type f -name proposal.json -print -quit)"
-          test -n "$frozen" && test -n "$proposal"
-          python - "$frozen" "$proposal" <<'PY'
-          import json,sys
-          from executor.frozen_pilot_authority import validate_frozen_pilot_authority
-          from executor.solution_proposal import validate_solution_proposal
-
-          frozen=json.load(open(sys.argv[1],encoding='utf-8'))
-          saved=json.load(open(sys.argv[2],encoding='utf-8'))
-          if frozen.get('status')!='AUTHORIZED_AND_FROZEN': raise SystemExit('frozen status mismatch')
-          if frozen.get('contract_sha256')!='e35d5cb5cdbd7c21a876e1036cbeeb7e214a2bc9856bcb882db95ccafca5af68': raise SystemExit('frozen contract sha mismatch')
-          request,decision=validate_frozen_pilot_authority(frozen)
-          if decision.decision!='ACCEPT': raise SystemExit('frozen decision is not ACCEPT')
-          decision_evidence=(frozen.get('contract') or {}).get('decision_evidence') or {}
-          if decision_evidence.get('comment_id')!=5431977112 or decision_evidence.get('comment_node_id')!='IC_kwDOTpqUf88AAAABQ8VkmA': raise SystemExit('frozen decision identity mismatch')
-          request_evidence=(frozen.get('contract') or {}).get('request_evidence') or {}
-          if request_evidence.get('issue_number')!=94 or request_evidence.get('issue_node_id')!='I_kwDOTpqUf88AAAABOaSz2w': raise SystemExit('frozen request identity mismatch')
-
-          transport=frozen.get('request_transport_provenance') or {}
-          if transport.get('origin')!='FORMATION_PUBLISHED_REQUEST' or transport.get('authority') is not False: raise SystemExit('transport authority boundary mismatch')
-          if transport.get('object_id')!='94' or transport.get('object_url')!='https://github.com/FJ899/Executor/issues/94': raise SystemExit('transport object mismatch')
-
-          consumption=frozen.get('decision_consumption') or {}
-          global_binding=consumption.get('global') or {}
-          expected_key='github-decision:IC_kwDOTpqUf88AAAABQ8VkmA'
-          if consumption.get('authority_key')!=expected_key or global_binding.get('authority_key')!=expected_key: raise SystemExit('decision consumption key mismatch')
-          if consumption.get('state')!='FINAL' or global_binding.get('state')!='FINAL': raise SystemExit('decision consumption is not final')
-          if global_binding.get('provider_state')!='GLOBAL_RESULT_BOUND': raise SystemExit('global decision result is not bound')
-
-          canonical={
-            'schema_version':'executor-solution-proposal/1.0',
-            'proposal_id':saved['proposal_id'],
-            'contract_sha256':saved['contract_sha256'],
-            'repository':saved['repository'],
-            'source_commit':saved['source_commit'],
-            'source_tree':saved['source_tree'],
-            'mutations':saved['mutations'],
-            'rationale':saved['rationale'],
-            'evidence_plan':saved['evidence_plan'],
-            'provenance':saved['provenance'],
-          }
-          validated=validate_solution_proposal(canonical,frozen_result=frozen)
-          if validated.payload_sha256!='f9e0b171359c5ec4d77d258b7c1737e2776f118a56153e2a00258a5e05d59ce4': raise SystemExit('canonical proposal payload hash mismatch')
-          if validated.repository!='FJ899/executor-pilot-target' or validated.source_commit!='3934a94a5eebf750079200589d6dc40e024d44a0' or validated.source_tree!='26d307afcbb3ce72b2911ca44936712c11558c4c': raise SystemExit('proposal target identity mismatch')
-          print('REFINED_FROZEN_AUTHORITY_VALID=true')
-          print('CONTRACT_SHA256='+frozen['contract_sha256'])
-          print('CANONICAL_PROPOSAL_SHA256='+validated.payload_sha256)
-          print('RECOVERY_WRITE_CAPABILITY=false')
+          mkdir -p authority/effect-evidence
+          creative-os-product form \
+            --request-id gp001-product-authority-e2e-004 \
+            --request 'Napraw regresję atomowości batcha w ProjectRegistry.add_many bez zmiany testów.' \
+            --understood-objective 'Naprawić regresję atomowości ProjectRegistry.add_many w dozwolonym pliku i zachować acceptance tests.' \
+            --executor-root . \
+            --executor-commit "$(git rev-parse HEAD)" \
+            > authority/formation.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          v=json.loads(Path('authority/formation.json').read_text())
+          p=((v.get('canonical_contract_request') or {}).get('github_request_payload') or {})
+          if p.get('request_id')!='gp001-product-authority-e2e-004': raise SystemExit('request id mismatch')
+          t=p.get('target') or {}
+          if t.get('repository')!='FJ899/executor-pilot-target' or t.get('commit')!='3934a94a5eebf750079200589d6dc40e024d44a0' or t.get('tree')!='26d307afcbb3ce72b2911ca44936712c11558c4c': raise SystemExit('target drift')
+          task=p.get('task') or {}
+          if task.get('allowed_paths')!=['project_registry/registry.py'] or task.get('max_production_files')!=1 or task.get('max_patch_lines')!=80: raise SystemExit('scope drift')
+          print('REQUEST_EXPIRES_AT='+str(p.get('expires_at')))
           PY
+
+      - name: Publish exact zero-authority Formation transport once
+        shell: bash
+        run: |
+          set -euo pipefail
+          creative-os-product publish-authority-request \
+            --formation authority/formation.json \
+            --profile trust_profiles/github-product-gp001.json \
+            --ledger "${RUNNER_TEMP}/gp001-request004.sqlite3" \
+            --evidence-dir authority/effect-evidence \
+            > authority/publication.json
+          python -m json.tool authority/publication.json >/dev/null
+
+      - name: Derive exact Human binding read only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          from executor.github_trust import GitHubRestClient,GitHubTrustProfile
+          from executor.pilot_contract import build_pilot_draft_from_formation,pilot_draft_sha256
+          from executor.product_github_authority import verify_formation_published_request
+          pub=json.loads(Path('authority/publication.json').read_text())
+          if pub.get('status')!='AWAITING_VERIFIED_HUMAN_DECISION': raise SystemExit('publication did not reach Human boundary')
+          transport=pub.get('request_transport_provenance') or {}
+          if transport.get('origin')!='FORMATION_PUBLISHED_REQUEST' or transport.get('authority') is not False: raise SystemExit('transport gained authority')
+          canonical=pub['canonical_contract_request']; payload=pub['github_request_payload']
+          issue_number=int(transport['object_id'])
+          profile=GitHubTrustProfile.from_dict(json.load(open('trust_profiles/github-product-gp001.json')))
+          request=verify_formation_published_request(GitHubRestClient(),profile=profile,issue_number=issue_number,expected_payload=payload)
+          draft=build_pilot_draft_from_formation(canonical,request,formation_publication=pub)
+          body_sha=hashlib.sha256(json.dumps(payload,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+          summary={'issue_number':issue_number,'issue_url':transport['object_url'],'issue_node_id':request.issue_node_id,'request_body_sha256':body_sha,'pilot_draft_sha256':pilot_draft_sha256(draft),'request_expires_at':payload['expires_at'],'transport_authority':False}
+          Path('authority/human-binding.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
+          print('HUMAN_BINDING='+json.dumps(summary,sort_keys=True))
+          PY
+
+      - name: Preserve request 004 evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gp001-fresh-request-004-${{ github.run_id }}-${{ github.run_attempt }}
+          path: authority
+          if-no-files-found: error
+          retention-days: 30
