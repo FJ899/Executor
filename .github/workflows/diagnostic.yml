@@ -19,6 +19,7 @@ jobs:
         with:
           repository: FJ899/Executor
           ref: fda645f0b8a294297f0a32782c596a29e5db0a53
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Verify exact runtime identity
