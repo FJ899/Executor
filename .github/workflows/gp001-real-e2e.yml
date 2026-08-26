@@ -1,4 +1,4 @@
-name: GP001 ACCEPT-003 exact-candidate continuation
+name: GP001 ACCEPT-003 freeze binding diagnostic
 
 on:
   pull_request:
@@ -7,19 +7,16 @@ on:
       - .github/workflows/gp001-real-e2e.yml
 
 permissions:
-  contents: write
+  contents: read
   actions: read
   issues: read
 
 jobs:
-  accept003-product-continuation:
+  diagnose-accept003-freeze:
     if: github.repository == 'FJ899/Executor' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 10
     env:
-      EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: FJ899/Executor
-      EXECUTOR_GLOBAL_AUTHORITY_TOKEN: ${{ github.token }}
-      EXECUTOR_GITHUB_EFFECT_TOKEN: ${{ secrets.EXECUTOR_GITHUB_EFFECT_TOKEN }}
       GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout exact product candidate
@@ -38,26 +35,50 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Execute guarded product continuation
-        shell: bash
-        run: bash tools/run_gp001_accept003_continuation.sh
+      - name: Install exact product runtime
+        run: python -m pip install --no-deps .
 
-      - name: Verify sandbox cleanup
-        if: always()
+      - name: Download failed ACCEPT-003 freeze evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: 9623827750
+          path: accept003
+          github-token: ${{ github.token }}
+          repository: FJ899/Executor
+          run-id: 33014305193
+
+      - name: Show exact blocker and derive expected pilot draft SHA read only
         shell: bash
         run: |
           set -euo pipefail
-          remaining="$(docker ps -a --filter label=creative-os-executor-pilot=p4-bounded-real-pilot --format '{{.ID}}')"
-          test -z "$remaining"
+          frozen="$(find accept003 -type f -name frozen.json -print -quit)"
+          publication="$(find accept003 -type f -name publication.json -print -quit)"
+          test -n "$frozen" && test -n "$publication"
+          echo '=== EXACT FROZEN RESULT ==='
+          cat "$frozen"
+          python - "$publication" <<'PY'
+          import json,sys
+          from executor.github_trust import GitHubRestClient, GitHubTrustProfile
+          from executor.pilot_contract import build_pilot_draft_from_formation, pilot_draft_sha256
+          from executor.product_github_authority import verify_formation_published_request
 
-      - name: Preserve ACCEPT-003 product evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: gp001-product-accept-003-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            run-output
-            effect-evidence
-            runs
-          if-no-files-found: warn
-          retention-days: 30
+          publication=json.load(open(sys.argv[1],encoding='utf-8'))
+          canonical=publication['canonical_contract_request']
+          payload=canonical['github_request_payload']
+          profile=GitHubTrustProfile.from_dict(json.load(open('trust_profiles/github-product-gp001.json',encoding='utf-8')))
+          source=GitHubRestClient()
+          request=verify_formation_published_request(
+              source,
+              profile=profile,
+              issue_number=90,
+              expected_payload=payload,
+          )
+          draft=build_pilot_draft_from_formation(
+              canonical,
+              request,
+              formation_publication=publication,
+          )
+          print('FORMATION_DRAFT_SHA256='+canonical['formation_binding']['draft_sha256'])
+          print('EXPECTED_PILOT_DRAFT_SHA256='+pilot_draft_sha256(draft))
+          print('REQUEST_EXPIRES_AT='+payload['expires_at'])
+          PY
