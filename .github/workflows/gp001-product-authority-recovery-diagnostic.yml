@@ -37,12 +37,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          find recovered -maxdepth 4 -type f -print | sort
+          root='recovered/gp001-product-authority-request-33003779887-1'
+          find "$root" -maxdepth 4 -type f -print | sort
           echo '--- publication.json ---'
-          cat recovered/publication.json
+          cat "$root/publication.json"
           echo
           echo '--- effect evidence summaries ---'
-          for f in recovered/effect-evidence/*.json; do
+          for f in "$root"/effect-evidence/*.json; do
             echo "### $f"
             cat "$f"
             echo
