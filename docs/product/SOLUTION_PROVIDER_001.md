@@ -236,11 +236,11 @@ missing frozen verification commands
 attempted effect-authority metadata
 ```
 
-## Historical P4 blocker and remediation
+## Historical P4 blockers and remediation
 
-Historical head `7fd0414c559a2890760e30031abf7a71d6b12e5f` was fail-open because Executor assigned current bindings and a fresh timestamp after receiving arbitrary raw generator content.
+The first P4 failure found that Executor could assign current bindings and a fresh timestamp after receiving arbitrary raw generator content. That was replaced by independently verified generation evidence bound to provider/model/time/frozen/source/context/prompt/response.
 
-Head `0cecd41bc20b770b4f8d01ae6938ea69c6cb54b7` removed that timestamp fabrication and introduced independent generation evidence, but P4 correctly found a remaining gap: provider `generated_at` was compared to `authority_snapshot.verified_at`, which precedes successful `CONTRACT_ACCEPT` result binding.
+The second P4 failure found a remaining temporal gap: provider `generated_at` was compared to `authority_snapshot.verified_at`, which precedes successful `CONTRACT_ACCEPT` result binding.
 
 The current remediation does **not** substitute `decision_consumption.consumed_at`, because consumption also occurs before durable result binding.
 
