@@ -79,26 +79,28 @@ def provenance_for(frozen: dict[str, Any]) -> dict[str, Any]:
     request = contract["request_evidence"]
     target = contract["target"]
     return {
-        "schema_version": "executor-solution-provenance/1.0",
+        "schema_version": "executor-solution-provenance/1.1",
         "producer_role": "EXTERNAL_INTELLIGENCE",
         "provider": "OpenAI",
         "model": "GPT-5.6 Sol",
-        "generated_at": "2026-08-16T00:02:00Z",
+        "generated_at": "2026-08-16T00:02:01Z",
         "request": {
             "repository": request["repository"],
             "issue_number": request["issue_number"],
             "issue_node_id": request["issue_node_id"],
             "body_sha256": request["body_sha256"],
         },
+        "frozen_contract_sha256": frozen["contract_sha256"],
         "source": {
             "repository": target["repository"],
             "commit": target["commit"],
             "tree": target["tree"],
         },
+        "context_sha256": "b" * 64,
         "prompt_sha256": "a" * 64,
         "human_solution_edits": 0,
         "effect_capability": "NONE",
-        "derivation": "REGENERATED_AFTER_HUMAN_REQUEST",
+        "derivation": "GENERATED_AFTER_FROZEN_CONTRACT",
         "historical_candidate_relation": "NEW_FIX",
     }
 
