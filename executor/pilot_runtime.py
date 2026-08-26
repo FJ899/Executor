@@ -228,13 +228,24 @@ class PilotDockerSandboxBackend(DockerSandboxBackend):
         *,
         policy_snapshot: ExecutionPolicySnapshot,
         contract: dict[str, Any],
-        policy_authority: EffectivePilotPolicyAuthority,
+        policy_authority: EffectivePilotPolicyAuthority | None = None,
         docker_binary: str = "docker",
     ) -> None:
         super().__init__(policy_snapshot=policy_snapshot, docker_binary=docker_binary)
         self.repository = contract["target"]["repository"]
         self.commit = contract["target"]["commit"]
         self.source_tree = contract["target"]["tree"]
+        if policy_authority is None:
+            profile = policy_snapshot.bounded_pilot_profile(repository=self.repository)
+            if profile is None:
+                raise SandboxExecutionError("repository is outside the bounded pilot policy")
+            policy_authority = EffectivePilotPolicyAuthority(
+                authority_class="BOUNDED_PILOT_REPOSITORY",
+                max_production_files=profile.max_production_files,
+                bounded_external_repositories=tuple(
+                    item.repository for item in policy_snapshot.bounded_pilot_repositories
+                ),
+            )
         self.policy_authority = policy_authority
         self.allowed = tuple(
             canonical_repository_path(path)
@@ -430,6 +441,20 @@ class PilotRuntime:
                 }
             ).encode("utf-8")
         ).hexdigest()
+        policy_authority = getattr(self, "policy_authority", None)
+        bounded_external_repositories = (
+            policy_authority.bounded_external_repositories
+            if isinstance(policy_authority, EffectivePilotPolicyAuthority)
+            else tuple(
+                item.repository
+                for item in self.policy_snapshot.bounded_pilot_repositories
+            )
+        )
+        authority_class = (
+            policy_authority.authority_class
+            if isinstance(policy_authority, EffectivePilotPolicyAuthority)
+            else "BOUNDED_PILOT_REPOSITORY"
+        )
         context = AuthorizationContext(
             run_id=run_id,
             task_id=self.contract["request_id"],
@@ -452,7 +477,7 @@ class PilotRuntime:
                     self.verified_decision.actor_login,
                 )
             },
-            bounded_external_repositories=self.policy_authority.bounded_external_repositories,
+            bounded_external_repositories=bounded_external_repositories,
         )
         decision_expiry = datetime.fromisoformat(
             self.verified_decision.expires_at[:-1] + "+00:00"
@@ -461,8 +486,6 @@ class PilotRuntime:
         if expires <= now:
             raise PilotBlocked("GitHub ACCEPT expired before effect authorization")
 
-        # One human decision can create exactly one effect key. Operator-controlled run_id
-        # and proposal variation cannot mint a second authority namespace.
         effect_identity = canonical_json(
             {
                 "decision_evidence_ref": self.verified_decision.evidence_ref,
@@ -512,7 +535,7 @@ class PilotRuntime:
                 "status": "AUTHORIZED",
                 "reasons": [
                     "exact fresh GitHub ACCEPT binds the current frozen contract",
-                    f"repository and write scope match {self.policy_authority.authority_class} authority",
+                    f"repository and write scope match {authority_class} authority",
                     "global GitHub authority receipt enforces one effect per human decision",
                     "exact workflow, image and proposal provenance are integrity-bound",
                     "merge, deploy and release remain forbidden",
