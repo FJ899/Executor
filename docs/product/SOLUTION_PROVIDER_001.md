@@ -1,6 +1,6 @@
 ---
 document: "SOLUTION_PROVIDER_001"
-version: "0.1"
+version: "0.2"
 status: "STAGE 2 IMPLEMENTATION CANDIDATE"
 date: "2026-08-27"
 scope: "first bounded frozen-contract to validated-solution path"
@@ -21,6 +21,9 @@ EXACT FROZEN SOURCE CONTEXT
         |
         v
 EXTERNAL INTELLIGENCE
+        |
+        v
+INDEPENDENT GENERATION EVIDENCE
         |
         v
 EXECUTOR-BOUND CANDIDATE
@@ -63,10 +66,11 @@ The generator receives a deterministic prompt containing:
 - exact bounded source context;
 - an explicit no-effect output contract.
 
-The generator may return only:
+The generator adapter may return only:
 
 ```text
-schema_version
+schema_version: executor-solution-generation/1.1
+evidence_ref
 mutations:
   - path
     replacement_text
@@ -85,6 +89,49 @@ It cannot supply or override:
 
 Attempted scope expansion or additional mutation metadata fails closed.
 
+`evidence_ref` is not treated as proof by itself. It is only a lookup key for the separate generation-evidence verifier.
+
+## Independent generation-evidence boundary
+
+Stage 2 does **not** assign a fresh timestamp or current frozen/context/prompt bindings to arbitrary generator content after the response arrives.
+
+After the generator returns, Executor computes the canonical SHA-256 of the exact generation response payload:
+
+```text
+response_sha256 = SHA256(schema_version + mutations + rationale)
+```
+
+A separate read-only `SolutionGenerationVerifier` resolves the returned `evidence_ref` independently of the generator response and returns `VerifiedGenerationEvidence`.
+
+That verified provider record must bind exactly:
+
+```text
+evidence_ref
+provider
+model
+generated_at
+frozen_contract_sha256
+repository
+commit
+tree
+context_sha256
+prompt_sha256
+response_sha256
+verification_method
+```
+
+Executor compares every binding against the current frozen input and the response it actually received.
+
+Therefore:
+
+- a cached response from frozen contract A replayed against frozen contract B retains evidence for A and is blocked;
+- an old provider response whose provider timestamp does not postdate the current freeze is blocked;
+- content changed while reusing an old `evidence_ref` changes `response_sha256` and is blocked;
+- an evidence record for another source/context/prompt is blocked;
+- Executor cannot make stale content look fresh merely by calling its own clock after generation.
+
+The generation verifier is a trusted **verification** boundary only. It receives no Executor effect-authority handle and creates no external effect.
+
 ## Executor-owned bindings
 
 For each accepted generator mutation Executor derives:
@@ -98,8 +145,8 @@ Executor also derives:
 
 - repository, commit and tree from the frozen context;
 - verification plan from frozen `postcondition_argv` and `regression_argv`;
-- deterministic proposal id from frozen/context/prompt/generation binding;
-- provenance from the provider boundary.
+- deterministic proposal id from frozen/context/prompt/verified-generation binding;
+- proposal provenance from the independently verified generation record.
 
 The result is passed through the existing `materialize_solution_candidate()` and `validate_solution_proposal()` path. Stage 2 does not create a parallel proposal validator.
 
@@ -108,7 +155,7 @@ The result is passed through the existing `materialize_solution_candidate()` and
 Stage 2 uses:
 
 ```text
-executor-solution-provenance/1.1
+executor-solution-provenance/1.2
 ```
 
 Required provenance binds at least:
@@ -116,17 +163,20 @@ Required provenance binds at least:
 - producer role;
 - provider;
 - model;
-- generated_at;
+- provider-evidenced `generated_at`;
 - exact request evidence identity;
 - exact frozen contract SHA-256;
 - exact source repository/commit/tree;
 - exact source-context SHA-256;
 - exact prompt SHA-256;
+- generation evidence reference;
+- exact generation response SHA-256;
+- generation verification method;
 - `human_solution_edits = 0`;
 - `effect_capability = NONE`;
 - derivation after frozen contract.
 
-`generated_at` must be later than both the original human request and the frozen-authority verification instant.
+`generated_at` comes from independently verified generation evidence and must be later than both the original human request and the frozen-authority verification instant.
 
 ## Fail-closed conditions
 
@@ -142,7 +192,11 @@ stale/dirty allowed source file
 scope expansion
 protected/out-of-scope mutation
 missing or invalid provenance
-pre-freeze solution provenance
+missing generation evidence
+pre-freeze verified generation
+cross-contract generation evidence replay
+cross-source/context/prompt generation evidence replay
+response content changed under old evidence_ref
 source/request/frozen/context/prompt binding mismatch
 invalid after hash
 missing frozen verification commands
@@ -151,7 +205,7 @@ attempted effect-authority metadata
 
 ## Effect boundary
 
-The solution generator receives no Executor ledger, runtime, sandbox mutation handle, GitHub write client or action-authorization handle.
+The solution generator and generation verifier receive no Executor ledger, runtime, sandbox mutation handle, GitHub write client or action-authorization handle.
 
 Stage 2 result remains effect-free:
 
@@ -187,6 +241,7 @@ Evidence is required for:
 
 ```text
 valid frozen authority + exact source + bounded generator output
++ independently verified exact generation evidence
     -> ValidatedSolutionProposal
 
 invalid/fabricated frozen authority
@@ -201,6 +256,15 @@ out-of-scope generator mutation
 generator tries to control Executor-owned hashes/metadata
     -> BLOCK
 
+cached response A + evidence A used against frozen/source/context B
+    -> BLOCK
+
+changed response content + old evidence_ref
+    -> BLOCK
+
+provider-evidenced generated_at <= freeze
+    -> BLOCK
+
 before/after hashes
     -> DERIVED BY EXECUTOR
 
@@ -208,7 +272,7 @@ verification plan
     -> DERIVED FROM FROZEN CONTRACT
 
 provenance
-    -> AUTO-BOUND TO REQUEST + FROZEN + SOURCE + CONTEXT + PROMPT
+    -> FROM VERIFIED GENERATION EVIDENCE + REQUEST/FROZEN/SOURCE BINDINGS
 
 provider effect capability
     -> NONE
