@@ -339,9 +339,15 @@ class PilotRuntime:
             raise PilotBlocked("current GitHub decision evidence differs from frozen evidence")
         if verified_decision.decision != "ACCEPT":
             raise PilotBlocked("only an exact current GitHub ACCEPT can execute")
+        if generation_verifier is not None:
+            raise PilotBlocked(
+                "solution generation evidence is not authoritative: "
+                "caller-supplied solution-generation verifier is forbidden at the runtime trust boundary"
+            )
         if generation_verifier is None:
             raise PilotBlocked(
-                "pilot runtime requires independent solution-generation evidence verification"
+                "pilot runtime requires independent solution-generation evidence verification; "
+                "trusted provider-backed runtime verifier is not installed in Stage 2"
             )
         try:
             authoritative = validate_authoritative_solution_proposal(
