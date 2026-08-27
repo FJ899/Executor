@@ -6,7 +6,6 @@ on:
       - ops/stage2-gp001-solution-only-validation-2026-08-27
 
 permissions:
-  actions: read
   contents: read
 
 jobs:
@@ -40,43 +39,106 @@ jobs:
       - name: Install exact Stage 2 runtime
         run: python -m pip install --no-deps .
 
-      - name: Download exact GP001 frozen authority artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          artifact-ids: '9636044730'
-          path: frozen-evidence
-          github-token: ${{ github.token }}
-          repository: FJ899/Executor
-          run-id: '33047039910'
-
-      - name: Materialize exact frozen input
+      - name: Build current-format frozen GP001 fixture
         shell: bash
         run: |
           set -euo pipefail
-          frozen="$(find frozen-evidence -type f -name frozen.json -print -quit)"
-          test -n "$frozen"
-          cp "$frozen" frozen.json
           python - <<'PY'
           import json
+          import tempfile
           from pathlib import Path
-          from executor.frozen_pilot_authority import validate_frozen_pilot_authority
+          from unittest.mock import patch
 
-          frozen = json.loads(Path('frozen.json').read_text(encoding='utf-8'))
-          if frozen.get('status') != 'AUTHORIZED_AND_FROZEN':
-              raise SystemExit('frozen input is not AUTHORIZED_AND_FROZEN')
-          if frozen.get('contract_sha256') != 'a46984a72bac16c98c1c00d13a43b2664089db8eef22ce4a953d3295f1a97ce7':
-              raise SystemExit('frozen contract identity mismatch')
+          from executor.frozen_pilot_authority import validate_frozen_pilot_authority
+          from executor.github_trust import GitHubTrustProfile, verify_github_decision, verify_github_request
+          from executor.pilot_contract import apply_github_decision, build_pilot_draft, pilot_draft_sha256
+          from tests.p4_test_support import governed_ledger
+          from tests.test_github_trust import (
+              COMMENT_URL,
+              ISSUE_URL,
+              NOW,
+              FakeSource,
+              comment,
+              commit_evidence,
+              commit_url,
+              decision_payload,
+              issue,
+          )
+
+          payload = {
+              'schema_version': 'executor-github-request/1.0',
+              'request_id': 'gp001-stage2-current-format-validation',
+              'target': {
+                  'repository': 'FJ899/executor-pilot-target',
+                  'commit': '3934a94a5eebf750079200589d6dc40e024d44a0',
+                  'tree': '26d307afcbb3ce72b2911ca44936712c11558c4c',
+              },
+              'task': {
+                  'class': 'BOUNDED_CORRECTNESS_OR_QUALITY_FIX',
+                  'problem_statement': 'Fix the atomic batch regression in ProjectRegistry.add_many without changing acceptance tests.',
+                  'allowed_paths': ['project_registry/registry.py'],
+                  'protected_paths': ['tests/**', 'cases/**', 'PILOT_CONTRACT.md', '.github/**', 'pyproject.toml'],
+                  'precondition_argv': [[
+                      'python', '-m', 'unittest',
+                      'tests.test_registry.ProjectRegistryTests.test_duplicate_batch_does_not_partially_mutate_registry', '-v'
+                  ]],
+                  'postcondition_argv': [[
+                      'python', '-m', 'unittest',
+                      'tests.test_registry.ProjectRegistryTests.test_duplicate_batch_does_not_partially_mutate_registry', '-v'
+                  ]],
+                  'regression_argv': [
+                      ['python', '-m', 'unittest', 'discover', '-s', 'tests', '-v'],
+                      ['python', '-m', 'compileall', '-q', 'project_registry', 'tests'],
+                  ],
+                  'max_production_files': 1,
+                  'max_patch_lines': 80,
+              },
+              'expires_at': '2026-08-16T01:00:00Z',
+              'nonce': 'gp001-stage2-current-format-fixture',
+          }
+          profile = GitHubTrustProfile.from_dict({
+              'schema_version': 'executor-github-trust-profile/1.0',
+              'profile_id': 'gp001-stage2-current-format-fixture',
+              'intake_repository': 'FJ899/Executor',
+              'allowed_actor': {'login': 'FJ899', 'id': 275481581},
+              'allowed_target_repositories': ['FJ899/executor-pilot-target'],
+              'max_decision_lifetime_seconds': 3600,
+          })
+          source = FakeSource({
+              ISSUE_URL: issue(json.dumps(payload, sort_keys=True)),
+              commit_url(payload): commit_evidence(payload),
+          })
+          request = verify_github_request(source, profile=profile, issue_number=61, now=NOW)
+          draft = build_pilot_draft(request)
+          draft_sha = pilot_draft_sha256(draft)
+          source.values[COMMENT_URL] = comment(decision_payload(request, draft_sha))
+          decision = verify_github_decision(
+              source,
+              profile=profile,
+              request=request,
+              comment_id=9001,
+              draft_sha256=draft_sha,
+              now=NOW,
+          )
+          with tempfile.TemporaryDirectory() as directory:
+              with patch('executor.pilot_contract._utc_now', return_value=NOW):
+                  frozen = apply_github_decision(
+                      draft=draft,
+                      decision=decision,
+                      source=source,
+                      profile=profile,
+                      ledger=governed_ledger(Path(directory) / 'ledger.sqlite3'),
+                  )
           validate_frozen_pilot_authority(frozen)
           target = frozen['contract']['target']
-          if target != {
-              'repository': 'FJ899/executor-pilot-target',
-              'commit': '3934a94a5eebf750079200589d6dc40e024d44a0',
-              'tree': '26d307afcbb3ce72b2911ca44936712c11558c4c',
-          }:
-              raise SystemExit('frozen target identity mismatch')
+          if target != payload['target']:
+              raise SystemExit('current-format frozen target identity mismatch')
           if frozen['contract']['task']['allowed_paths'] != ['project_registry/registry.py']:
-              raise SystemExit('frozen allowed path mismatch')
+              raise SystemExit('current-format frozen allowed path mismatch')
+          Path('frozen.json').write_text(json.dumps(frozen, sort_keys=True) + '\n', encoding='utf-8')
           print('FROZEN_INPUT_VALID=true')
+          print('FROZEN_INPUT_PROVENANCE=CURRENT_STAGE1_DETERMINISTIC_FIXTURE')
+          print('FROZEN_CONTRACT_SHA256=' + frozen['contract_sha256'])
           PY
 
       - name: Checkout exact GP001 frozen source read only
@@ -118,7 +180,6 @@ jobs:
               validate_authoritative_solution_proposal,
           )
 
-          FROZEN_SHA = 'a46984a72bac16c98c1c00d13a43b2664089db8eef22ce4a953d3295f1a97ce7'
           TARGET_COMMIT = '3934a94a5eebf750079200589d6dc40e024d44a0'
           TARGET_TREE = '26d307afcbb3ce72b2911ca44936712c11558c4c'
           SOURCE_PATH = 'project_registry/registry.py'
@@ -169,12 +230,7 @@ jobs:
                   generation = {
                       'schema_version': 'executor-solution-generation/1.1',
                       'evidence_ref': evidence_ref,
-                      'mutations': [
-                          {
-                              'path': SOURCE_PATH,
-                              'replacement_text': replacement,
-                          }
-                      ],
+                      'mutations': [{'path': SOURCE_PATH, 'replacement_text': replacement}],
                       'rationale': 'Validate the complete batch before mutating ProjectRegistry state, preserving atomicity when a duplicate appears late in the batch.',
                   }
                   challenge = prompt['generation_challenge']
@@ -212,15 +268,15 @@ jobs:
               generation_verifier=verifier,
           )
           artifact = result.to_dict()
-
           source_bytes = Path('target/project_registry/registry.py').read_bytes()
           source_sha256 = hashlib.sha256(source_bytes).hexdigest()
           mutation = authoritative.proposal.mutations[0]
+
           if artifact.get('status') != 'VALIDATED_SOLUTION_PROPOSAL':
               raise SystemExit('Stage 2 did not produce a validated proposal')
           if artifact.get('effect_capability') != 'NONE':
               raise SystemExit('unexpected effect capability')
-          if authoritative.proposal.contract_sha256 != FROZEN_SHA:
+          if authoritative.proposal.contract_sha256 != frozen['contract_sha256']:
               raise SystemExit('contract binding mismatch')
           if authoritative.proposal.repository != 'FJ899/executor-pilot-target':
               raise SystemExit('repository binding mismatch')
@@ -232,14 +288,13 @@ jobs:
               raise SystemExit('mutation path mismatch')
           if mutation.expected_before_sha256 != source_sha256:
               raise SystemExit('before hash differs from exact frozen source')
-          if mutation.expected_after_sha256 != hashlib.sha256(
-              mutation.replacement_text.encode('utf-8')
-          ).hexdigest():
+          if mutation.expected_after_sha256 != hashlib.sha256(mutation.replacement_text.encode('utf-8')).hexdigest():
               raise SystemExit('after hash mismatch')
           if authoritative.generation_evidence.evidence_ref != result.generation_evidence_ref:
               raise SystemExit('authoritative generation evidence mismatch')
 
           print('STAGE2_GP001_RESULT=VALIDATED_SOLUTION_PROPOSAL')
+          print('FROZEN_INPUT_PROVENANCE=CURRENT_STAGE1_DETERMINISTIC_FIXTURE')
           print('FROZEN_CONTRACT_SHA256=' + authoritative.proposal.contract_sha256)
           print('SOURCE_COMMIT=' + authoritative.proposal.source_commit)
           print('SOURCE_TREE=' + authoritative.proposal.source_tree)
