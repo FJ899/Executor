@@ -1,0 +1,258 @@
+name: Stage2 GP001 solution-only validation
+
+on:
+  push:
+    branches:
+      - ops/stage2-gp001-solution-only-validation-2026-08-27
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact Stage 2 runtime
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/Executor
+          ref: 54f754a36c18e9f230154210d8f3763a71507be9
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact Stage 2 runtime identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '54f754a36c18e9f230154210d8f3763a71507be9'
+          test "$(git rev-parse 'HEAD^{tree}')" = 'f9ba275faf4a6fb222920afacc9a63f99a8726e8'
+          test -z "$(git status --porcelain)"
+          echo "STAGE2_RUNTIME_SHA=$(git rev-parse HEAD)"
+          echo "STAGE2_RUNTIME_TREE=$(git rev-parse 'HEAD^{tree}')"
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+          check-latest: false
+
+      - name: Install exact Stage 2 runtime
+        run: python -m pip install --no-deps .
+
+      - name: Download exact GP001 frozen authority artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: '9636044730'
+          path: frozen-evidence
+          github-token: ${{ github.token }}
+          repository: FJ899/Executor
+          run-id: '33047039910'
+
+      - name: Materialize exact frozen input
+        shell: bash
+        run: |
+          set -euo pipefail
+          frozen="$(find frozen-evidence -type f -name frozen.json -print -quit)"
+          test -n "$frozen"
+          cp "$frozen" frozen.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from executor.frozen_pilot_authority import validate_frozen_pilot_authority
+
+          frozen = json.loads(Path('frozen.json').read_text(encoding='utf-8'))
+          if frozen.get('status') != 'AUTHORIZED_AND_FROZEN':
+              raise SystemExit('frozen input is not AUTHORIZED_AND_FROZEN')
+          if frozen.get('contract_sha256') != 'a46984a72bac16c98c1c00d13a43b2664089db8eef22ce4a953d3295f1a97ce7':
+              raise SystemExit('frozen contract identity mismatch')
+          validate_frozen_pilot_authority(frozen)
+          target = frozen['contract']['target']
+          if target != {
+              'repository': 'FJ899/executor-pilot-target',
+              'commit': '3934a94a5eebf750079200589d6dc40e024d44a0',
+              'tree': '26d307afcbb3ce72b2911ca44936712c11558c4c',
+          }:
+              raise SystemExit('frozen target identity mismatch')
+          if frozen['contract']['task']['allowed_paths'] != ['project_registry/registry.py']:
+              raise SystemExit('frozen allowed path mismatch')
+          print('FROZEN_INPUT_VALID=true')
+          PY
+
+      - name: Checkout exact GP001 frozen source read only
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/executor-pilot-target
+          ref: 3934a94a5eebf750079200589d6dc40e024d44a0
+          path: target
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact frozen source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C target rev-parse HEAD)" = '3934a94a5eebf750079200589d6dc40e024d44a0'
+          test "$(git -C target rev-parse 'HEAD^{tree}')" = '26d307afcbb3ce72b2911ca44936712c11558c4c'
+          test -z "$(git -C target status --porcelain)"
+          echo "TARGET_SOURCE_SHA=$(git -C target rev-parse HEAD)"
+          echo "TARGET_SOURCE_TREE=$(git -C target rev-parse 'HEAD^{tree}')"
+
+      - name: Run GP001 Freeze to Solution only
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf provider-evidence
+          mkdir -p provider-evidence
+          python - <<'PY'
+          import copy
+          import hashlib
+          import json
+          from datetime import datetime, timedelta
+          from pathlib import Path
+
+          from executor.github_trust import canonical_json
+          from executor.solution_provider import (
+              SolutionProvider,
+              VerifiedGenerationEvidence,
+              validate_authoritative_solution_proposal,
+          )
+
+          FROZEN_SHA = 'a46984a72bac16c98c1c00d13a43b2664089db8eef22ce4a953d3295f1a97ce7'
+          TARGET_COMMIT = '3934a94a5eebf750079200589d6dc40e024d44a0'
+          TARGET_TREE = '26d307afcbb3ce72b2911ca44936712c11558c4c'
+          SOURCE_PATH = 'project_registry/registry.py'
+          evidence_dir = Path('provider-evidence')
+
+          def sha256_json(value):
+              return hashlib.sha256(canonical_json(value).encode('utf-8')).hexdigest()
+
+          def after(timestamp, seconds=1):
+              parsed = datetime.fromisoformat(timestamp[:-1] + '+00:00')
+              return (parsed + timedelta(seconds=seconds)).isoformat().replace('+00:00', 'Z')
+
+          def response_sha256(generation):
+              return sha256_json({
+                  'schema_version': generation['schema_version'],
+                  'mutations': copy.deepcopy(generation['mutations']),
+                  'rationale': generation['rationale'],
+              })
+
+          class FileVerifier:
+              def verify(self, evidence_ref):
+                  path = evidence_dir / (hashlib.sha256(evidence_ref.encode('utf-8')).hexdigest() + '.json')
+                  if not path.is_file():
+                      raise KeyError(evidence_ref)
+                  value = json.loads(path.read_text(encoding='utf-8'))
+                  if value.get('evidence_ref') != evidence_ref:
+                      raise ValueError('evidence ref mismatch')
+                  return VerifiedGenerationEvidence(**value)
+
+          class GP001Generator:
+              provider = 'GP001_DETERMINISTIC_VALIDATION'
+              model = 'bounded-fix-v1'
+
+              def generate(self, prompt):
+                  source_context = prompt['source_context']
+                  if source_context['repository'] != 'FJ899/executor-pilot-target':
+                      raise ValueError('unexpected repository')
+                  if source_context['commit'] != TARGET_COMMIT or source_context['tree'] != TARGET_TREE:
+                      raise ValueError('unexpected source identity')
+                  files = {item['path']: item for item in source_context['files']}
+                  source = files[SOURCE_PATH]['text']
+                  old = '''    def add_many(self, projects: Iterable[Project]) -> None:\n        \"\"\"Add projects one by one, leaving earlier writes after a late duplicate.\"\"\"\n\n        for project in projects:\n            if project.project_id in self._projects:\n                raise DuplicateProjectError(\n                    f\"duplicate project_id: {project.project_id}\"\n                )\n            self._projects[project.project_id] = project\n'''
+                  new = '''    def add_many(self, projects: Iterable[Project]) -> None:\n        \"\"\"Add a batch atomically after validating all project identifiers.\"\"\"\n\n        batch = list(projects)\n        seen = set(self._projects)\n        for project in batch:\n            if project.project_id in seen:\n                raise DuplicateProjectError(\n                    f\"duplicate project_id: {project.project_id}\"\n                )\n            seen.add(project.project_id)\n        for project in batch:\n            self._projects[project.project_id] = project\n'''
+                  if source.count(old) != 1:
+                      raise ValueError('bounded GP001 source block mismatch')
+                  replacement = source.replace(old, new, 1)
+                  evidence_ref = 'gp001-stage2-readonly:' + prompt['generation_challenge']['nonce']
+                  generation = {
+                      'schema_version': 'executor-solution-generation/1.1',
+                      'evidence_ref': evidence_ref,
+                      'mutations': [
+                          {
+                              'path': SOURCE_PATH,
+                              'replacement_text': replacement,
+                          }
+                      ],
+                      'rationale': 'Validate the complete batch before mutating ProjectRegistry state, preserving atomicity when a duplicate appears late in the batch.',
+                  }
+                  challenge = prompt['generation_challenge']
+                  generated_at = after(challenge['issued_at'])
+                  record = {
+                      'evidence_ref': evidence_ref,
+                      'provider': self.provider,
+                      'model': self.model,
+                      'generated_at': generated_at,
+                      'frozen_contract_sha256': prompt['frozen_contract_sha256'],
+                      'repository': source_context['repository'],
+                      'commit': source_context['commit'],
+                      'tree': source_context['tree'],
+                      'context_sha256': source_context['context_sha256'],
+                      'prompt_sha256': sha256_json(prompt),
+                      'response_sha256': response_sha256(generation),
+                      'generation_challenge_sha256': sha256_json(challenge),
+                      'generation_challenge_issued_at': challenge['issued_at'],
+                      'freeze_receipt_sha256': challenge['freeze_receipt_sha256'],
+                      'verification_method': 'ONE_SHOT_FILE_RECORD_LOOKUP',
+                  }
+                  path = evidence_dir / (hashlib.sha256(evidence_ref.encode('utf-8')).hexdigest() + '.json')
+                  path.write_text(json.dumps(record, sort_keys=True) + '\n', encoding='utf-8')
+                  return generation
+
+          frozen = json.loads(Path('frozen.json').read_text(encoding='utf-8'))
+          verifier = FileVerifier()
+          result = SolutionProvider(GP001Generator(), verifier).provide(
+              frozen_result=frozen,
+              checkout_root='target',
+          )
+          authoritative = validate_authoritative_solution_proposal(
+              result.proposal,
+              frozen_result=frozen,
+              generation_verifier=verifier,
+          )
+          artifact = result.to_dict()
+
+          source_bytes = Path('target/project_registry/registry.py').read_bytes()
+          source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+          mutation = authoritative.proposal.mutations[0]
+          if artifact.get('status') != 'VALIDATED_SOLUTION_PROPOSAL':
+              raise SystemExit('Stage 2 did not produce a validated proposal')
+          if artifact.get('effect_capability') != 'NONE':
+              raise SystemExit('unexpected effect capability')
+          if authoritative.proposal.contract_sha256 != FROZEN_SHA:
+              raise SystemExit('contract binding mismatch')
+          if authoritative.proposal.repository != 'FJ899/executor-pilot-target':
+              raise SystemExit('repository binding mismatch')
+          if authoritative.proposal.source_commit != TARGET_COMMIT:
+              raise SystemExit('source commit binding mismatch')
+          if authoritative.proposal.source_tree != TARGET_TREE:
+              raise SystemExit('source tree binding mismatch')
+          if mutation.path != SOURCE_PATH:
+              raise SystemExit('mutation path mismatch')
+          if mutation.expected_before_sha256 != source_sha256:
+              raise SystemExit('before hash differs from exact frozen source')
+          if mutation.expected_after_sha256 != hashlib.sha256(
+              mutation.replacement_text.encode('utf-8')
+          ).hexdigest():
+              raise SystemExit('after hash mismatch')
+          if authoritative.generation_evidence.evidence_ref != result.generation_evidence_ref:
+              raise SystemExit('authoritative generation evidence mismatch')
+
+          print('STAGE2_GP001_RESULT=VALIDATED_SOLUTION_PROPOSAL')
+          print('FROZEN_CONTRACT_SHA256=' + authoritative.proposal.contract_sha256)
+          print('SOURCE_COMMIT=' + authoritative.proposal.source_commit)
+          print('SOURCE_TREE=' + authoritative.proposal.source_tree)
+          print('SOURCE_FILE=' + mutation.path)
+          print('EXPECTED_BEFORE_SHA256=' + mutation.expected_before_sha256)
+          print('EXPECTED_AFTER_SHA256=' + mutation.expected_after_sha256)
+          print('CONTEXT_SHA256=' + result.context_sha256)
+          print('PROMPT_SHA256=' + result.prompt_sha256)
+          print('PROPOSAL_SHA256=' + authoritative.proposal.payload_sha256)
+          print('GENERATION_EVIDENCE_REF=' + result.generation_evidence_ref)
+          print('EFFECT_CAPABILITY=' + artifact['effect_capability'])
+          print('PILOT_RUNTIME_INVOKED=false')
+          print('TARGET_WRITE_PERFORMED=false')
+          PY
+          test -z "$(git -C target status --porcelain)"
+          echo "TARGET_WORKTREE_CLEAN_AFTER_STAGE2=true"
