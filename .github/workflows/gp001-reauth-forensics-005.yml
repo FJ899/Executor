@@ -1,65 +1,14 @@
-name: GP001 reauthorized publication read-only forensics
+name: GP001 reauthorized publication read-only forensics — DISARMED
 
 on:
-  push:
-    branches:
-      - ops/gp001-reauth-forensics-005
+  workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  inspect:
-    if: github.event.head_commit.message == 'Inspect GP001 reauthorized publication evidence once'
+  disarmed:
+    if: false
     runs-on: ubuntu-24.04
-    timeout-minutes: 6
     steps:
-      - name: Download exact recovery artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          artifact-ids: 9636703599
-          path: evidence
-          github-token: ${{ github.token }}
-          repository: FJ899/Executor
-          run-id: 33048783263
-
-      - name: Print bounded forensic evidence
-        shell: bash
-        run: |
-          set -euo pipefail
-          root="$(find evidence -type f -name recovery.stderr -printf '%h\n' -quit)"
-          test -n "$root"
-          echo '--- recovery.stdout ---'
-          cat "$root/recovery.stdout" || true
-          echo '--- recovery.stderr ---'
-          cat "$root/recovery.stderr" || true
-          echo '--- publication-result.json ---'
-          if test -f "$root/publication-result.json"; then cat "$root/publication-result.json"; else echo 'MISSING'; fi
-          echo '--- authority-ledger.json ---'
-          if test -f "$root/authority-ledger.json"; then cat "$root/authority-ledger.json"; else echo 'MISSING'; fi
-          echo '--- evidence files ---'
-          find "$root/evidence" -maxdepth 2 -type f -printf '%P\n' | sort || true
-          echo '--- sanitized evidence envelopes ---'
-          python - "$root" <<'PY'
-          import base64,json,sys
-          from pathlib import Path
-          root=Path(sys.argv[1])/'evidence'
-          for p in sorted(root.rglob('*.json')):
-              print('FILE='+str(p.relative_to(root)))
-              try: v=json.loads(p.read_text(encoding='utf-8'))
-              except Exception as e:
-                  print('PARSE_ERROR='+str(e)); continue
-              if not isinstance(v,dict):
-                  print('TYPE='+type(v).__name__); continue
-              payload=v.get('payload') if isinstance(v.get('payload'),dict) else v
-              for k in ('kind','status','provider','action_kind','target','attempt_id','effect_sha256','provider_outcome','provider_status','provider_message','object_id','object_url','system_completion','recovery_required','automatic_retry_allowed','next_attempt_requires_new_authority','reason'):
-                  if k in v: print(f'{k}={v[k]}')
-                  elif k in payload: print(f'{k}={payload[k]}')
-              raw=v.get('provider_response_b64')
-              if isinstance(raw,str):
-                  try:
-                      text=base64.b64decode(raw,validate=True).decode('utf-8','replace')
-                      print('provider_response='+text[:1500])
-                  except Exception as e: print('provider_response_decode_error='+str(e))
-          PY
+      - run: echo 'Historical read-only diagnostic boundary only.'
