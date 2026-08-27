@@ -1,12 +1,65 @@
-name: Simple diagnostic workflow
+name: GP001 draft publication read-only diagnosis
 
 on:
   push:
-  workflow_dispatch:
+    branches:
+      - ops/gp001-current-draft-pr-005
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
-  diagnostic:
+  diagnose:
     runs-on: ubuntu-24.04
+    timeout-minutes: 6
     steps:
-      - name: Report runner status
-        run: echo runner-ok
+      - name: Download exact failed-no-effect publication artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: 9636321620
+          path: evidence
+          github-token: ${{ github.token }}
+          repository: FJ899/Executor
+          run-id: 33047770719
+
+      - name: Print sanitized diagnosis only
+        shell: bash
+        run: |
+          set -euo pipefail
+          stderr="$(find evidence -type f -name publication.stderr -print -quit)"
+          result="$(find evidence -type f -name publication-result.json -print -quit)"
+          test -n "$stderr" && test -n "$result"
+          echo '--- PUBLICATION STDERR ---'
+          cat "$stderr"
+          echo '--- EVIDENCE FILES ---'
+          find evidence -type f -printf '%f\n' | sort
+          echo '--- SANITIZED JSON ENVELOPES ---'
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          for p in sorted(Path('evidence').rglob('*.json')):
+              try:
+                  v=json.loads(p.read_text(encoding='utf-8'))
+              except Exception:
+                  continue
+              if p.name in {'frozen.json','pilot-report.json','publication-result.json','preflight-ref.json','preflight-prs.json','preflight-summary.json'}:
+                  continue
+              print('FILE='+p.name)
+              if not isinstance(v,dict):
+                  print('TYPE='+type(v).__name__); continue
+              print('KIND='+str(v.get('kind')))
+              payload=v.get('payload') if isinstance(v.get('payload'),dict) else v
+              for key in ('provider','action_kind','target','attempt_id','effect_sha256','provider_outcome','provider_status','provider_message','object_id','object_url','receipt_provider_status','receipt_provider_outcome','receipt_provider_message','system_completion','recovery_required','status','reason'):
+                  if key in payload:
+                      value=payload.get(key)
+                      if isinstance(value,str) and len(value)>800: value=value[:800]+'…'
+                      print(f'{key}={value}')
+              if isinstance(v.get('provider_response_b64'),str):
+                  import base64
+                  try:
+                      raw=base64.b64decode(v['provider_response_b64'],validate=True).decode('utf-8','replace')
+                      print('provider_response='+raw[:1200])
+                  except Exception as e:
+                      print('provider_response_decode_error='+str(e))
+          PY
