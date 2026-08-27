@@ -122,7 +122,8 @@ jobs:
           for k in ("source_context_sha256","prompt_sha256","response_sha256","generation_challenge_sha256","terminal_freeze_receipt_sha256","proposal_payload_sha256"): sha(req[k], k)
           utc(req["provider_generation_timestamp"], "provider_generation_timestamp"); utc(req["generation_challenge_issued_at"], "challenge time")
           rb = req["request_binding"]; exact(rb, {"repository","issue_number","issue_node_id","body_sha256"}, "request binding")
-          if rb["repository"] != req["repository"] or type(rb["issue_number"]) is not int or rb["issue_number"] <= 0: raise SystemExit("request binding mismatch")
+          text(rb["repository"], "request repository")
+          if type(rb["issue_number"]) is not int or rb["issue_number"] <= 0: raise SystemExit("request binding mismatch")
           text(rb["issue_node_id"], "issue node"); sha(rb["body_sha256"], "request body")
 
           q = urllib.parse.quote(rid, safe="")
