@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from executor.github_authority import GovernedAuthorityLedger
@@ -96,7 +95,6 @@ class FormationPilotFlow:
         self,
         *,
         provider: SolutionProvider,
-        source_root: str | Path,
         prompt: str,
         generated_at: str | None = None,
         historical_candidate_relation: str = "NEW_FIX",
@@ -105,7 +103,6 @@ class FormationPilotFlow:
         return generate_validated_solution(
             provider=provider,
             frozen_result=frozen,
-            source_root=source_root,
             prompt=prompt,
             generated_at=generated_at,
             historical_candidate_relation=historical_candidate_relation,

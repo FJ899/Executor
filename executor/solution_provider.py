@@ -4,17 +4,14 @@ import copy
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Protocol
 
 from executor.github_trust import canonical_json
-from executor.solution_context import SolutionContext, build_solution_context
 from executor.solution_proposal import (
     ValidatedSolutionProposal,
     materialize_solution_candidate,
     validate_solution_proposal,
 )
-from executor.solution_source import GitSolutionSourceResolver, SourceObservation
 
 
 class SolutionProviderError(RuntimeError):
@@ -22,11 +19,11 @@ class SolutionProviderError(RuntimeError):
 
 
 class SolutionProvider(Protocol):
-    """Zero-write external intelligence boundary.
+    """Zero-effect external intelligence boundary.
 
-    Providers receive only the frozen product artifact, an exact read-only
-    SolutionContext and the prompt. They receive no repository writer, GitHub
-    mutation client, publication handle, or authority ledger.
+    Providers may reason over an exact frozen contract and return only an
+    ``executor-solution-candidate/1.0`` value. They receive no effect authority,
+    GitHub token, repository mutation handle, or Executor ledger capability.
     """
 
     @property
@@ -41,7 +38,6 @@ class SolutionProvider(Protocol):
         self,
         *,
         frozen_contract: dict[str, Any],
-        solution_context: dict[str, Any],
         prompt: str,
     ) -> dict[str, Any]:
         ...
@@ -63,12 +59,10 @@ class ExternalIntelligence:
         self,
         *,
         frozen_contract: dict[str, Any],
-        solution_context: dict[str, Any],
         prompt: str,
     ) -> dict[str, Any]:
         return self.provider.generate_candidate(
             frozen_contract=copy.deepcopy(frozen_contract),
-            solution_context=copy.deepcopy(solution_context),
             prompt=prompt,
         )
 
@@ -107,15 +101,8 @@ def build_solution_provenance(
     prompt: str,
     generated_at: str | None = None,
     historical_candidate_relation: str = "NEW_FIX",
-    solution_context: SolutionContext | None = None,
-    source_observation: SourceObservation | None = None,
 ) -> dict[str, Any]:
-    """Create provenance inside Executor at the provider boundary.
-
-    Calls without SolutionContext/SourceObservation retain the historical 1.0
-    shape for compatibility. The active Stage-2 generation path always supplies
-    both and therefore emits provenance 1.1.
-    """
+    """Create provenance inside Executor at the provider trust boundary."""
 
     if frozen_result.get("status") != "AUTHORIZED_AND_FROZEN":
         raise SolutionProviderError("solution generation requires a frozen contract")
@@ -132,10 +119,9 @@ def build_solution_provenance(
         raise SolutionProviderError("provider model is required")
     if historical_candidate_relation not in {"SAME_FIX_REDERIVED", "NEW_FIX"}:
         raise SolutionProviderError("historical candidate relation is invalid")
-    if (solution_context is None) != (source_observation is None):
-        raise SolutionProviderError("solution context and source observation must be supplied together")
 
-    common = {
+    return {
+        "schema_version": "executor-solution-provenance/1.0",
         "producer_role": "EXTERNAL_INTELLIGENCE",
         "provider": provider_name.strip(),
         "model": model_name.strip(),
@@ -148,64 +134,22 @@ def build_solution_provenance(
         "derivation": "REGENERATED_AFTER_HUMAN_REQUEST",
         "historical_candidate_relation": historical_candidate_relation,
     }
-    if solution_context is None or source_observation is None:
-        return {
-            "schema_version": "executor-solution-provenance/1.0",
-            **common,
-        }
-
-    contract_sha256 = frozen_result.get("contract_sha256")
-    if not isinstance(contract_sha256, str) or len(contract_sha256) != 64:
-        raise SolutionProviderError("frozen contract hash is missing")
-    if solution_context.contract_sha256 != contract_sha256:
-        raise SolutionProviderError("solution context is bound to a different frozen contract")
-    if solution_context.source_observation_id != source_observation.observation_id:
-        raise SolutionProviderError("solution context source observation binding mismatch")
-
-    return {
-        "schema_version": "executor-solution-provenance/1.1",
-        **common,
-        "frozen_contract_sha256": contract_sha256,
-        "solution_context_sha256": solution_context.sha256,
-        "source_observation_id": source_observation.observation_id,
-        "source_observed_at": source_observation.observed_at,
-        "source_files": [item.identity_dict() for item in source_observation.files],
-    }
 
 
 def generate_validated_solution(
     *,
     provider: SolutionProvider,
     frozen_result: dict[str, Any],
-    source_root: str | Path,
     prompt: str,
     generated_at: str | None = None,
     historical_candidate_relation: str = "NEW_FIX",
 ) -> ValidatedSolutionProposal:
-    """Frozen contract -> exact source context -> provider -> validated proposal.
-
-    The production path establishes the source observation internally with the
-    canonical Git resolver. Callers supply only the checkout location, never a
-    replacement observation adapter.
-    """
+    """Frozen contract -> provider candidate -> Executor-owned provenance -> validation."""
 
     if frozen_result.get("status") != "AUTHORIZED_AND_FROZEN":
         raise SolutionProviderError("solution generation requires AUTHORIZED_AND_FROZEN")
-    try:
-        observation = GitSolutionSourceResolver().observe(
-            frozen_result=frozen_result,
-            source_root=source_root,
-        )
-        context = build_solution_context(
-            frozen_result=frozen_result,
-            observation=observation,
-        )
-    except (RuntimeError, ValueError, OSError) as exc:
-        raise SolutionProviderError(f"cannot establish exact solution source context: {exc}") from exc
-
     candidate = provider.generate_candidate(
         frozen_contract=copy.deepcopy(frozen_result),
-        solution_context=context.to_dict(),
         prompt=prompt,
     )
     provenance = build_solution_provenance(
@@ -214,8 +158,6 @@ def generate_validated_solution(
         prompt=prompt,
         generated_at=generated_at,
         historical_candidate_relation=historical_candidate_relation,
-        solution_context=context,
-        source_observation=observation,
     )
     proposal = materialize_solution_candidate(
         candidate,
@@ -224,7 +166,7 @@ def generate_validated_solution(
     )
     validated = validate_solution_proposal(proposal, frozen_result=frozen_result)
     # Defensive assertion: a provider can influence candidate content but cannot
-    # override the boundary-owned provenance or its context/source bindings.
+    # override the boundary-owned provenance or inject effect authority.
     expected_sha = hashlib.sha256(canonical_json(provenance).encode("utf-8")).hexdigest()
     if validated.provenance_sha256 != expected_sha:
         raise SolutionProviderError("validated provenance differs from boundary-owned provenance")

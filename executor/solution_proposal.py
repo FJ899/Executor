@@ -10,10 +10,6 @@ from typing import Any
 
 from executor.github_trust import canonical_json
 from executor.repository_access import RepositoryPathError, canonical_repository_path
-from executor.solution_context import (
-    solution_context_identity_sha256,
-    source_observation_identity_sha256,
-)
 
 
 class SolutionProposalError(ValueError):
@@ -22,7 +18,6 @@ class SolutionProposalError(ValueError):
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
-_SHA1 = re.compile(r"^[0-9a-f]{40}$")
 _FORBIDDEN_KEYS = {
     "authority",
     "authorization",
@@ -145,51 +140,12 @@ def _parse_utc(value: Any, *, label: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _validate_source_files_v11(
-    value: Any,
-    *,
-    contract: dict[str, Any],
-) -> tuple[list[dict[str, str]], dict[str, str]]:
-    if not isinstance(value, list) or not value:
-        raise SolutionProposalError("solution provenance source_files are required")
-    task = contract.get("task")
-    if not isinstance(task, dict):
-        raise SolutionProposalError("frozen task is missing")
-    allowed = task.get("allowed_paths")
-    if not isinstance(allowed, list):
-        raise SolutionProposalError("frozen allowed_paths are missing")
-    expected_paths = [canonical_repository_path(path) for path in allowed]
-    normalized: list[dict[str, str]] = []
-    hashes: dict[str, str] = {}
-    for index, item in enumerate(value):
-        if not isinstance(item, dict) or set(item) != {"path", "sha256", "git_blob_sha"}:
-            raise SolutionProposalError(f"provenance.source_files[{index}] has invalid fields")
-        try:
-            path = canonical_repository_path(item.get("path"))
-        except (RepositoryPathError, TypeError) as exc:
-            raise SolutionProposalError(f"provenance.source_files[{index}] path is invalid") from exc
-        sha = item.get("sha256")
-        blob = item.get("git_blob_sha")
-        if not isinstance(sha, str) or _SHA256.fullmatch(sha) is None:
-            raise SolutionProposalError(f"provenance source file sha256 is invalid: {path}")
-        if not isinstance(blob, str) or _SHA1.fullmatch(blob) is None:
-            raise SolutionProposalError(f"provenance source file git blob SHA is invalid: {path}")
-        normalized.append({"path": path, "sha256": sha, "git_blob_sha": blob})
-        hashes[path] = sha
-    if [item["path"] for item in normalized] != expected_paths:
-        raise SolutionProposalError("solution provenance source_files do not match exact allowed_paths")
-    if len(hashes) != len(normalized):
-        raise SolutionProposalError("solution provenance source_files contain duplicate paths")
-    return normalized, hashes
-
-
 def _validate_provenance(
     value: Any,
     *,
     contract: dict[str, Any],
-    contract_sha256: str,
-) -> tuple[dict[str, Any], str, dict[str, str] | None]:
-    common = {
+) -> tuple[dict[str, Any], str]:
+    expected = {
         "schema_version",
         "producer_role",
         "provider",
@@ -203,25 +159,10 @@ def _validate_provenance(
         "derivation",
         "historical_candidate_relation",
     }
-    v11_extra = {
-        "frozen_contract_sha256",
-        "solution_context_sha256",
-        "source_observation_id",
-        "source_observed_at",
-        "source_files",
-    }
-    if not isinstance(value, dict):
+    if not isinstance(value, dict) or set(value) != expected:
         raise SolutionProposalError("solution provenance has invalid fields")
-    schema = value.get("schema_version")
-    if schema == "executor-solution-provenance/1.0":
-        if set(value) != common:
-            raise SolutionProposalError("solution provenance has invalid fields")
-    elif schema == "executor-solution-provenance/1.1":
-        if set(value) != common | v11_extra:
-            raise SolutionProposalError("solution provenance has invalid fields")
-    else:
+    if value.get("schema_version") != "executor-solution-provenance/1.0":
         raise SolutionProposalError("solution provenance schema is invalid")
-
     if value.get("producer_role") != "EXTERNAL_INTELLIGENCE":
         raise SolutionProposalError("solution must be produced by external intelligence")
     if not isinstance(value.get("provider"), str) or not value["provider"].strip():
@@ -269,41 +210,9 @@ def _validate_provenance(
     )
     if generated <= request_created:
         raise SolutionProposalError("solution provenance predates the human request")
-
-    source_hashes: dict[str, str] | None = None
-    if schema == "executor-solution-provenance/1.1":
-        if value.get("frozen_contract_sha256") != contract_sha256:
-            raise SolutionProposalError("solution provenance frozen contract hash mismatch")
-        context_sha = value.get("solution_context_sha256")
-        observation_id = value.get("source_observation_id")
-        if not isinstance(context_sha, str) or _SHA256.fullmatch(context_sha) is None:
-            raise SolutionProposalError("solution provenance context hash is invalid")
-        if not isinstance(observation_id, str) or _SHA256.fullmatch(observation_id) is None:
-            raise SolutionProposalError("solution provenance source observation id is invalid")
-        _parse_utc(value.get("source_observed_at"), label="provenance.source_observed_at")
-        source_files, source_hashes = _validate_source_files_v11(
-            value.get("source_files"),
-            contract=contract,
-        )
-        expected_observation_id = source_observation_identity_sha256(
-            repository=target.get("repository"),
-            commit=target.get("commit"),
-            tree=target.get("tree"),
-            source_files=source_files,
-        )
-        if observation_id != expected_observation_id:
-            raise SolutionProposalError("solution provenance source observation identity mismatch")
-        expected_context_sha = solution_context_identity_sha256(
-            contract_sha256=contract_sha256,
-            contract=contract,
-            source_files=source_files,
-        )
-        if context_sha != expected_context_sha:
-            raise SolutionProposalError("solution provenance context hash mismatch")
-
     normalized = copy.deepcopy(value)
     sha = hashlib.sha256(canonical_json(normalized).encode("utf-8")).hexdigest()
-    return normalized, sha, source_hashes
+    return normalized, sha
 
 
 def validate_solution_proposal(
@@ -358,10 +267,9 @@ def validate_solution_proposal(
     if not isinstance(proposal.get("rationale"), str) or not proposal["rationale"].strip():
         raise SolutionProposalError("solution proposal rationale is required")
 
-    provenance, provenance_sha, source_hashes = _validate_provenance(
+    provenance, provenance_sha = _validate_provenance(
         proposal.get("provenance"),
         contract=contract,
-        contract_sha256=contract_sha,
     )
 
     mutations = proposal.get("mutations")
@@ -401,10 +309,6 @@ def validate_solution_proposal(
             or "\x00" in replacement
         ):
             raise SolutionProposalError(f"mutation {index} hashes/content are invalid")
-        if source_hashes is not None and before != source_hashes.get(path):
-            raise SolutionProposalError(
-                f"mutation {index} before hash does not match exact frozen source"
-            )
         actual_after = hashlib.sha256(replacement.encode("utf-8")).hexdigest()
         if actual_after != after:
             raise SolutionProposalError(
