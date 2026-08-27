@@ -1,0 +1,209 @@
+name: Stage 3 trusted generation verifier attestation
+
+on:
+  workflow_call:
+    inputs:
+      verification_request_json:
+        required: true
+        type: string
+    secrets:
+      openai_read_credential:
+        required: true
+    outputs:
+      provider_generation_evidence_base64:
+        value: ${{ jobs.verify.outputs.provider_generation_evidence_base64 }}
+      provider_generation_evidence_sha256:
+        value: ${{ jobs.verify.outputs.provider_generation_evidence_sha256 }}
+      attestation_bundle_base64:
+        value: ${{ jobs.verify.outputs.attestation_bundle_base64 }}
+      attestation_id:
+        value: ${{ jobs.verify.outputs.attestation_id }}
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      provider_generation_evidence_base64: ${{ steps.verify.outputs.provider_generation_evidence_base64 }}
+      provider_generation_evidence_sha256: ${{ steps.verify.outputs.provider_generation_evidence_sha256 }}
+      attestation_bundle_base64: ${{ steps.bundle.outputs.attestation_bundle_base64 }}
+      attestation_id: ${{ steps.attest.outputs.attestation-id }}
+    steps:
+      - id: verify
+        name: Re-read exact stored OpenAI Response and derive evidence
+        shell: bash
+        env:
+          VERIFICATION_REQUEST_JSON: ${{ inputs.verification_request_json }}
+          OPENAI_READ_CREDENTIAL: ${{ secrets.openai_read_credential }}
+          VERIFIER_REPOSITORY: ${{ job.workflow_repository }}
+          VERIFIER_WORKFLOW_PATH: ${{ job.workflow_file_path }}
+          VERIFIER_WORKFLOW_SHA: ${{ job.workflow_sha }}
+          RUNNER_ENVIRONMENT_VALUE: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64, copy, datetime as dt, hashlib, json, os, pathlib, re
+          import urllib.parse, urllib.request
+
+          REQUEST_SCHEMA = "executor-stage3-generation-verification-request/1.0"
+          PROMPT_SCHEMA = "executor-solution-provider-prompt/1.2"
+          CONTEXT_SCHEMA = "executor-solution-context/1.0"
+          CHALLENGE_SCHEMA = "executor-solution-generation-challenge/1.0"
+          RESPONSE_SCHEMA = "executor-solution-generation/1.1"
+          EVIDENCE_SCHEMA = "executor-provider-generation-evidence/1.0"
+          METHOD = "OPENAI_RESPONSES_RETRIEVE_V1"
+          REPOSITORY = "FJ899/Executor"
+          WORKFLOW = ".github/workflows/stage3-generation-verifier-attestation.yml"
+          PREDICATE = "https://fj899.github.io/Executor/attestations/provider-generation-evidence/v1"
+          HCON = "SHA256_CANONICAL_JSON_WITHOUT_EVIDENCE_ARTIFACT_SHA256"
+          SHA256 = re.compile(r"^[0-9a-f]{64}$")
+          GITSHA = re.compile(r"^[0-9a-f]{40}$")
+          RESPONSE_ID = re.compile(r"^resp_[A-Za-z0-9_-]{1,120}$")
+
+          def canon(v):
+              return json.dumps(v, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+          def hbytes(v): return hashlib.sha256(v).hexdigest()
+          def hjson(v): return hbytes(canon(v).encode())
+          def exact(v, keys, label):
+              if not isinstance(v, dict) or set(v) != set(keys): raise SystemExit(label + " fields mismatch")
+          def sha(v, label, git=False):
+              if not isinstance(v, str) or (GITSHA if git else SHA256).fullmatch(v) is None: raise SystemExit(label + " invalid")
+              return v
+          def text(v, label):
+              if not isinstance(v, str) or not v or "\x00" in v: raise SystemExit(label + " invalid")
+              return v
+          def utc(v, label):
+              if not isinstance(v, str) or not v.endswith("Z"): raise SystemExit(label + " invalid")
+              try: parsed = dt.datetime.fromisoformat(v[:-1] + "+00:00")
+              except ValueError as e: raise SystemExit(label + " invalid") from e
+              if parsed.utcoffset() != dt.timedelta(0): raise SystemExit(label + " invalid")
+              return parsed
+          def get(path):
+              req = urllib.request.Request(
+                  "https://api.openai.com/v1" + path,
+                  headers={"Authorization": "Bearer " + os.environ["OPENAI_READ_CREDENTIAL"], "Accept": "application/json"},
+              )
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  raw = r.read(16 * 1024 * 1024 + 1)
+              if len(raw) > 16 * 1024 * 1024: raise SystemExit("provider response too large")
+              try: value = json.loads(raw.decode())
+              except (UnicodeError, json.JSONDecodeError) as e: raise SystemExit("provider returned invalid JSON") from e
+              if not isinstance(value, dict): raise SystemExit("provider returned non-object JSON")
+              return value
+          def one_text(items, kind):
+              values = []
+              for item in items:
+                  if not isinstance(item, dict): continue
+                  for part in item.get("content", []) if isinstance(item.get("content"), list) else []:
+                      if isinstance(part, dict) and part.get("type") == kind and isinstance(part.get("text"), str):
+                          values.append(part["text"])
+              if len(values) != 1: raise SystemExit("provider record must contain exactly one " + kind)
+              return values[0]
+
+          req = json.loads(os.environ["VERIFICATION_REQUEST_JSON"])
+          exact(req, {
+              "schema_version","provider","model","generation_evidence_ref","provider_generation_timestamp",
+              "frozen_task_contract_sha256","repository","source_commit","source_tree","source_context_sha256",
+              "prompt_sha256","response_sha256","generation_challenge_sha256","generation_challenge_issued_at",
+              "terminal_freeze_receipt_sha256","request_binding","proposal_payload_sha256"
+          }, "verification request")
+          if req["schema_version"] != REQUEST_SCHEMA or req["provider"] != "OpenAI": raise SystemExit("unsupported verification profile")
+          if os.environ["VERIFIER_REPOSITORY"] != REPOSITORY or os.environ["VERIFIER_WORKFLOW_PATH"] != WORKFLOW: raise SystemExit("verifier identity mismatch")
+          verifier_sha = sha(os.environ["VERIFIER_WORKFLOW_SHA"], "verifier workflow SHA", git=True)
+          if os.environ["RUNNER_ENVIRONMENT_VALUE"] != "github-hosted": raise SystemExit("self-hosted runner is forbidden")
+          rid = req["generation_evidence_ref"]
+          if not isinstance(rid, str) or RESPONSE_ID.fullmatch(rid) is None: raise SystemExit("generation_evidence_ref is not a Response ID")
+          text(req["model"], "model"); sha(req["frozen_task_contract_sha256"], "contract")
+          sha(req["source_commit"], "commit", git=True); sha(req["source_tree"], "tree", git=True)
+          for k in ("source_context_sha256","prompt_sha256","response_sha256","generation_challenge_sha256","terminal_freeze_receipt_sha256","proposal_payload_sha256"): sha(req[k], k)
+          utc(req["provider_generation_timestamp"], "provider_generation_timestamp"); utc(req["generation_challenge_issued_at"], "challenge time")
+          rb = req["request_binding"]; exact(rb, {"repository","issue_number","issue_node_id","body_sha256"}, "request binding")
+          if rb["repository"] != req["repository"] or type(rb["issue_number"]) is not int or rb["issue_number"] <= 0: raise SystemExit("request binding mismatch")
+          text(rb["issue_node_id"], "issue node"); sha(rb["body_sha256"], "request body")
+
+          q = urllib.parse.quote(rid, safe="")
+          response = get("/responses/" + q)
+          inputs = get("/responses/" + q + "/input_items?limit=100")
+          if inputs.get("has_more") is True: raise SystemExit("provider input-items pagination incomplete")
+          if response.get("id") != rid or response.get("status") != "completed" or response.get("model") != req["model"]: raise SystemExit("provider response identity/model/status mismatch")
+          created = response.get("created_at")
+          if type(created) not in (int, float) or isinstance(created, bool): raise SystemExit("provider created_at invalid")
+          generated = dt.datetime.fromtimestamp(created, tz=dt.timezone.utc)
+          generated_at = generated.isoformat(timespec="microseconds" if generated.microsecond else "seconds").replace("+00:00", "Z")
+          if generated_at != req["provider_generation_timestamp"]: raise SystemExit("provider generation timestamp mismatch")
+
+          input_text = one_text(inputs.get("data", []) if isinstance(inputs.get("data"), list) else [], "input_text")
+          prompt = json.loads(input_text)
+          if not isinstance(prompt, dict) or prompt.get("schema_version") != PROMPT_SCHEMA or input_text != canon(prompt): raise SystemExit("stored prompt is not exact canonical Stage-2 prompt")
+          if hbytes(input_text.encode()) != req["prompt_sha256"] or prompt.get("frozen_contract_sha256") != req["frozen_task_contract_sha256"]: raise SystemExit("prompt binding mismatch")
+          target = prompt.get("target")
+          if not isinstance(target, dict) or target.get("repository") != req["repository"] or target.get("commit") != req["source_commit"] or target.get("tree") != req["source_tree"]: raise SystemExit("prompt target mismatch")
+          ctx = prompt.get("source_context")
+          if not isinstance(ctx, dict) or ctx.get("schema_version") != CONTEXT_SCHEMA: raise SystemExit("source context invalid")
+          ctx_material = {k: copy.deepcopy(v) for k,v in ctx.items() if k != "context_sha256"}
+          if hjson(ctx_material) != ctx.get("context_sha256") or ctx.get("context_sha256") != req["source_context_sha256"]: raise SystemExit("source context hash mismatch")
+          if (ctx.get("repository"),ctx.get("commit"),ctx.get("tree"),ctx.get("frozen_contract_sha256")) != (req["repository"],req["source_commit"],req["source_tree"],req["frozen_task_contract_sha256"]): raise SystemExit("source context identity mismatch")
+          files = ctx.get("files")
+          if not isinstance(files, list): raise SystemExit("source context files invalid")
+          by_path = {}
+          for f in files:
+              exact(f, {"path","sha256","text"}, "source file")
+              if f["path"] in by_path or hbytes(text(f["text"], "source text").encode()) != sha(f["sha256"], "source hash"): raise SystemExit("source file mismatch")
+              by_path[f["path"]] = f
+          challenge = prompt.get("generation_challenge"); exact(challenge, {"schema_version","nonce","issued_at","freeze_receipt_sha256"}, "challenge")
+          if challenge["schema_version"] != CHALLENGE_SCHEMA or hjson(challenge) != req["generation_challenge_sha256"] or challenge["issued_at"] != req["generation_challenge_issued_at"] or challenge["freeze_receipt_sha256"] != req["terminal_freeze_receipt_sha256"]: raise SystemExit("generation challenge mismatch")
+
+          output_text = one_text(response.get("output", []) if isinstance(response.get("output"), list) else [], "output_text")
+          raw = json.loads(output_text)
+          if not isinstance(raw, dict) or set(raw) not in ({"schema_version","mutations","rationale"},{"schema_version","evidence_ref","mutations","rationale"}): raise SystemExit("provider generation fields mismatch")
+          if raw.get("schema_version") != RESPONSE_SCHEMA: raise SystemExit("provider generation schema mismatch")
+          rationale = text(raw.get("rationale"), "rationale").strip(); raw_mutations = raw.get("mutations")
+          if not isinstance(raw_mutations, list) or not raw_mutations: raise SystemExit("provider mutations invalid")
+          mutations=[]; seen=set()
+          for m in raw_mutations:
+              exact(m, {"path","replacement_text"}, "mutation")
+              path=text(m["path"], "mutation path"); repl=m["replacement_text"]
+              if path not in by_path or path in seen or not isinstance(repl,str) or "\x00" in repl or repl == by_path[path]["text"]: raise SystemExit("mutation mismatch")
+              seen.add(path); mutations.append({"path":path,"expected_before_sha256":by_path[path]["sha256"],"replacement_text":repl,"expected_after_sha256":hbytes(repl.encode())})
+          response_sha = hjson({"schema_version":RESPONSE_SCHEMA,"mutations":copy.deepcopy(raw_mutations),"rationale":rationale})
+          if response_sha != req["response_sha256"]: raise SystemExit("provider response hash mismatch")
+          binding={"frozen_contract_sha256":req["frozen_task_contract_sha256"],"context_sha256":req["source_context_sha256"],"prompt_sha256":req["prompt_sha256"],"generation_challenge_sha256":req["generation_challenge_sha256"],"generation_challenge_issued_at":req["generation_challenge_issued_at"],"freeze_receipt_sha256":req["terminal_freeze_receipt_sha256"],"generation_evidence_ref":rid,"generation_response_sha256":response_sha}
+          proposal_id="proposal-"+hjson(binding)[:24]
+          task=prompt.get("task")
+          if not isinstance(task,dict) or not isinstance(task.get("postcondition_argv"),list) or not isinstance(task.get("regression_argv"),list): raise SystemExit("prompt task evidence plan invalid")
+          provenance={"schema_version":"executor-solution-provenance/1.3","producer_role":"EXTERNAL_INTELLIGENCE","provider":"OpenAI","model":req["model"],"generated_at":generated_at,"request":copy.deepcopy(rb),"frozen_contract_sha256":req["frozen_task_contract_sha256"],"source":{"repository":req["repository"],"commit":req["source_commit"],"tree":req["source_tree"]},"context_sha256":req["source_context_sha256"],"prompt_sha256":req["prompt_sha256"],"generation_challenge_sha256":req["generation_challenge_sha256"],"generation_challenge_issued_at":req["generation_challenge_issued_at"],"generation_evidence_ref":rid,"generation_response_sha256":response_sha,"generation_verification_method":METHOD,"human_solution_edits":0,"effect_capability":"NONE","derivation":"GENERATED_AFTER_POST_FREEZE_CHALLENGE","historical_candidate_relation":"NEW_FIX"}
+          proposal={"schema_version":"executor-solution-proposal/1.0","proposal_id":proposal_id,"contract_sha256":req["frozen_task_contract_sha256"],"repository":req["repository"],"source_commit":req["source_commit"],"source_tree":req["source_tree"],"mutations":mutations,"rationale":rationale,"evidence_plan":[*copy.deepcopy(task["postcondition_argv"]),*copy.deepcopy(task["regression_argv"])],"provenance":provenance}
+          if hjson(proposal) != req["proposal_payload_sha256"]: raise SystemExit("provider-derived proposal hash mismatch")
+
+          request_sha=hjson(req)
+          material={"schema_version":EVIDENCE_SCHEMA,"provider":"OpenAI","model":req["model"],"generation_evidence_ref":rid,"provider_record_id":rid,"provider_generation_timestamp":generated_at,"frozen_task_contract_sha256":req["frozen_task_contract_sha256"],"repository":req["repository"],"source_commit":req["source_commit"],"source_tree":req["source_tree"],"source_context_sha256":req["source_context_sha256"],"prompt_sha256":req["prompt_sha256"],"response_sha256":response_sha,"generation_challenge_sha256":req["generation_challenge_sha256"],"generation_challenge_issued_at":req["generation_challenge_issued_at"],"terminal_freeze_receipt_sha256":req["terminal_freeze_receipt_sha256"],"proposal_payload_sha256":req["proposal_payload_sha256"],"verification_method":METHOD,"verifier_repository":REPOSITORY,"verifier_reusable_workflow_path":WORKFLOW,"verifier_workflow_source_commit":verifier_sha,"verification_request_sha256":request_sha,"evidence_hash_construction":HCON,"attestation_predicate_type":PREDICATE}
+          evidence={**material,"evidence_artifact_sha256":hjson(material)}; evidence_bytes=canon(evidence).encode()
+          ep=pathlib.Path(os.environ["RUNNER_TEMP"])/"provider-generation-evidence.json"; ep.write_bytes(evidence_bytes)
+          pp=pathlib.Path(os.environ["RUNNER_TEMP"])/"provider-generation-predicate.json"; pp.write_text(canon({"schema_version":"executor-stage3-generation-attestation-predicate/1.0","provider_generation_evidence_schema":EVIDENCE_SCHEMA,"provider_generation_evidence_sha256":hbytes(evidence_bytes),"verification_request_sha256":request_sha}),encoding="utf-8")
+          with pathlib.Path(os.environ["GITHUB_OUTPUT"]).open("a",encoding="utf-8") as out:
+              out.write("provider_generation_evidence_base64="+base64.b64encode(evidence_bytes).decode()+"\n")
+              out.write("provider_generation_evidence_sha256="+hbytes(evidence_bytes)+"\n")
+              out.write("evidence_path="+str(ep)+"\n"); out.write("predicate_path="+str(pp)+"\n")
+          PY
+
+      - id: attest
+        name: Attest exact ProviderGenerationEvidence artifact
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: ${{ steps.verify.outputs.evidence_path }}
+          predicate-type: https://fj899.github.io/Executor/attestations/provider-generation-evidence/v1
+          predicate-path: ${{ steps.verify.outputs.predicate_path }}
+          show-summary: false
+
+      - id: bundle
+        name: Return immutable attestation bundle to caller
+        shell: bash
+        env:
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          echo "attestation_bundle_base64=$(base64 -w0 "$BUNDLE_PATH")" >> "$GITHUB_OUTPUT"
