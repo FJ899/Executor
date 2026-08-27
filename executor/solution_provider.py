@@ -56,6 +56,9 @@ class VerifiedGenerationEvidence:
     context_sha256: str
     prompt_sha256: str
     response_sha256: str
+    generation_challenge_sha256: str
+    generation_challenge_issued_at: str
+    freeze_receipt_sha256: str
     verification_method: str
 
 
@@ -100,6 +103,15 @@ class SolutionSourceContext:
             "files": [item.to_dict() for item in self.files],
             "context_sha256": self.context_sha256,
         }
+
+
+@dataclass(frozen=True)
+class AuthoritativelyVerifiedSolutionProposal:
+    """A structural proposal plus independently re-read generation evidence."""
+
+    proposal: ValidatedSolutionProposal
+    generation_evidence: VerifiedGenerationEvidence
+    freeze_receipt_sha256: str
 
 
 @dataclass(frozen=True)
@@ -200,6 +212,15 @@ def _validated_contract(frozen_result: dict[str, Any]) -> tuple[dict[str, Any], 
     if actual_contract_sha256 != contract_sha256:
         raise SolutionProviderError("frozen contract content hash mismatch")
     return contract, contract_sha256
+
+
+def _freeze_receipt_sha256(frozen_result: dict[str, Any]) -> str:
+    receipt = frozen_result.get("decision_consumption")
+    if not isinstance(receipt, dict):
+        raise SolutionProviderError("terminal CONTRACT_ACCEPT receipt is missing")
+    if receipt.get("state") != "FINAL" or receipt.get("terminal_success") is not True:
+        raise SolutionProviderError("terminal CONTRACT_ACCEPT receipt is not successful")
+    return _sha256_json(receipt)
 
 
 def build_solution_source_context(
@@ -402,7 +423,9 @@ def _validate_generation_evidence(
     contract_sha256: str,
     context: SolutionSourceContext,
     prompt_sha256: str,
+    generation_challenge_sha256: str,
     challenge_issued_at: str,
+    freeze_receipt_sha256: str,
 ) -> VerifiedGenerationEvidence:
     if not isinstance(evidence, VerifiedGenerationEvidence):
         raise SolutionProviderError("generation verifier returned invalid evidence")
@@ -424,6 +447,24 @@ def _validate_generation_evidence(
         raise SolutionProviderError("generation evidence prompt mismatch")
     if _require_sha256(evidence.response_sha256, label="generation response hash") != response_sha256:
         raise SolutionProviderError("generation evidence response hash mismatch")
+    if (
+        _require_sha256(
+            evidence.generation_challenge_sha256,
+            label="generation evidence challenge hash",
+        )
+        != generation_challenge_sha256
+    ):
+        raise SolutionProviderError("generation evidence challenge mismatch")
+    if evidence.generation_challenge_issued_at != challenge_issued_at:
+        raise SolutionProviderError("generation evidence challenge time mismatch")
+    if (
+        _require_sha256(
+            evidence.freeze_receipt_sha256,
+            label="generation evidence freeze receipt hash",
+        )
+        != freeze_receipt_sha256
+    ):
+        raise SolutionProviderError("generation evidence freeze receipt mismatch")
     if not isinstance(evidence.verification_method, str) or not evidence.verification_method.strip():
         raise SolutionProviderError("generation verification method is required")
 
@@ -444,6 +485,134 @@ def _validate_generation_evidence(
             "verified generation does not postdate the post-freeze generation challenge"
         )
     return evidence
+
+
+def _validated_response_sha256(validated: ValidatedSolutionProposal) -> str:
+    response_payload = {
+        "schema_version": "executor-solution-generation/1.1",
+        "mutations": [
+            {
+                "path": mutation.path,
+                "replacement_text": mutation.replacement_text,
+            }
+            for mutation in validated.mutations
+        ],
+        "rationale": validated.rationale,
+    }
+    return _sha256_json(response_payload)
+
+
+def validate_authoritative_solution_proposal(
+    proposal: dict[str, Any],
+    *,
+    frozen_result: dict[str, Any],
+    generation_verifier: SolutionGenerationVerifier,
+) -> AuthoritativelyVerifiedSolutionProposal:
+    """Re-read provider evidence before a structural proposal may cross an effect boundary."""
+
+    _validated_contract(frozen_result)
+    freeze_receipt_sha256 = _freeze_receipt_sha256(frozen_result)
+    try:
+        validated = validate_solution_proposal(
+            proposal,
+            frozen_result=frozen_result,
+        )
+    except SolutionProposalError as exc:
+        raise SolutionProviderError(f"solution proposal is structurally invalid: {exc}") from exc
+
+    provenance = validated.provenance
+    evidence_ref = provenance.get("generation_evidence_ref")
+    if not isinstance(evidence_ref, str) or not evidence_ref.strip():
+        raise SolutionProviderError("solution proposal generation evidence ref is missing")
+    try:
+        evidence = generation_verifier.verify(evidence_ref)
+    except Exception as exc:
+        raise SolutionProviderError(f"generation evidence verification failed: {exc}") from exc
+    if not isinstance(evidence, VerifiedGenerationEvidence):
+        raise SolutionProviderError("generation verifier returned invalid evidence")
+
+    source = provenance.get("source")
+    if not isinstance(source, dict):
+        raise SolutionProviderError("solution provenance source binding is missing")
+    expected_response_sha256 = _validated_response_sha256(validated)
+    comparisons = (
+        ("evidence reference", evidence.evidence_ref, evidence_ref),
+        ("provider", evidence.provider, provenance.get("provider")),
+        ("model", evidence.model, provenance.get("model")),
+        ("generated_at", evidence.generated_at, provenance.get("generated_at")),
+        (
+            "frozen contract",
+            evidence.frozen_contract_sha256,
+            validated.contract_sha256,
+        ),
+        ("repository", evidence.repository, validated.repository),
+        ("commit", evidence.commit, validated.source_commit),
+        ("tree", evidence.tree, validated.source_tree),
+        ("context", evidence.context_sha256, provenance.get("context_sha256")),
+        ("prompt", evidence.prompt_sha256, provenance.get("prompt_sha256")),
+        (
+            "challenge",
+            evidence.generation_challenge_sha256,
+            provenance.get("generation_challenge_sha256"),
+        ),
+        (
+            "challenge time",
+            evidence.generation_challenge_issued_at,
+            provenance.get("generation_challenge_issued_at"),
+        ),
+        (
+            "verification method",
+            evidence.verification_method,
+            provenance.get("generation_verification_method"),
+        ),
+        (
+            "response",
+            evidence.response_sha256,
+            provenance.get("generation_response_sha256"),
+        ),
+    )
+    for label, actual, expected in comparisons:
+        if actual != expected:
+            raise SolutionProviderError(
+                f"authoritative generation evidence {label} mismatch"
+            )
+
+    if source != {
+        "repository": evidence.repository,
+        "commit": evidence.commit,
+        "tree": evidence.tree,
+    }:
+        raise SolutionProviderError("authoritative generation evidence source mismatch")
+    if evidence.freeze_receipt_sha256 != freeze_receipt_sha256:
+        raise SolutionProviderError("authoritative generation evidence freeze receipt mismatch")
+    if evidence.response_sha256 != expected_response_sha256:
+        raise SolutionProviderError("authoritative generation response reconstruction mismatch")
+    for label, value in (
+        ("context", evidence.context_sha256),
+        ("prompt", evidence.prompt_sha256),
+        ("challenge", evidence.generation_challenge_sha256),
+        ("response", evidence.response_sha256),
+        ("freeze receipt", evidence.freeze_receipt_sha256),
+    ):
+        _require_sha256(value, label=f"authoritative generation {label} hash")
+
+    issued_at = _parse_utc(
+        evidence.generation_challenge_issued_at,
+        label="authoritative generation challenge issued_at",
+    )
+    generated_at = _parse_utc(
+        evidence.generated_at,
+        label="authoritative generation generated_at",
+    )
+    if generated_at <= issued_at:
+        raise SolutionProviderError(
+            "authoritative generation does not postdate its verified challenge"
+        )
+    return AuthoritativelyVerifiedSolutionProposal(
+        proposal=validated,
+        generation_evidence=evidence,
+        freeze_receipt_sha256=freeze_receipt_sha256,
+    )
 
 
 class SolutionProvider:
@@ -476,10 +645,12 @@ class SolutionProvider:
             frozen_result=frozen_result,
             checkout_root=checkout_root,
         )
+        freeze_receipt_sha256 = _freeze_receipt_sha256(frozen_result)
         generation_challenge = {
             "schema_version": "executor-solution-generation-challenge/1.0",
             "nonce": secrets.token_hex(32),
             "issued_at": _timestamp(_utc_now()),
+            "freeze_receipt_sha256": freeze_receipt_sha256,
         }
         generation_challenge_sha256 = _sha256_json(generation_challenge)
         prompt = _build_prompt(
@@ -511,7 +682,9 @@ class SolutionProvider:
             contract_sha256=contract_sha256,
             context=context,
             prompt_sha256=prompt_sha256,
+            generation_challenge_sha256=generation_challenge_sha256,
             challenge_issued_at=generation_challenge["issued_at"],
+            freeze_receipt_sha256=freeze_receipt_sha256,
         )
 
         generation_binding = {
@@ -520,6 +693,7 @@ class SolutionProvider:
             "prompt_sha256": prompt_sha256,
             "generation_challenge_sha256": generation_challenge_sha256,
             "generation_challenge_issued_at": generation_challenge["issued_at"],
+            "freeze_receipt_sha256": freeze_receipt_sha256,
             "generation_evidence_ref": verified_generation.evidence_ref,
             "generation_response_sha256": verified_generation.response_sha256,
         }
