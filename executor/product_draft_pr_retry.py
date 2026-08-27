@@ -87,6 +87,20 @@ def _canonical_sha256(value: dict[str, Any]) -> str:
     return hashlib.sha256(canonical_effect_bytes(value)).hexdigest()
 
 
+def _prepared_record(prepared: PreparedCommit) -> dict[str, Any]:
+    """Canonical JSON-safe identity for a Human-reviewed prepared commit."""
+
+    return {
+        "repository": prepared.repository,
+        "source_commit": prepared.source_commit,
+        "commit_sha": prepared.commit_sha,
+        "tree_sha": prepared.tree_sha,
+        "head_branch": prepared.head_branch,
+        "patch_sha256": prepared.patch_sha256,
+        "changed_paths": list(prepared.changed_paths),
+    }
+
+
 def _validate_prior_no_effect(
     prior_publication: dict[str, Any],
     *,
@@ -425,7 +439,7 @@ class ProductDraftPrRetryExecutor(DraftPrEffectExecutor):
             "schema_version": "executor-draft-pr-retry-plan/1.0",
             "contract_sha256": contract_sha,
             "pilot_run_id": self.report["run_id"],
-            "prepared": prepared.__dict__,
+            "prepared": _prepared_record(prepared),
             "push": {
                 "action_kind": "CREATE_GIT_REF",
                 "target": f"{prepared.repository}@refs/heads/{prepared.head_branch}",
@@ -466,7 +480,7 @@ class ProductDraftPrRetryExecutor(DraftPrEffectExecutor):
         )
         prepared = self.prepare_commit(workspace)
         planned = retry_plan.get("prepared")
-        if not isinstance(planned, dict) or prepared.__dict__ != planned:
+        if not isinstance(planned, dict) or _prepared_record(prepared) != planned:
             raise DraftPrRetryError("live retry prepared commit differs from Human-reviewed retry plan")
         push_plan = retry_plan["push"]
         pr_plan = retry_plan["pull_request"]
@@ -514,7 +528,7 @@ class ProductDraftPrRetryExecutor(DraftPrEffectExecutor):
             return {
                 "status": "DRAFT_PR_REAUTHORIZED_PUBLICATION_INCOMPLETE",
                 "stage": "CREATE_DRAFT_PR",
-                "prepared": prepared.__dict__,
+                "prepared": _prepared_record(prepared),
                 "push": push,
                 "pull_request": pr,
                 "automatic_retry_allowed": False,
@@ -522,7 +536,7 @@ class ProductDraftPrRetryExecutor(DraftPrEffectExecutor):
         return {
             "schema_version": "executor-draft-pr-publication-result/1.1",
             "status": "DRAFT_PR_CREATED_REVIEW_REQUIRED",
-            "prepared": prepared.__dict__,
+            "prepared": _prepared_record(prepared),
             "push": push,
             "pull_request": pr,
             "reauthorization": reauthorization.to_dict(),
