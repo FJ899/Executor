@@ -8,11 +8,7 @@ from executor.solution_provider import (
     SolutionProvider,
     VerifiedGenerationEvidence,
 )
-from tests.test_solution_provider import (
-    FakeGenerationVerifier,
-    FakeGenerator,
-    SolutionProviderTests,
-)
+import tests.test_solution_provider as solution_provider_tests
 
 
 class SolutionRuntimeTrustBoundaryTests(unittest.TestCase):
@@ -25,15 +21,15 @@ class SolutionRuntimeTrustBoundaryTests(unittest.TestCase):
     """
 
     def test_caller_created_matching_verifier_is_blocked_before_runtime_effect_boundary(self):
-        fixture = SolutionProviderTests(
+        fixture = solution_provider_tests.SolutionProviderTests(
             methodName="test_frozen_contract_to_validated_solution_proposal"
         )
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
 
-        producer_verifier = FakeGenerationVerifier()
+        producer_verifier = solution_provider_tests.FakeGenerationVerifier()
         result = SolutionProvider(
-            FakeGenerator(producer_verifier),
+            solution_provider_tests.FakeGenerator(producer_verifier),
             producer_verifier,
         ).provide(
             frozen_result=fixture.frozen,
@@ -58,7 +54,7 @@ class SolutionRuntimeTrustBoundaryTests(unittest.TestCase):
             freeze_receipt_sha256=observed.freeze_receipt_sha256,
             verification_method=observed.verification_method,
         )
-        attacker_verifier = FakeGenerationVerifier()
+        attacker_verifier = solution_provider_tests.FakeGenerationVerifier()
         attacker_verifier.records[result.generation_evidence_ref] = caller_created
 
         with patch("executor.pilot_runtime.load_execution_policy_snapshot") as load_policy:
