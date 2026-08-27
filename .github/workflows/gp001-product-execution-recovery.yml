@@ -1,20 +1,180 @@
 name: GP001 product execution recovery
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - ops/gp001-current-execution-005
 
 permissions:
-  contents: read
+  contents: write
+  actions: read
 
 jobs:
-  historical-boundary:
-    if: ${{ false }}
-    runs-on: ubuntu-latest
+  product-execution-recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: FJ899/Executor
+      EXECUTOR_GLOBAL_AUTHORITY_TOKEN: ${{ github.token }}
+      EXECUTOR_WORKFLOW_PATH: .github/workflows/gp001-product-execution-recovery.yml
+      GITHUB_TOKEN: ${{ github.token }}
+      TARGET_COMMIT: 3934a94a5eebf750079200589d6dc40e024d44a0
+      TARGET_TREE: 26d307afcbb3ce72b2911ca44936712c11558c4c
+      FROZEN_CONTRACT_SHA256: a46984a72bac16c98c1c00d13a43b2664089db8eef22ce4a953d3295f1a97ce7
+      PROPOSAL_PAYLOAD_SHA256: 31c96ba7f55ae860e2f5a3eabffe6c4f5227eac0700121e354f26a156fcc9588
+      PROPOSAL_PROVENANCE_SHA256: d0ad69ca4ef16dcf60e5e698460a1df095e4cdcbccf3d899294517bf81ac8b3b
     steps:
-      - run: |
-          echo 'Automatic execution recovery replay disabled.'
-          echo 'Successful bounded execution run: 33007806386.'
-          echo 'Result: ACTION_COMPLETED_REVIEW_REQUIRED.'
-          echo 'Authority result SHA-256: 14248d0fbfed336ac48a445ffb1e2ee7ffab11821bc1d0127ee987031a8d36ca.'
-          echo 'Evidence artifact: 9621264039.'
-          echo 'Target provider publication write was not attempted.'
+      - name: Checkout exact one-shot Executor runtime
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/Executor
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify one-shot runtime lineage and canonical workflow identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test "$(git rev-parse HEAD^)" = 'fda645f0b8a294297f0a32782c596a29e5db0a53'
+          test -f .github/workflows/gp001-product-execution-recovery.yml
+          test -z "$(git status --porcelain)"
+          echo "EXECUTOR_RUNTIME_COMMIT=$(git rev-parse HEAD)"
+          sha256sum .github/workflows/gp001-product-execution-recovery.yml
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Install exact one-shot runtime
+        run: python -m pip install --no-deps .
+
+      - name: Download exact validated provider artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: 9636124510
+          path: prior
+          github-token: ${{ github.token }}
+          repository: FJ899/Executor
+          run-id: 33047246359
+
+      - name: Materialize and validate exact frozen contract and proposal
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p run-output runs
+          frozen="$(find prior -type f -name frozen.json -print -quit)"
+          proposal="$(find prior -type f -name proposal-validated.json -print -quit)"
+          test -n "$frozen" && test -n "$proposal"
+          cp "$frozen" run-output/frozen.json
+          cp "$proposal" run-output/proposal.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from executor.product_frozen_authority import validate_product_frozen_pilot_authority
+          from executor.solution_artifact import runtime_solution_proposal
+          frozen=json.loads(Path('run-output/frozen.json').read_text(encoding='utf-8'))
+          proposal=json.loads(Path('run-output/proposal.json').read_text(encoding='utf-8'))
+          if frozen.get('status')!='AUTHORIZED_AND_FROZEN': raise SystemExit('frozen authority missing')
+          if frozen.get('contract_sha256')!='a46984a72bac16c98c1c00d13a43b2664089db8eef22ce4a953d3295f1a97ce7': raise SystemExit('frozen contract identity mismatch')
+          if frozen.get('authority_source')!='VERIFIED_HUMAN_DECISION_ONLY': raise SystemExit('authority source mismatch')
+          validate_product_frozen_pilot_authority(frozen)
+          if proposal.get('contract_sha256') != frozen.get('contract_sha256'): raise SystemExit('proposal contract mismatch')
+          if proposal.get('payload_sha256')!='31c96ba7f55ae860e2f5a3eabffe6c4f5227eac0700121e354f26a156fcc9588': raise SystemExit('proposal payload hash mismatch')
+          if proposal.get('provenance_sha256')!='d0ad69ca4ef16dcf60e5e698460a1df095e4cdcbccf3d899294517bf81ac8b3b': raise SystemExit('proposal provenance hash mismatch')
+          runtime_solution_proposal(proposal,frozen_result=frozen)
+          print('FROZEN_AND_PROPOSAL_VALID=true')
+          PY
+
+      - name: Checkout exact frozen target source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/executor-pilot-target
+          ref: 3934a94a5eebf750079200589d6dc40e024d44a0
+          path: target
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify target commit tree and clean state
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C target rev-parse HEAD)" = "$TARGET_COMMIT"
+          test "$(git -C target rev-parse 'HEAD^{tree}')" = "$TARGET_TREE"
+          test -z "$(git -C target status --porcelain)"
+
+      - name: Resolve immutable sandbox image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull python:3.11-slim
+          image="$(docker image inspect --format='{{.Id}}' python:3.11-slim)"
+          case "$image" in
+            sha256:????????????????????????????????????????????????????????????????) ;;
+            *) echo "unexpected image identity: $image" >&2; exit 1 ;;
+          esac
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "SANDBOX_IMAGE_ID=$image"
+
+      - name: Execute exact bounded pilot once under frozen Human authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          creative-os-product execute \
+            --frozen run-output/frozen.json \
+            --proposal run-output/proposal.json \
+            --profile trust_profiles/github-product-gp001.json \
+            --ledger "${RUNNER_TEMP}/product-execution-authority.sqlite3" \
+            --workspace target \
+            --runs-root runs \
+            --run-id "gp001-product-current-${GITHUB_RUN_ID}" \
+            --image "${{ steps.image.outputs.image }}" \
+            --executor-root . \
+            --executor-commit "$(git rev-parse HEAD)" \
+            > run-output/pilot-report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          value=json.loads(Path('run-output/pilot-report.json').read_text(encoding='utf-8'))
+          if value.get('status')!='ACTION_COMPLETED_REVIEW_REQUIRED': raise SystemExit(f"execution did not reach review-required success: {value}")
+          if value.get('repository')!='FJ899/executor-pilot-target': raise SystemExit('pilot report repository mismatch')
+          if value.get('human_review_required') is not True or value.get('merge_allowed') is not False: raise SystemExit('review/merge boundary mismatch')
+          state=value.get('product_state') or {}
+          if state.get('human_acceptance') not in {'PENDING',None}: raise SystemExit('unexpected human acceptance state')
+          print('PILOT_STATUS='+value['status'])
+          print('AUTHORITY_RESULT_SHA256='+str((value.get('authority_consumption') or {}).get('result_sha256')))
+          print('HUMAN_REVIEW_REQUIRED='+str(value.get('human_review_required')).lower())
+          print('MERGE_ALLOWED='+str(value.get('merge_allowed')).lower())
+          PY
+          git -C target diff --binary > run-output/pilot.patch
+          test -s run-output/pilot.patch
+
+      - name: Verify exact bounded local effect and no target publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t changed < <(git -C target diff --name-only)
+          test "${#changed[@]}" -eq 1
+          test "${changed[0]}" = 'project_registry/registry.py'
+          numstat="$(git -C target diff --numstat -- project_registry/registry.py)"
+          added="$(printf '%s\n' "$numstat" | awk '{print $1}')"
+          deleted="$(printf '%s\n' "$numstat" | awk '{print $2}')"
+          test "$added" != '-' && test "$deleted" != '-'
+          test $((added + deleted)) -le 80
+          test ! -e run-output/draft-pr-publication.json
+          echo "CHANGED_PATH=project_registry/registry.py"
+          echo "PATCH_CHANGED_LINES=$((added + deleted))"
+          echo "TARGET_PROVIDER_WRITE_ATTEMPTED=false"
+
+      - name: Preserve exact current execution evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gp001-product-current-execution-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            run-output
+            runs
+          if-no-files-found: error
+          retention-days: 30
