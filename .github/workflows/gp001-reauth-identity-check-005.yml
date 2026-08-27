@@ -1,99 +1,14 @@
-name: GP001 retry prepared identity and authority refs read-only
+name: GP001 retry prepared identity and authority refs read-only — DISARMED
 
 on:
-  push:
-    branches:
-      - ops/gp001-reauth-identity-check-005
+  workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  inspect:
-    if: github.event.head_commit.message == 'Check GP001 retry prepared identity and authority refs once'
+  disarmed:
+    if: false
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          repository: FJ899/Executor
-          ref: fda645f0b8a294297f0a32782c596a29e5db0a53
-          path: executor-src
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: '3.11'
-      - run: python -m pip install --no-deps ./executor-src
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          artifact-ids: 9636321620
-          path: prior
-          github-token: ${{ github.token }}
-          repository: FJ899/Executor
-          run-id: 33047770719
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          artifact-ids: 9636522963
-          path: retry-plan
-          github-token: ${{ github.token }}
-          repository: FJ899/Executor
-          run-id: 33048311105
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          artifact-ids: 9636703599
-          path: failed-recovery
-          github-token: ${{ github.token }}
-          repository: FJ899/Executor
-          run-id: 33048783263
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          repository: FJ899/executor-pilot-target
-          ref: 3934a94a5eebf750079200589d6dc40e024d44a0
-          path: target
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Compare planned and recomputed PreparedCommit; inspect local ledger
-        shell: bash
-        run: |
-          set -euo pipefail
-          frozen="$(find prior -type f -name frozen.json -print -quit)"
-          report="$(find prior -type f -name pilot-report.json -print -quit)"
-          patch="$(find prior -type f -name pilot.patch -print -quit)"
-          plan="$(find retry-plan -type f -name retry-plan.json -print -quit)"
-          ledger="$(find failed-recovery -type f -name authority-ledger.json -print -quit)"
-          git -C target apply --check "$GITHUB_WORKSPACE/$patch"
-          git -C target apply "$GITHUB_WORKSPACE/$patch"
-          PYTHONPATH=executor-src python - "$frozen" "$report" "$plan" "$ledger" <<'PY'
-          import hashlib,json,sqlite3,sys
-          from pathlib import Path
-          from executor.product_draft_pr_retry import ProductDraftPrRetryExecutor
-          frozen=json.load(open(sys.argv[1],encoding='utf-8'))
-          report=json.load(open(sys.argv[2],encoding='utf-8'))
-          plan=json.load(open(sys.argv[3],encoding='utf-8'))
-          ex=ProductDraftPrRetryExecutor(frozen_result=frozen,pilot_report=report,ledger=object(),evidence_directory='noop')
-          prepared=ex.prepare_commit('target').__dict__
-          planned=plan['prepared']
-          print('PLANNED='+json.dumps(planned,sort_keys=True))
-          print('RECOMPUTED='+json.dumps(prepared,sort_keys=True))
-          print('DICT_EQUAL='+str(prepared==planned))
-          for k in sorted(set(planned)|set(prepared)):
-              same=planned.get(k)==prepared.get(k)
-              print(f'FIELD {k}: equal={same} planned_type={type(planned.get(k)).__name__} recomputed_type={type(prepared.get(k)).__name__} planned={planned.get(k)!r} recomputed={prepared.get(k)!r}')
-          ledger=Path(sys.argv[4])
-          con=sqlite3.connect(f'file:{ledger}?mode=ro',uri=True)
-          rows=con.execute('select authority_key,payload_sha256,action_kind,run_id,state,result_sha256 from authority_consumptions order by authority_key').fetchall()
-          print('LOCAL_AUTHORITY_ROWS='+str(len(rows)))
-          for row in rows: print('LOCAL_AUTHORITY_ROW='+json.dumps(row))
-          contract=frozen['contract_sha256']
-          node='IC_kwDOTpqUf88AAAABQ_xVtA'
-          keys=[
-            f'draft-pr:{contract}:REAUTH:{node}:PUSH_DRAFT_BRANCH',
-            f'draft-pr:{contract}:REAUTH:{node}:CREATE_DRAFT_PR',
-          ]
-          for key in keys:
-              digest=hashlib.sha256(key.encode()).hexdigest()
-              print('AUTHORITY_KEY='+key)
-              print('AUTHORITY_REF=refs/heads/executor-authority/'+digest)
-          PY
+      - run: echo 'Historical read-only diagnostic boundary only.'
