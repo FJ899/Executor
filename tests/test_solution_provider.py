@@ -6,16 +6,20 @@ import json
 import subprocess
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+from executor.frozen_pilot_authority import validate_frozen_pilot_authority
 from executor.github_trust import canonical_json, verify_github_decision, verify_github_request
 from executor.pilot_contract import apply_github_decision, build_pilot_draft, pilot_draft_sha256
+from executor.pilot_runtime import PilotBlocked, PilotRuntime
 from executor.solution_provider import (
     SolutionProvider,
     SolutionProviderError,
     VerifiedGenerationEvidence,
+    validate_authoritative_solution_proposal,
 )
 from tests.p4_test_support import governed_ledger
 from tests.test_github_trust import (
@@ -70,6 +74,7 @@ class FakeGenerationVerifier:
 
     def publish(self, *, prompt: dict, generation: dict, provider: str, model: str, generated_at: str):
         source = prompt["source_context"]
+        challenge = prompt["generation_challenge"]
         evidence_ref = generation["evidence_ref"]
         self.records[evidence_ref] = VerifiedGenerationEvidence(
             evidence_ref=evidence_ref,
@@ -83,6 +88,11 @@ class FakeGenerationVerifier:
             context_sha256=source["context_sha256"],
             prompt_sha256=hashlib.sha256(canonical_json(prompt).encode("utf-8")).hexdigest(),
             response_sha256=_response_sha256(generation),
+            generation_challenge_sha256=hashlib.sha256(
+                canonical_json(challenge).encode("utf-8")
+            ).hexdigest(),
+            generation_challenge_issued_at=challenge["issued_at"],
+            freeze_receipt_sha256=challenge["freeze_receipt_sha256"],
             verification_method="FAKE_PROVIDER_RECORD_LOOKUP",
         )
 
@@ -199,6 +209,21 @@ class SolutionProviderTests(unittest.TestCase):
                 ledger=governed_ledger(ledger_path),
             )
 
+    def _runtime_kwargs(self, proposal: dict) -> dict:
+        request, decision = validate_frozen_pilot_authority(self.frozen)
+        return {
+            "executor_root": self.repo,
+            "executor_commit": "0" * 40,
+            "frozen_result": self.frozen,
+            "proposal": proposal,
+            "verified_request": request,
+            "verified_decision": decision,
+            "ledger": governed_ledger(Path(self.temp.name) / "runtime-ledger.sqlite3"),
+            "runs_root": Path(self.temp.name) / "runs",
+            "image": "sha256:" + "1" * 64,
+            "execution_environment": {},
+        }
+
     def test_frozen_contract_to_validated_solution_proposal(self):
         verifier = FakeGenerationVerifier()
         generator = FakeGenerator(verifier)
@@ -266,6 +291,106 @@ class SolutionProviderTests(unittest.TestCase):
             result.generation_challenge_issued_at,
         )
         self.assertEqual(len(generator.last_prompt["generation_challenge"]["nonce"]), 64)
+        self.assertEqual(
+            len(generator.last_prompt["generation_challenge"]["freeze_receipt_sha256"]),
+            64,
+        )
+
+    def test_authoritative_consumer_rechecks_provider_record(self):
+        verifier = FakeGenerationVerifier()
+        result = SolutionProvider(FakeGenerator(verifier), verifier).provide(
+            frozen_result=self.frozen,
+            checkout_root=self.repo,
+        )
+        verified = validate_authoritative_solution_proposal(
+            result.proposal,
+            frozen_result=self.frozen,
+            generation_verifier=verifier,
+        )
+        self.assertEqual(verified.proposal.payload_sha256, result.validated.payload_sha256)
+        self.assertEqual(
+            verified.generation_evidence.evidence_ref,
+            result.generation_evidence_ref,
+        )
+        self.assertEqual(len(verified.freeze_receipt_sha256), 64)
+        self.assertEqual(
+            verifier.calls,
+            ["provider-generation:current", "provider-generation:current"],
+        )
+
+    def test_authoritative_consumer_blocks_missing_provider_record(self):
+        producer_verifier = FakeGenerationVerifier()
+        result = SolutionProvider(FakeGenerator(producer_verifier), producer_verifier).provide(
+            frozen_result=self.frozen,
+            checkout_root=self.repo,
+        )
+        empty_verifier = FakeGenerationVerifier()
+        with self.assertRaisesRegex(SolutionProviderError, "verification failed"):
+            validate_authoritative_solution_proposal(
+                result.proposal,
+                frozen_result=self.frozen,
+                generation_verifier=empty_verifier,
+            )
+
+    def test_authoritative_consumer_blocks_wrong_terminal_freeze_receipt(self):
+        verifier = FakeGenerationVerifier()
+        result = SolutionProvider(FakeGenerator(verifier), verifier).provide(
+            frozen_result=self.frozen,
+            checkout_root=self.repo,
+        )
+        evidence = verifier.records[result.generation_evidence_ref]
+        verifier.records[result.generation_evidence_ref] = replace(
+            evidence,
+            freeze_receipt_sha256="0" * 64,
+        )
+        with self.assertRaisesRegex(SolutionProviderError, "freeze receipt mismatch"):
+            validate_authoritative_solution_proposal(
+                result.proposal,
+                frozen_result=self.frozen,
+                generation_verifier=verifier,
+            )
+
+    def test_authoritative_consumer_reconstructs_exact_response(self):
+        verifier = FakeGenerationVerifier()
+        result = SolutionProvider(FakeGenerator(verifier), verifier).provide(
+            frozen_result=self.frozen,
+            checkout_root=self.repo,
+        )
+        forged_sha = "e" * 64
+        forged = copy.deepcopy(result.proposal)
+        forged["provenance"]["generation_response_sha256"] = forged_sha
+        evidence = verifier.records[result.generation_evidence_ref]
+        verifier.records[result.generation_evidence_ref] = replace(
+            evidence,
+            response_sha256=forged_sha,
+        )
+        with self.assertRaisesRegex(SolutionProviderError, "response reconstruction mismatch"):
+            validate_authoritative_solution_proposal(
+                forged,
+                frozen_result=self.frozen,
+                generation_verifier=verifier,
+            )
+
+    def test_pilot_runtime_blocks_structural_proposal_without_provider_record(self):
+        producer_verifier = FakeGenerationVerifier()
+        result = SolutionProvider(FakeGenerator(producer_verifier), producer_verifier).provide(
+            frozen_result=self.frozen,
+            checkout_root=self.repo,
+        )
+        with self.assertRaisesRegex(PilotBlocked, "not authoritative"):
+            PilotRuntime(
+                **self._runtime_kwargs(result.proposal),
+                generation_verifier=FakeGenerationVerifier(),
+            )
+
+    def test_pilot_runtime_blocks_when_generation_verifier_is_absent(self):
+        verifier = FakeGenerationVerifier()
+        result = SolutionProvider(FakeGenerator(verifier), verifier).provide(
+            frozen_result=self.frozen,
+            checkout_root=self.repo,
+        )
+        with self.assertRaisesRegex(PilotBlocked, "requires independent"):
+            PilotRuntime(**self._runtime_kwargs(result.proposal))
 
     def test_scope_expansion_is_blocked_before_materialization(self):
         verifier = FakeGenerationVerifier()
