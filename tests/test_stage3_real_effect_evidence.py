@@ -48,7 +48,7 @@ class Stage3RealEffectEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(
             policy["signer_digest"],
-            "52cb6465fe9ab59b6ffd259801bda521e9155294",
+            "ddcc0e1c8fc0bbd01d4e1b41c26a430af4c8ed12",
         )
         self.assertEqual(
             policy["accepted_predicate_type"],
