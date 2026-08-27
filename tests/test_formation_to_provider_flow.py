@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from executor.request_to_contract import FormationStatus, RequestToContract001
-from executor.solution_provider import build_solution_provenance, generate_validated_solution
+from executor.solution_provider import build_solution_provenance
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,15 +49,14 @@ class FakeProvider:
     provider_name = "TEST_EXTERNAL_INTELLIGENCE"
     model_name = "test-model-1"
 
-    def __init__(self, candidate: dict):
-        self.candidate = candidate
-        self.received_frozen = None
-        self.received_prompt = None
-
-    def generate_candidate(self, *, frozen_contract: dict, prompt: str) -> dict:
-        self.received_frozen = frozen_contract
-        self.received_prompt = prompt
-        return self.candidate
+    def generate_candidate(
+        self,
+        *,
+        frozen_contract: dict,
+        solution_context: dict,
+        prompt: str,
+    ) -> dict:
+        raise AssertionError("provenance construction must not call the provider")
 
 
 class FormationToProviderFlowTests(unittest.TestCase):
@@ -108,36 +107,17 @@ class FormationToProviderFlowTests(unittest.TestCase):
         self.assertFalse(current.decision_surface()["executable"])
 
     def test_provider_boundary_builds_provenance_not_provider(self) -> None:
-        replacement = "def run():\n    return 1\n"
-        after = hashlib.sha256(replacement.encode("utf-8")).hexdigest()
-        candidate = {
-            "schema_version": "executor-solution-candidate/1.0",
-            "status": "AWAITING_FROZEN_CONTRACT_SHA",
-            "proposal_id": "provider-test-1",
-            "repository": "FJ899/executor-pilot-target",
-            "source_commit": "3934a94a5eebf750079200589d6dc40e024d44a0",
-            "source_tree": "26d307afcbb3ce72b2911ca44936712c11558c4c",
-            "mutations": [
-                {
-                    "path": "project_registry/registry.py",
-                    "expected_before_sha256": "0" * 64,
-                    "replacement_text": replacement,
-                    "expected_after_sha256": after,
-                }
+        candidate_evidence_plan = [
+            [
+                "python",
+                "-m",
+                "unittest",
+                "tests.test_registry.ProjectRegistryTests.test_duplicate_batch_does_not_partially_mutate_registry",
+                "-v",
             ],
-            "rationale": "bounded test candidate",
-            "evidence_plan": [
-                [
-                    "python",
-                    "-m",
-                    "unittest",
-                    "tests.test_registry.ProjectRegistryTests.test_duplicate_batch_does_not_partially_mutate_registry",
-                    "-v",
-                ],
-                ["python", "-m", "unittest", "discover", "-s", "tests", "-v"],
-                ["python", "-m", "compileall", "-q", "project_registry", "tests"],
-            ],
-        }
+            ["python", "-m", "unittest", "discover", "-s", "tests", "-v"],
+            ["python", "-m", "compileall", "-q", "project_registry", "tests"],
+        ]
         contract = {
             "request_id": "request-formation-e2e",
             "target": {
@@ -148,8 +128,8 @@ class FormationToProviderFlowTests(unittest.TestCase):
             "task": {
                 "allowed_paths": ["project_registry/registry.py"],
                 "protected_paths": ["tests/**"],
-                "postcondition_argv": [candidate["evidence_plan"][0]],
-                "regression_argv": candidate["evidence_plan"][1:],
+                "postcondition_argv": [candidate_evidence_plan[0]],
+                "regression_argv": candidate_evidence_plan[1:],
                 "max_production_files": 1,
             },
             "request_evidence": {
@@ -165,7 +145,7 @@ class FormationToProviderFlowTests(unittest.TestCase):
             "contract": contract,
             "contract_sha256": "2" * 64,
         }
-        provider = FakeProvider(candidate)
+        provider = FakeProvider()
         prompt = "Produce a bounded candidate for the exact frozen contract."
 
         provenance = build_solution_provenance(
@@ -174,22 +154,13 @@ class FormationToProviderFlowTests(unittest.TestCase):
             prompt=prompt,
             generated_at="2026-08-26T11:00:00Z",
         )
+        self.assertEqual(provenance["schema_version"], "executor-solution-provenance/1.0")
         self.assertEqual(provenance["provider"], provider.provider_name)
         self.assertEqual(provenance["model"], provider.model_name)
         self.assertEqual(provenance["effect_capability"], "NONE")
         self.assertEqual(
             provenance["prompt_sha256"], hashlib.sha256(prompt.encode("utf-8")).hexdigest()
         )
-
-        validated = generate_validated_solution(
-            provider=provider,
-            frozen_result=frozen,
-            prompt=prompt,
-            generated_at="2026-08-26T11:00:00Z",
-        )
-        self.assertEqual(validated.proposal_id, "provider-test-1")
-        self.assertEqual(validated.provenance["effect_capability"], "NONE")
-        self.assertEqual(provider.received_prompt, prompt)
 
 
 if __name__ == "__main__":
