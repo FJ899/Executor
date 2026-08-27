@@ -1,0 +1,200 @@
+name: GP001 reauthorized draft PR recovery fix one-shot
+
+on:
+  push:
+    branches:
+      - ops/gp001-reauth-publish-006
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  recover:
+    if: github.event.head_commit.message == 'Execute GP001 reauthorized draft PR recovery fix once'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      EXECUTOR_GLOBAL_AUTHORITY_REPOSITORY: FJ899/Executor
+      EXECUTOR_GLOBAL_AUTHORITY_TOKEN: ${{ github.token }}
+      EXECUTOR_GITHUB_EFFECT_TOKEN: ${{ secrets.EXECUTOR_GITHUB_EFFECT_TOKEN }}
+      GITHUB_EVIDENCE_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout exact fixed Executor product runtime
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/Executor
+          ref: 6b15817026aa027f111460035aaee6afa1fa5d4e
+          path: executor-src
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Install exact fixed Executor runtime
+        run: python -m pip install --no-deps ./executor-src
+
+      - name: Download exact prior NO_EFFECT publication evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: 9636321620
+          path: prior
+          github-token: ${{ github.token }}
+          repository: FJ899/Executor
+          run-id: 33047770719
+
+      - name: Download exact Human-reviewed retry plan
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: 9636522963
+          path: retry-plan
+          github-token: ${{ github.token }}
+          repository: FJ899/Executor
+          run-id: 33048311105
+
+      - name: Checkout exact frozen target source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/executor-pilot-target
+          ref: 3934a94a5eebf750079200589d6dc40e024d44a0
+          path: target
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Materialize exact verified pilot patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${EXECUTOR_GITHUB_EFFECT_TOKEN:-}" || { echo 'effect token missing'; exit 2; }
+          frozen="$(find prior -type f -name frozen.json -print -quit)"
+          report="$(find prior -type f -name pilot-report.json -print -quit)"
+          prior_result="$(find prior -type f -name publication-result.json -print -quit)"
+          patch="$(find prior -type f -name pilot.patch -print -quit)"
+          plan="$(find retry-plan -type f -name retry-plan.json -print -quit)"
+          test -n "$frozen" && test -n "$report" && test -n "$prior_result" && test -n "$patch" && test -n "$plan"
+          test "$(git -C target rev-parse HEAD)" = '3934a94a5eebf750079200589d6dc40e024d44a0'
+          git -C target apply --check "$GITHUB_WORKSPACE/$patch"
+          git -C target apply "$GITHUB_WORKSPACE/$patch"
+          mkdir -p recovery-output/evidence
+          cp "$frozen" recovery-output/frozen.json
+          cp "$report" recovery-output/pilot-report.json
+          cp "$prior_result" recovery-output/prior-publication-result.json
+          cp "$plan" recovery-output/retry-plan.json
+          cp "$patch" recovery-output/pilot.patch
+
+      - name: Verify exact Human reauthorization and publish once
+        id: recovery
+        shell: bash
+        run: |
+          set +e
+          python - <<'PY' > recovery-output/recovery.stdout 2> recovery-output/recovery.stderr
+          import json
+          import os
+          from pathlib import Path
+
+          from executor.authority_ledger import AtomicAuthorityLedger
+          from executor.github_authority import GitHubGlobalAuthority, GovernedAuthorityLedger
+          from executor.github_trust import GitHubRestClient, GitHubTrustProfile
+          from executor.product_draft_pr_gateway import ProductGitHubDraftPrGateway
+          from executor.product_draft_pr_retry import ProductDraftPrRetryExecutor, verify_draft_pr_reauthorization
+          from executor.product_frozen_authority import validate_product_frozen_pilot_authority
+
+          frozen = json.loads(Path('recovery-output/frozen.json').read_text(encoding='utf-8'))
+          report = json.loads(Path('recovery-output/pilot-report.json').read_text(encoding='utf-8'))
+          prior = json.loads(Path('recovery-output/prior-publication-result.json').read_text(encoding='utf-8'))
+          plan = json.loads(Path('recovery-output/retry-plan.json').read_text(encoding='utf-8'))
+          profile = GitHubTrustProfile.from_dict(
+              json.loads(Path('executor-src/trust_profiles/github-product-gp001.json').read_text(encoding='utf-8'))
+          )
+
+          validate_product_frozen_pilot_authority(frozen)
+          assert plan['push']['effect_sha256'] == 'e842d763f13f16a41e66b879e7473fae360a020d26f893fae595dec0cd1357e2'
+          assert plan['pull_request']['effect_sha256'] == '97962323ca611446f203706481c1aa3b9583dda2b881c9709671b109e09e8e78'
+          governed = GovernedAuthorityLedger(
+              AtomicAuthorityLedger('recovery-output/authority-ledger.json'),
+              GitHubGlobalAuthority.from_environment(expected_repository=profile.intake_repository),
+          )
+          source = GitHubRestClient(token=os.environ['GITHUB_EVIDENCE_TOKEN'])
+          reauth = verify_draft_pr_reauthorization(
+              source,
+              profile=profile,
+              frozen_result=frozen,
+              pilot_report=report,
+              prior_publication=prior,
+              retry_plan=plan,
+              comment_id=5435577780,
+          )
+          executor = ProductDraftPrRetryExecutor(
+              frozen_result=frozen,
+              pilot_report=report,
+              ledger=governed,
+              evidence_directory='recovery-output/evidence',
+          )
+          gateway = ProductGitHubDraftPrGateway(
+              repository=report['repository'],
+              workspace='target',
+              token=os.environ['EXECUTOR_GITHUB_EFFECT_TOKEN'],
+          )
+          result = executor.publish_reauthorized(
+              workspace='target',
+              prior_publication=prior,
+              retry_plan=plan,
+              reauthorization=reauth,
+              gateway=gateway,
+          )
+          Path('recovery-output/publication-result.json').write_text(
+              json.dumps(result, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          print('VERIFIED_REAUTH_COMMENT_ID=' + str(reauth.comment_id))
+          print('VERIFIED_REAUTH_COMMENT_NODE_ID=' + reauth.comment_node_id)
+          print('STATUS=' + str(result.get('status')))
+          push = result.get('push') if isinstance(result.get('push'), dict) else {}
+          pr = result.get('pull_request') if isinstance(result.get('pull_request'), dict) else {}
+          print('PUSH_STATUS=' + str(push.get('status')))
+          print('PUSH_OBJECT_ID=' + str(push.get('object_id')))
+          print('PUSH_OBJECT_URL=' + str(push.get('object_url')))
+          print('PR_STATUS=' + str(pr.get('status')))
+          print('PR_OBJECT_ID=' + str(pr.get('object_id')))
+          print('PR_OBJECT_URL=' + str(pr.get('object_url')))
+          print('MERGE_ALLOWED=' + str(result.get('merge_allowed')))
+          print('DEPLOY_ALLOWED=' + str(result.get('deploy_allowed')))
+          print('RELEASE_ALLOWED=' + str(result.get('release_allowed')))
+          print('TAG_ALLOWED=' + str(result.get('tag_allowed')))
+          if result.get('status') != 'DRAFT_PR_CREATED_REVIEW_REQUIRED':
+              raise SystemExit(3)
+          PY
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload exact recovery evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gp001-reauthorized-draft-pr-recovery-006-${{ github.run_id }}
+          path: recovery-output
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Enforce terminal review-required success
+        if: always()
+        shell: bash
+        run: |
+          test '${{ steps.recovery.outputs.exit_code }}' = '0'
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('recovery-output/publication-result.json')
+          v=json.loads(p.read_text(encoding='utf-8'))
+          assert v['status']=='DRAFT_PR_CREATED_REVIEW_REQUIRED'
+          assert v['human_review_required'] is True
+          assert v['human_acceptance']=='PENDING'
+          assert v['merge_allowed'] is False
+          assert v['deploy_allowed'] is False
+          assert v['release_allowed'] is False
+          assert v['tag_allowed'] is False
+          print('DRAFT_PR_CREATED_REVIEW_REQUIRED=true')
+          PY
