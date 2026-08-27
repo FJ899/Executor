@@ -160,7 +160,10 @@ class ProductDraftPrRetryTests(unittest.TestCase):
             "schema_version": "executor-draft-pr-retry-plan/1.0",
             "contract_sha256": self.contract_sha,
             "pilot_run_id": self.run_id,
-            "prepared": self.prepared.__dict__,
+            "prepared": {
+                **self.prepared.__dict__,
+                "changed_paths": list(self.prepared.changed_paths),
+            },
             "push": {
                 "action_kind": "CREATE_GIT_REF",
                 "target": prior_target,
