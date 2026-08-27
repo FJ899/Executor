@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import tempfile
+import unittest
+from pathlib import Path
 from types import SimpleNamespace
-
-import pytest
+from unittest.mock import patch
 
 from executor.stage3_evidence import Manifest
 from executor.stage3_runtime import (
@@ -49,90 +51,106 @@ def _mutation() -> SimpleNamespace:
     return SimpleNamespace(path="target.txt", expected_after_sha256="after")
 
 
-def test_crash_immediately_before_consumption_is_block_with_proven_zero_writes(monkeypatch) -> None:
-    pre_repo = _repo()
-    pre_git = _git()
-    monkeypatch.setattr("executor.stage3_runtime._safe_post_manifests", lambda: (pre_repo, pre_git))
-    monkeypatch.setattr("executor.stage3_runtime._write_terminal_receipt", lambda *a, **k: None)
-    result = _block_or_unknown(initial_repo=pre_repo, initial_git=pre_git, detail="injected before consume")
-    assert result.terminal_status is Stage3TerminalStatus.BLOCK
-    assert result.authority_consumed is False
-    assert result.repository_write_count_claim == 0
+class Stage3CrashSemanticsTests(unittest.TestCase):
+    def test_crash_immediately_before_consumption_is_block_with_proven_zero_writes(self) -> None:
+        pre_repo = _repo()
+        pre_git = _git()
+        with patch("executor.stage3_runtime._safe_post_manifests", return_value=(pre_repo, pre_git)), patch(
+            "executor.stage3_runtime._write_terminal_receipt", return_value=None
+        ):
+            result = _block_or_unknown(
+                initial_repo=pre_repo,
+                initial_git=pre_git,
+                detail="injected before consume",
+            )
+        self.assertIs(result.terminal_status, Stage3TerminalStatus.BLOCK)
+        self.assertIs(result.authority_consumed, False)
+        self.assertEqual(result.repository_write_count_claim, 0)
+
+    def test_crash_after_consumption_before_first_target_write_is_fail(self) -> None:
+        status, writes = _classify_post_consumption_exception(
+            pre_repo=_repo(),
+            pre_git=_git(),
+            post_repo=_repo(),
+            post_git=_git(),
+            mutation=_mutation(),
+        )
+        self.assertIs(status, Stage3TerminalStatus.FAIL)
+        self.assertEqual(writes, 0)
+
+    def test_crash_during_partial_or_wrong_target_replacement_is_fail(self) -> None:
+        status, writes = _classify_post_consumption_exception(
+            pre_repo=_repo(),
+            pre_git=_git(),
+            post_repo=_repo("partial"),
+            post_git=_git(),
+            mutation=_mutation(),
+        )
+        self.assertIs(status, Stage3TerminalStatus.FAIL)
+        self.assertEqual(writes, 1)
+
+    def test_crash_after_exact_flush_before_observer_or_terminal_closure_is_unknown(self) -> None:
+        status, writes = _classify_post_consumption_exception(
+            pre_repo=_repo(),
+            pre_git=_git(),
+            post_repo=_repo("after"),
+            post_git=_git(),
+            mutation=_mutation(),
+        )
+        self.assertIs(status, Stage3TerminalStatus.UNKNOWN)
+        self.assertEqual(writes, 1)
+
+    def test_crash_with_second_path_effect_is_fail(self) -> None:
+        status, writes = _classify_post_consumption_exception(
+            pre_repo=_repo(),
+            pre_git=_git(),
+            post_repo=_repo("after", extra=True),
+            post_git=_git(),
+            mutation=_mutation(),
+        )
+        self.assertIs(status, Stage3TerminalStatus.FAIL)
+        self.assertGreaterEqual(writes, 1)
+
+    def test_crash_with_git_metadata_effect_is_fail(self) -> None:
+        status, writes = _classify_post_consumption_exception(
+            pre_repo=_repo(),
+            pre_git=_git("a" * 64),
+            post_repo=_repo("after"),
+            post_git=_git("b" * 64),
+            mutation=_mutation(),
+        )
+        self.assertIs(status, Stage3TerminalStatus.FAIL)
+        self.assertEqual(writes, 1)
+
+    def test_crash_with_unavailable_independent_post_state_is_unknown(self) -> None:
+        status, writes = _classify_post_consumption_exception(
+            pre_repo=_repo(),
+            pre_git=_git(),
+            post_repo=None,
+            post_git=None,
+            mutation=_mutation(),
+        )
+        self.assertIs(status, Stage3TerminalStatus.UNKNOWN)
+        self.assertIsNone(writes)
+
+    def test_fail_and_unknown_never_mean_safe_retry(self) -> None:
+        self.assertNotEqual(Stage3TerminalStatus.FAIL.value, "BLOCK")
+        self.assertNotEqual(Stage3TerminalStatus.UNKNOWN.value, "BLOCK")
+        self.assertNotIn("RETRY", {item.value for item in Stage3TerminalStatus})
+
+    def test_terminal_allocation_replay_blocks_with_zero_second_write(self) -> None:
+        import executor.stage3_runtime as runtime
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            terminal = Path(temp_dir) / "stage3-terminal.json"
+            terminal.write_text("{}", encoding="utf-8")
+            with patch.object(runtime, "TERMINAL_RECEIPT", terminal):
+                result = runtime.Stage3MutationRuntime().execute()
+        self.assertIs(result.terminal_status, Stage3TerminalStatus.BLOCK)
+        self.assertIs(result.authority_consumed, False)
+        self.assertEqual(result.repository_write_count_claim, 0)
+        self.assertIn("retry/replay", result.detail)
 
 
-def test_crash_after_consumption_before_first_target_write_is_fail() -> None:
-    status, writes = _classify_post_consumption_exception(
-        pre_repo=_repo(), pre_git=_git(), post_repo=_repo(), post_git=_git(), mutation=_mutation()
-    )
-    assert status is Stage3TerminalStatus.FAIL
-    assert writes == 0
-
-
-def test_crash_during_replacement_with_partial_or_wrong_target_is_fail() -> None:
-    status, writes = _classify_post_consumption_exception(
-        pre_repo=_repo(),
-        pre_git=_git(),
-        post_repo=_repo("partial"),
-        post_git=_git(),
-        mutation=_mutation(),
-    )
-    assert status is Stage3TerminalStatus.FAIL
-    assert writes == 1
-
-
-def test_crash_after_exact_flush_before_observer_or_terminal_closure_is_unknown() -> None:
-    status, writes = _classify_post_consumption_exception(
-        pre_repo=_repo(),
-        pre_git=_git(),
-        post_repo=_repo("after"),
-        post_git=_git(),
-        mutation=_mutation(),
-    )
-    assert status is Stage3TerminalStatus.UNKNOWN
-    assert writes == 1
-
-
-def test_crash_with_second_path_or_git_metadata_effect_is_fail() -> None:
-    status, _ = _classify_post_consumption_exception(
-        pre_repo=_repo(),
-        pre_git=_git(),
-        post_repo=_repo("after", extra=True),
-        post_git=_git(),
-        mutation=_mutation(),
-    )
-    assert status is Stage3TerminalStatus.FAIL
-    status, _ = _classify_post_consumption_exception(
-        pre_repo=_repo(),
-        pre_git=_git("a" * 64),
-        post_repo=_repo("after"),
-        post_git=_git("b" * 64),
-        mutation=_mutation(),
-    )
-    assert status is Stage3TerminalStatus.FAIL
-
-
-def test_crash_with_unavailable_independent_post_state_is_unknown() -> None:
-    status, writes = _classify_post_consumption_exception(
-        pre_repo=_repo(), pre_git=_git(), post_repo=None, post_git=None, mutation=_mutation()
-    )
-    assert status is Stage3TerminalStatus.UNKNOWN
-    assert writes is None
-
-
-def test_fail_unknown_never_mean_safe_retry() -> None:
-    assert Stage3TerminalStatus.FAIL.value != "BLOCK"
-    assert Stage3TerminalStatus.UNKNOWN.value != "BLOCK"
-    assert "RETRY" not in {item.value for item in Stage3TerminalStatus}
-
-
-def test_terminal_allocation_replay_blocks_without_second_write(monkeypatch, tmp_path) -> None:
-    import executor.stage3_runtime as runtime
-
-    terminal = tmp_path / "stage3-terminal.json"
-    terminal.write_text("{}", encoding="utf-8")
-    monkeypatch.setattr(runtime, "TERMINAL_RECEIPT", terminal)
-    result = runtime.Stage3MutationRuntime().execute()
-    assert result.terminal_status is Stage3TerminalStatus.BLOCK
-    assert result.authority_consumed is False
-    assert result.repository_write_count_claim == 0
-    assert "retry/replay" in result.detail
+if __name__ == "__main__":
+    unittest.main()
