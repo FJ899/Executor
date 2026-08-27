@@ -50,10 +50,14 @@ from executor.sandbox.spec import (
     SandboxResult,
     SandboxSpec,
 )
+from executor.solution_provider import (
+    SolutionGenerationVerifier,
+    SolutionProviderError,
+    validate_authoritative_solution_proposal,
+)
 from executor.solution_proposal import (
     ProposedMutation,
     ValidatedSolutionProposal,
-    validate_solution_proposal,
 )
 
 
@@ -319,6 +323,7 @@ class PilotRuntime:
         runs_root: str | Path,
         image: str,
         execution_environment: dict[str, Any],
+        generation_verifier: SolutionGenerationVerifier | None = None,
         docker_binary: str = "docker",
     ) -> None:
         if frozen_result.get("status") != "AUTHORIZED_AND_FROZEN":
@@ -334,7 +339,25 @@ class PilotRuntime:
             raise PilotBlocked("current GitHub decision evidence differs from frozen evidence")
         if verified_decision.decision != "ACCEPT":
             raise PilotBlocked("only an exact current GitHub ACCEPT can execute")
-        validated = validate_solution_proposal(proposal, frozen_result=frozen_result)
+        if generation_verifier is not None:
+            raise PilotBlocked(
+                "solution generation evidence is not authoritative: "
+                "caller-supplied solution-generation verifier is forbidden at the runtime trust boundary"
+            )
+        if generation_verifier is None:
+            raise PilotBlocked(
+                "pilot runtime requires independent solution-generation evidence verification; "
+                "trusted provider-backed runtime verifier is not installed in Stage 2"
+            )
+        try:
+            authoritative = validate_authoritative_solution_proposal(
+                proposal,
+                frozen_result=frozen_result,
+                generation_verifier=generation_verifier,
+            )
+        except SolutionProviderError as exc:
+            raise PilotBlocked(f"solution generation evidence is not authoritative: {exc}") from exc
+        validated = authoritative.proposal
         try:
             policy = load_execution_policy_snapshot(executor_root, commit=executor_commit)
         except ExecutionPolicyError as exc:
@@ -371,6 +394,8 @@ class PilotRuntime:
         self.contract = contract
         self.contract_sha256 = frozen_result["contract_sha256"]
         self.proposal = validated
+        self.solution_generation_evidence = authoritative.generation_evidence
+        self.solution_freeze_receipt_sha256 = authoritative.freeze_receipt_sha256
         self.verified_request = verified_request
         self.verified_decision = verified_decision
         self.ledger = ledger
