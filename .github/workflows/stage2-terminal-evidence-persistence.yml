@@ -1,0 +1,250 @@
+name: Stage 2 terminal evidence persistence
+
+on:
+  workflow_call:
+    inputs:
+      frozen_result_base64:
+        required: true
+        type: string
+      stage2_result_base64:
+        required: true
+        type: string
+      proposal_base64:
+        required: true
+        type: string
+      provider_verification_request_base64:
+        required: true
+        type: string
+      provider_generation_evidence_base64:
+        required: true
+        type: string
+      provider_attestation_bundle_base64:
+        required: true
+        type: string
+      materialization_receipt_base64:
+        required: true
+        type: string
+      terminal_manifest_base64:
+        required: true
+        type: string
+    outputs:
+      terminal_chain_id:
+        value: ${{ jobs.persist.outputs.terminal_chain_id }}
+      evidence_commit_sha:
+        value: ${{ jobs.persist.outputs.evidence_commit_sha }}
+      evidence_tree_sha:
+        value: ${{ jobs.persist.outputs.evidence_tree_sha }}
+      evidence_branch:
+        value: ${{ jobs.persist.outputs.evidence_branch }}
+      frozen_result_blob_sha:
+        value: ${{ jobs.persist.outputs.frozen_result_blob_sha }}
+      stage2_result_blob_sha:
+        value: ${{ jobs.persist.outputs.stage2_result_blob_sha }}
+      proposal_blob_sha:
+        value: ${{ jobs.persist.outputs.proposal_blob_sha }}
+      manifest_blob_sha:
+        value: ${{ jobs.persist.outputs.manifest_blob_sha }}
+      frozen_result_sha256:
+        value: ${{ jobs.persist.outputs.frozen_result_sha256 }}
+      stage2_result_sha256:
+        value: ${{ jobs.persist.outputs.stage2_result_sha256 }}
+      proposal_sha256:
+        value: ${{ jobs.persist.outputs.proposal_sha256 }}
+      manifest_sha256:
+        value: ${{ jobs.persist.outputs.manifest_sha256 }}
+
+permissions:
+  contents: write
+
+jobs:
+  persist:
+    name: Persist exact canonical Stage-2 terminal evidence
+    runs-on: ubuntu-latest
+    outputs:
+      terminal_chain_id: ${{ steps.persist.outputs.terminal_chain_id }}
+      evidence_commit_sha: ${{ steps.persist.outputs.evidence_commit_sha }}
+      evidence_tree_sha: ${{ steps.persist.outputs.evidence_tree_sha }}
+      evidence_branch: ${{ steps.persist.outputs.evidence_branch }}
+      frozen_result_blob_sha: ${{ steps.persist.outputs.frozen_result_blob_sha }}
+      stage2_result_blob_sha: ${{ steps.persist.outputs.stage2_result_blob_sha }}
+      proposal_blob_sha: ${{ steps.persist.outputs.proposal_blob_sha }}
+      manifest_blob_sha: ${{ steps.persist.outputs.manifest_blob_sha }}
+      frozen_result_sha256: ${{ steps.persist.outputs.frozen_result_sha256 }}
+      stage2_result_sha256: ${{ steps.persist.outputs.stage2_result_sha256 }}
+      proposal_sha256: ${{ steps.persist.outputs.proposal_sha256 }}
+      manifest_sha256: ${{ steps.persist.outputs.manifest_sha256 }}
+    steps:
+      - name: Checkout caller repository only for Git transport
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/Executor
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - id: reconstruct
+        name: Reconstruct and verify exact immutable source blobs
+        shell: bash
+        env:
+          FROZEN_B64: ${{ inputs.frozen_result_base64 }}
+          STAGE2_B64: ${{ inputs.stage2_result_base64 }}
+          PROPOSAL_B64: ${{ inputs.proposal_base64 }}
+          REQUEST_B64: ${{ inputs.provider_verification_request_base64 }}
+          PROVIDER_EVIDENCE_B64: ${{ inputs.provider_generation_evidence_base64 }}
+          PROVIDER_ATTESTATION_B64: ${{ inputs.provider_attestation_bundle_base64 }}
+          RECEIPT_B64: ${{ inputs.materialization_receipt_base64 }}
+          MANIFEST_B64: ${{ inputs.terminal_manifest_base64 }}
+        run: |
+          set -euo pipefail
+          rm -rf persistence-input
+          mkdir -p persistence-input
+          printf '%s' "$FROZEN_B64" | base64 -d > persistence-input/frozen_result.json
+          printf '%s' "$STAGE2_B64" | base64 -d > persistence-input/stage2_result.json
+          printf '%s' "$PROPOSAL_B64" | base64 -d > persistence-input/validated_solution_proposal.json
+          printf '%s' "$REQUEST_B64" | base64 -d > persistence-input/provider_verification_request.json
+          printf '%s' "$PROVIDER_EVIDENCE_B64" | base64 -d > persistence-input/provider_generation_evidence.json
+          printf '%s' "$PROVIDER_ATTESTATION_B64" | base64 -d > persistence-input/provider_attestation_bundle.json
+          printf '%s' "$RECEIPT_B64" | base64 -d > persistence-input/stage2_materialization_receipt.json
+          printf '%s' "$MANIFEST_B64" | base64 -d > persistence-input/manifest.json
+
+          python - <<'PY'
+          import hashlib, json, pathlib
+
+          root=pathlib.Path('persistence-input')
+          def raw(name): return (root/name).read_bytes()
+          def obj(name): return json.loads(raw(name).decode('utf-8'))
+          def h(raw_bytes): return hashlib.sha256(raw_bytes).hexdigest()
+          def canon(value): return json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False)
+          def hjson(value): return h(canon(value).encode())
+
+          frozen=obj('frozen_result.json')
+          stage2=obj('stage2_result.json')
+          proposal=obj('validated_solution_proposal.json')
+          request=obj('provider_verification_request.json')
+          evidence=obj('provider_generation_evidence.json')
+          manifest=obj('manifest.json')
+
+          if frozen.get('status')!='AUTHORIZED_AND_FROZEN':
+              raise SystemExit('frozen_result is not AUTHORIZED_AND_FROZEN')
+          if frozen.get('contract_sha256')!='a46984a72bac16c98c1c00d13a43b2664089db8eef22ce4a953d3295f1a97ce7':
+              raise SystemExit('unexpected frozen contract')
+          if stage2.get('status')!='SOLUTION_PROVIDED':
+              raise SystemExit('Stage-2 result is not terminal SOLUTION_PROVIDED')
+          if stage2.get('effect_capability')!='NONE':
+              raise SystemExit('Stage-2 result carries effect capability')
+          if stage2.get('proposal')!=proposal:
+              raise SystemExit('persisted proposal differs from Stage-2 result proposal')
+          proposal_sha=hjson(proposal)
+          if stage2.get('proposal_sha256')!=proposal_sha:
+              raise SystemExit('proposal payload hash mismatch')
+          if request.get('generation_evidence_ref')!=stage2.get('generation_evidence_ref'):
+              raise SystemExit('verification request evidence ref mismatch')
+          if evidence.get('generation_evidence_ref')!=stage2.get('generation_evidence_ref'):
+              raise SystemExit('provider evidence ref mismatch')
+          if manifest.get('generation_evidence_ref')!=stage2.get('generation_evidence_ref'):
+              raise SystemExit('terminal manifest evidence ref mismatch')
+          if manifest.get('effect_capability')!='NONE':
+              raise SystemExit('terminal manifest effect capability mismatch')
+          if manifest.get('target_repository_write_count')!=0:
+              raise SystemExit('terminal manifest claims a target write')
+          if manifest.get('stage3_effect_executed') is not False:
+              raise SystemExit('terminal manifest claims Stage-3 effect')
+          if manifest.get('human_stage3_effect_authority_consumed') is not False:
+              raise SystemExit('terminal manifest claims consumed Human authority')
+
+          frozen_sha=h(raw('frozen_result.json'))
+          stage2_sha=h(raw('stage2_result.json'))
+          manifest_sha=h(raw('manifest.json'))
+          if manifest.get('frozen_result_sha256')!=frozen_sha:
+              raise SystemExit('terminal manifest frozen_result hash mismatch')
+          if manifest.get('stage2_terminal_result_sha256')!=stage2_sha:
+              raise SystemExit('terminal manifest Stage-2 result hash mismatch')
+          if manifest.get('proposal_payload_sha256')!=proposal_sha:
+              raise SystemExit('terminal manifest proposal hash mismatch')
+
+          chain_material={
+              'frozen_result_sha256':frozen_sha,
+              'stage2_result_sha256':stage2_sha,
+              'proposal_payload_sha256':proposal_sha,
+              'generation_evidence_ref':stage2['generation_evidence_ref'],
+              'provider_generation_binding_sha256':manifest['provider_generation_binding_sha256'],
+          }
+          terminal_chain_id='gp001-'+hjson(chain_material)[:32]
+          (root/'terminal_chain_id.txt').write_text(terminal_chain_id,encoding='ascii')
+          (root/'content_hashes.json').write_text(canon({
+              'frozen_result_sha256':frozen_sha,
+              'stage2_result_sha256':stage2_sha,
+              'proposal_sha256':proposal_sha,
+              'manifest_sha256':manifest_sha,
+          }),encoding='utf-8')
+          PY
+
+      - id: persist
+        name: Create one immutable evidence-only Git commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          chain_id="$(cat persistence-input/terminal_chain_id.txt)"
+          branch="evidence/stage2/${chain_id}"
+          prefix="evidence/stage2/${chain_id}"
+
+          if git ls-remote --exit-code --heads origin "refs/heads/${branch}" >/dev/null 2>&1; then
+            echo "STAGE2_EVIDENCE_PERSISTENCE_BLOCK: discovery ref already exists"
+            exit 2
+          fi
+
+          tmp="$(mktemp -d)"
+          git clone --no-checkout "https://x-access-token:${GITHUB_TOKEN}@github.com/FJ899/Executor.git" "$tmp/repo" >/dev/null 2>&1
+          cd "$tmp/repo"
+          git checkout --orphan evidence-root
+          git rm -rf . >/dev/null 2>&1 || true
+          mkdir -p "$prefix"
+          cp "$GITHUB_WORKSPACE/persistence-input/frozen_result.json" "$prefix/frozen_result.json"
+          cp "$GITHUB_WORKSPACE/persistence-input/stage2_result.json" "$prefix/stage2_result.json"
+          cp "$GITHUB_WORKSPACE/persistence-input/validated_solution_proposal.json" "$prefix/validated_solution_proposal.json"
+          cp "$GITHUB_WORKSPACE/persistence-input/provider_verification_request.json" "$prefix/provider_verification_request.json"
+          cp "$GITHUB_WORKSPACE/persistence-input/provider_generation_evidence.json" "$prefix/provider_generation_evidence.json"
+          cp "$GITHUB_WORKSPACE/persistence-input/provider_attestation_bundle.json" "$prefix/provider_attestation_bundle.json"
+          cp "$GITHUB_WORKSPACE/persistence-input/stage2_materialization_receipt.json" "$prefix/stage2_materialization_receipt.json"
+          cp "$GITHUB_WORKSPACE/persistence-input/manifest.json" "$prefix/manifest.json"
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$prefix"
+          git commit -m "Evidence: persist Stage 2 GP001 terminal chain ${chain_id}"
+
+          commit_sha="$(git rev-parse HEAD)"
+          tree_sha="$(git rev-parse HEAD^{tree})"
+          frozen_blob="$(git rev-parse "HEAD:${prefix}/frozen_result.json")"
+          stage2_blob="$(git rev-parse "HEAD:${prefix}/stage2_result.json")"
+          proposal_blob="$(git rev-parse "HEAD:${prefix}/validated_solution_proposal.json")"
+          manifest_blob="$(git rev-parse "HEAD:${prefix}/manifest.json")"
+
+          git push origin "HEAD:refs/heads/${branch}"
+          remote_sha="$(git ls-remote origin "refs/heads/${branch}" | awk '{print $1}')"
+          test "$remote_sha" = "$commit_sha"
+
+          hashes="$(cat "$GITHUB_WORKSPACE/persistence-input/content_hashes.json")"
+          python - "$GITHUB_OUTPUT" "$chain_id" "$branch" "$commit_sha" "$tree_sha" "$frozen_blob" "$stage2_blob" "$proposal_blob" "$manifest_blob" "$hashes" <<'PY'
+          import json,sys
+          output,chain,branch,commit,tree,frozen_blob,stage2_blob,proposal_blob,manifest_blob,hashes=sys.argv[1:]
+          h=json.loads(hashes)
+          pairs={
+              'terminal_chain_id':chain,
+              'evidence_branch':branch,
+              'evidence_commit_sha':commit,
+              'evidence_tree_sha':tree,
+              'frozen_result_blob_sha':frozen_blob,
+              'stage2_result_blob_sha':stage2_blob,
+              'proposal_blob_sha':proposal_blob,
+              'manifest_blob_sha':manifest_blob,
+              'frozen_result_sha256':h['frozen_result_sha256'],
+              'stage2_result_sha256':h['stage2_result_sha256'],
+              'proposal_sha256':h['proposal_sha256'],
+              'manifest_sha256':h['manifest_sha256'],
+          }
+          with open(output,'a',encoding='utf-8') as f:
+              for k,v in pairs.items(): f.write(f'{k}={v}\n')
+          PY
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
