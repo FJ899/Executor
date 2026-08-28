@@ -35,9 +35,20 @@ class Stage2TerminalEvidencePersistenceWorkflowTests(unittest.TestCase):
             "api.openai.com",
             "Stage3MutationRuntime",
             "human-stage3-effect-authorization",
-            "FJ899/executor-pilot-target",
         )
         for token in forbidden:
+            with self.subTest(token=token):
+                self.assertNotIn(token, self.raw)
+
+    def test_target_repository_is_provenance_only_not_an_effect_destination(self) -> None:
+        self.assertIn("'target_repository':'FJ899/executor-pilot-target'", self.raw)
+        forbidden_operational_forms = (
+            "repository: FJ899/executor-pilot-target",
+            "github.com/FJ899/executor-pilot-target.git",
+            "git@github.com:FJ899/executor-pilot-target",
+            "refs/heads/executor-pilot",
+        )
+        for token in forbidden_operational_forms:
             with self.subTest(token=token):
                 self.assertNotIn(token, self.raw)
 
