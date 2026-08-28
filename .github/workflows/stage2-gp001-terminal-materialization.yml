@@ -1,0 +1,285 @@
+name: Stage 2 GP001 terminal materialization
+
+on:
+  push:
+    branches:
+      - ops/stage2-gp001-terminal-materialization-2026-08-28
+    paths:
+      - .github/workflows/stage2-gp001-terminal-materialization.yml
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: stage2-gp001-terminal-materialization
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    name: Real OpenAI Stage-2 terminal materialization
+    runs-on: ubuntu-latest
+    outputs:
+      verification_request_json: ${{ steps.materialize.outputs.verification_request_json }}
+      frozen_result_base64: ${{ steps.materialize.outputs.frozen_result_base64 }}
+      stage2_result_base64: ${{ steps.materialize.outputs.stage2_result_base64 }}
+      proposal_base64: ${{ steps.materialize.outputs.proposal_base64 }}
+      materialization_receipt_base64: ${{ steps.materialize.outputs.materialization_receipt_base64 }}
+    steps:
+      - name: Checkout exact operator source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          path: operator
+          fetch-depth: 0
+
+      - name: Checkout exact P4-passed Stage-2 runtime
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/Executor
+          ref: 0c6db09653c41c3287e43c2111e590663050c02c
+          path: stage2-runtime
+          fetch-depth: 0
+
+      - name: Checkout exact P4-passed Stage-3 consumer implementation
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/Executor
+          ref: 5ccd0cd3e0f00a5d117a77a532b9da29fe3345d4
+          path: stage3-runtime
+          fetch-depth: 0
+
+      - name: Checkout exact frozen GP001 target
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/executor-pilot-target
+          ref: 3934a94a5eebf750079200589d6dc40e024d44a0
+          path: target
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Verify exact immutable identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C stage2-runtime rev-parse HEAD)" = "0c6db09653c41c3287e43c2111e590663050c02c"
+          test "$(git -C stage2-runtime rev-parse HEAD^{tree})" = "b0526b3c06690e23ed84d11c6ab7a70d4e86137e"
+          test "$(git -C stage3-runtime rev-parse HEAD)" = "5ccd0cd3e0f00a5d117a77a532b9da29fe3345d4"
+          test "$(git -C stage3-runtime rev-parse HEAD^{tree})" = "fec44dd443607209113bab1a7577867030a277e5"
+          test "$(git -C target rev-parse HEAD)" = "3934a94a5eebf750079200589d6dc40e024d44a0"
+          test "$(git -C target rev-parse HEAD^{tree})" = "26d307afcbb3ce72b2911ca44936712c11558c4c"
+          test -z "$(git -C target status --porcelain=v1 --untracked-files=all)"
+
+      - name: Recover exact real GP001 frozen authority artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p historical input materialized
+          gh run download 33047492859 \
+            --repo FJ899/Executor \
+            --name gp001-product-current-execution-33047492859-1 \
+            --dir historical
+          frozen="$(find historical -type f -path '*/run-output/frozen.json' -print -quit)"
+          test -n "$frozen"
+          test "$(sha256sum "$frozen" | awk '{print $1}')" = "fdff405f809fa0f55c12ba7c5ca382564cb486e10fbcd2f3911b89107b3d97d7"
+          cp "$frozen" input/frozen-task-result.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          value=json.loads(Path('input/frozen-task-result.json').read_text(encoding='utf-8'))
+          assert value['status']=='AUTHORIZED_AND_FROZEN'
+          assert value['contract_sha256']=='a46984a72bac16c98c1c00d13a43b2664089db8eef22ce4a953d3295f1a97ce7'
+          assert value['contract']['request_evidence']['repository']=='FJ899/Executor'
+          assert value['contract']['request_evidence']['issue_number']==97
+          assert value['contract']['target']=={
+              'repository':'FJ899/executor-pilot-target',
+              'commit':'3934a94a5eebf750079200589d6dc40e024d44a0',
+              'tree':'26d307afcbb3ce72b2911ca44936712c11558c4c',
+          }
+          PY
+
+      - id: materialize
+        name: Call real OpenAI provider and materialize effect-free Stage-2 terminal result
+        shell: bash
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENAI_API_KEY:-}" ]; then
+            echo "STAGE2_TERMINAL_MATERIALIZATION_BLOCK: repository secret OPENAI_API_KEY is unavailable"
+            exit 2
+          fi
+
+          PYTHONPATH="$GITHUB_WORKSPACE/stage2-runtime" \
+            python operator/.github/scripts/stage2_gp001_terminal_materialize.py \
+              --frozen-result input/frozen-task-result.json \
+              --checkout-root target \
+              --output-dir materialized
+
+          cp input/frozen-task-result.json materialized/frozen-task-result.json
+
+          PYTHONPATH="$GITHUB_WORKSPACE/stage3-runtime" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from executor.github_trust import canonical_json
+          from executor.stage3_generation_trust import _expected_request
+
+          frozen=json.loads(Path('materialized/frozen-task-result.json').read_text(encoding='utf-8'))
+          stage2=json.loads(Path('materialized/stage2-terminal-result.json').read_text(encoding='utf-8'))
+          proposal=json.loads(Path('materialized/validated-solution-proposal.json').read_text(encoding='utf-8'))
+          request=_expected_request(frozen_result=frozen,stage2_result=stage2,proposal=proposal)
+          raw=canonical_json(request)
+          Path('materialized/provider-verification-request.json').write_text(raw,encoding='utf-8')
+
+          outputs={
+              'verification_request_json': raw,
+              'frozen_result_base64': __import__('base64').b64encode(Path('materialized/frozen-task-result.json').read_bytes()).decode(),
+              'stage2_result_base64': __import__('base64').b64encode(Path('materialized/stage2-terminal-result.json').read_bytes()).decode(),
+              'proposal_base64': __import__('base64').b64encode(Path('materialized/validated-solution-proposal.json').read_bytes()).decode(),
+              'materialization_receipt_base64': __import__('base64').b64encode(Path('materialized/stage2-materialization-receipt.json').read_bytes()).decode(),
+          }
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as out:
+              for key,value in outputs.items():
+                  out.write(f'{key}={value}\n')
+          PY
+
+          test "$(git -C target rev-parse HEAD)" = "3934a94a5eebf750079200589d6dc40e024d44a0"
+          test "$(git -C target rev-parse HEAD^{tree})" = "26d307afcbb3ce72b2911ca44936712c11558c4c"
+          test -z "$(git -C target status --porcelain=v1 --untracked-files=all)"
+
+      - name: Preserve materialization diagnostics without effect execution
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: stage2-gp001-materialization-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: materialized/
+          if-no-files-found: warn
+          retention-days: 30
+
+  verify-provider:
+    name: P4-accepted W_PRODUCER provider re-read and attestation
+    needs: materialize
+    uses: FJ899/Executor/.github/workflows/stage3-generation-verifier-attestation.yml@ddcc0e1c8fc0bbd01d4e1b41c26a430af4c8ed12
+    with:
+      verification_request_json: ${{ needs.materialize.outputs.verification_request_json }}
+    secrets:
+      openai_read_credential: ${{ secrets.OPENAI_API_KEY }}
+
+  finalize:
+    name: Assemble independently verifiable Stage-2 terminal bundle
+    needs:
+      - materialize
+      - verify-provider
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact final Stage-3 trust consumer
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: FJ899/Executor
+          ref: 5ccd0cd3e0f00a5d117a77a532b9da29fe3345d4
+          path: stage3-runtime
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Reconstruct exact immutable controller inputs
+        shell: bash
+        env:
+          FROZEN_B64: ${{ needs.materialize.outputs.frozen_result_base64 }}
+          STAGE2_B64: ${{ needs.materialize.outputs.stage2_result_base64 }}
+          PROPOSAL_B64: ${{ needs.materialize.outputs.proposal_base64 }}
+          RECEIPT_B64: ${{ needs.materialize.outputs.materialization_receipt_base64 }}
+          VERIFICATION_REQUEST_JSON: ${{ needs.materialize.outputs.verification_request_json }}
+          PROVIDER_EVIDENCE_B64: ${{ needs.verify-provider.outputs.provider_generation_evidence_base64 }}
+          PROVIDER_ATTESTATION_B64: ${{ needs.verify-provider.outputs.attestation_bundle_base64 }}
+        run: |
+          set -euo pipefail
+          mkdir -p terminal-bundle
+          printf '%s' "$FROZEN_B64" | base64 -d > terminal-bundle/frozen-task-result.json
+          printf '%s' "$STAGE2_B64" | base64 -d > terminal-bundle/stage2-terminal-result.json
+          printf '%s' "$PROPOSAL_B64" | base64 -d > terminal-bundle/validated-solution-proposal.json
+          printf '%s' "$RECEIPT_B64" | base64 -d > terminal-bundle/stage2-materialization-receipt.json
+          printf '%s' "$VERIFICATION_REQUEST_JSON" > terminal-bundle/provider-verification-request.json
+          printf '%s' "$PROVIDER_EVIDENCE_B64" | base64 -d > terminal-bundle/provider-generation-evidence.json
+          printf '%s' "$PROVIDER_ATTESTATION_B64" | base64 -d > terminal-bundle/provider-attestation-bundle.json
+
+      - name: Independently verify exact provider binding with final Stage-3 consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C stage3-runtime rev-parse HEAD)" = "5ccd0cd3e0f00a5d117a77a532b9da29fe3345d4"
+          test "$(git -C stage3-runtime rev-parse HEAD^{tree})" = "fec44dd443607209113bab1a7577867030a277e5"
+          PYTHONPATH="$GITHUB_WORKSPACE/stage3-runtime" python - <<'PY'
+          import json
+          from pathlib import Path
+          from executor.github_trust import canonical_json
+          from executor.stage3_evidence import sha256_bytes, sha256_json
+          from executor.stage3_generation_trust import verify_provider_generation_binding
+
+          root=Path('terminal-bundle')
+          frozen=json.loads((root/'frozen-task-result.json').read_text(encoding='utf-8'))
+          stage2=json.loads((root/'stage2-terminal-result.json').read_text(encoding='utf-8'))
+          proposal=json.loads((root/'validated-solution-proposal.json').read_text(encoding='utf-8'))
+          binding=verify_provider_generation_binding(
+              evidence_path=root/'provider-generation-evidence.json',
+              attestation_bundle_path=root/'provider-attestation-bundle.json',
+              frozen_result=frozen,
+              stage2_result=stage2,
+              proposal=proposal,
+          )
+          if stage2.get('effect_capability')!='NONE':
+              raise SystemExit('Stage-2 terminal result carries unexpected effect capability')
+          if stage2.get('proposal')!=proposal:
+              raise SystemExit('Stage-2 proposal copy mismatch')
+
+          manifest={
+              'schema_version':'executor-stage2-terminal-bundle-manifest/1.0',
+              'status':'STAGE2_TERMINAL_MATERIALIZED_PROVIDER_ATTESTED',
+              'request_repository':'FJ899/Executor',
+              'request_issue_number':97,
+              'target_repository':'FJ899/executor-pilot-target',
+              'target_commit':'3934a94a5eebf750079200589d6dc40e024d44a0',
+              'target_tree':'26d307afcbb3ce72b2911ca44936712c11558c4c',
+              'stage2_runtime_commit':'0c6db09653c41c3287e43c2111e590663050c02c',
+              'stage2_runtime_tree':'b0526b3c06690e23ed84d11c6ab7a70d4e86137e',
+              'w_producer_commit':'ddcc0e1c8fc0bbd01d4e1b41c26a430af4c8ed12',
+              'stage3_consumer_commit':'5ccd0cd3e0f00a5d117a77a532b9da29fe3345d4',
+              'stage3_consumer_tree':'fec44dd443607209113bab1a7577867030a277e5',
+              'frozen_result_sha256':sha256_bytes((root/'frozen-task-result.json').read_bytes()),
+              'stage2_terminal_result_sha256':sha256_bytes((root/'stage2-terminal-result.json').read_bytes()),
+              'proposal_payload_sha256':stage2['proposal_sha256'],
+              'verification_request_sha256':binding.verification_request_sha256,
+              'provider_generation_evidence_sha256':binding.evidence_sha256,
+              'provider_attestation_bundle_sha256':binding.attestation_bundle_sha256,
+              'provider_generation_binding_sha256':binding.binding_sha256,
+              'generation_evidence_ref':stage2['generation_evidence_ref'],
+              'provider':stage2['provider'],
+              'model':stage2['model'],
+              'effect_capability':'NONE',
+              'target_repository_write_count':0,
+              'stage3_effect_executed':False,
+              'human_stage3_effect_authority_consumed':False,
+          }
+          (root/'stage2-terminal-bundle-manifest.json').write_text(canonical_json(manifest),encoding='utf-8')
+          print(canonical_json(manifest))
+          PY
+
+      - name: Upload exact Stage-2 terminal materialization bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gp001-stage2-terminal-materialization-${{ github.run_id }}-${{ github.run_attempt }}
+          path: terminal-bundle/
+          if-no-files-found: error
+          retention-days: 30
