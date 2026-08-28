@@ -47,6 +47,20 @@ class Stage2TerminalEvidencePersistenceWorkflowTests(unittest.TestCase):
         self.assertNotIn("git push --force", self.raw)
         self.assertNotIn("git push -f", self.raw)
 
+    def test_raw_frozen_source_and_canonical_authority_are_distinct(self) -> None:
+        self.assertIn("frozen_result_source_raw.json", self.raw)
+        self.assertIn(
+            "fdff405f809fa0f55c12ba7c5ca382564cb486e10fbcd2f3911b89107b3d97d7",
+            self.raw,
+        )
+        self.assertIn(
+            "16a50e0535a7d9587f1c8751fd22099f61dead107117ad17b904a79a37f8fa8d",
+            self.raw,
+        )
+        self.assertIn("canonical frozen_result hash mismatch", self.raw)
+        self.assertIn("source_frozen_result_raw_sha256", self.raw)
+        self.assertIn("frozen_result_sha256", self.raw)
+
     def test_required_source_objects_are_verified_before_persistence(self) -> None:
         required_checks = (
             "AUTHORIZED_AND_FROZEN",
@@ -54,8 +68,9 @@ class Stage2TerminalEvidencePersistenceWorkflowTests(unittest.TestCase):
             "Stage-2 result carries effect capability",
             "proposal payload hash mismatch",
             "provider evidence ref mismatch",
-            "terminal manifest Stage-2 result hash mismatch",
-            "terminal manifest proposal hash mismatch",
+            "terminal verification manifest Stage-2 result hash mismatch",
+            "terminal verification manifest proposal hash mismatch",
+            "provider generation binding hash missing",
         )
         for token in required_checks:
             with self.subTest(token=token):
